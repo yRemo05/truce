@@ -1,0 +1,10 @@
+node_modules
+web/node_modules
+web/dist
+data
+.qloo-cache
+.env
+.env.*
+docs
+.claude
+.git

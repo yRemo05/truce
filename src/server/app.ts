@@ -38,6 +38,9 @@ const sideInput = z
   })
   .refine((v) => SLOTS.some((s) => v.seeds[s].length > 0), 'Pick at least one thing you love.');
 
+/** Search hits below this popularity percentile are listed after the rest. */
+const OBSCURE = 0.2;
+
 /** The ready-made pair behind "Try the demo": tastes far enough apart to make a real negotiation. */
 const DEMO = {
   pair: { mode: 'couple' as const, names: { a: 'Maya', b: 'Deniz' }, location: 'Manhattan' },
@@ -93,7 +96,11 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
     const { slot: s, q } = z
       .object({ slot, q: z.string().trim().min(1).max(80) })
       .parse({ slot: c.req.query('slot'), q: c.req.query('q') });
-    const hits = await searchEntities(qloo, q, KIND_OF_SLOT[s], 6);
+    // Qloo ranks by name match only; near-unknown titles ("Moonlight Soul",
+    // popularity 0) would crowd out the one people mean, so they go last.
+    const found = await searchEntities(qloo, q, KIND_OF_SLOT[s], 8);
+    const known = (e: (typeof found)[number]) => (e.popularity ?? 0) >= OBSCURE;
+    const hits = [...found.filter(known), ...found.filter((e) => !known(e))].slice(0, 6);
     return c.json({
       hits: hits.map(
         (e): SearchHit => ({
