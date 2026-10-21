@@ -87,6 +87,18 @@ export function voiceRules(nickname: string, others: readonly string[]): string 
 - Say a person loves something only if it is in their list of loves. For any other item, say why it suits them.`;
 }
 
+/**
+ * The voice slips the rules above still let through now and then ("a bridge
+ * that fits both of you"), put right with the people's names. A rejected move
+ * would cost the agent its own words, so the referee mends these instead.
+ */
+export function mendVoice(text: string, people: readonly string[]): string {
+  const everyone = joinNames(people);
+  return text
+    .replace(/\b(both of you|you both|all of you|you all)\b/gi, everyone)
+    .replace(/\bour (tastes?)\b/gi, "everyone's $1");
+}
+
 export function lovesOf(seeds: Record<Slot, string[]>, foods: readonly string[] = []): string {
   const lines = SLOTS.map((s) => `- ${s}: ${seeds[s].join(', ') || '(nothing named)'}`);
   if (foods.length) lines.push(`- food: ${foods.join(', ')}`);
@@ -307,10 +319,11 @@ export class ClaudeBrain implements AgentBrain {
     if (response.stop_reason === 'refusal') throw new Error('the model declined this turn');
     const move = response.parsed_output;
     if (!move) throw new Error(`no parsable move (stop: ${response.stop_reason})`);
+    const mend = (text: string) => mendVoice(text.trim(), [view.nickname, ...view.others.map((o) => o.nickname)]);
     return {
       action: move.action,
-      counters: move.counters.slice(0, 3).map((c) => ({ ...c, message: c.message.trim() })),
-      message: move.message.trim(),
+      counters: move.counters.slice(0, 3).map((c) => ({ ...c, message: mend(c.message) })),
+      message: mend(move.message),
     };
   }
 }

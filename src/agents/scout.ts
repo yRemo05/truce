@@ -22,7 +22,7 @@ import { recommend, tasteHotspot, type PlaceFilter } from '../qloo/queries';
 import { NO_CONSTRAINTS, admissible, slotQuery, toPoolItem, type Candidates, type PoolItem, type PoolOptions } from '../truce/pool';
 import { SLOTS, at, type PerSide, type Side, type Slot, type Weights } from '../truce/types';
 import type { AgentBrief, Mode } from './brain';
-import { AGENT_MODEL, briefLines, lovesOf, toneOf, usageOf, voiceRules, type UsageReport } from './claude-brain';
+import { AGENT_MODEL, briefLines, lovesOf, mendVoice, toneOf, usageOf, voiceRules, type UsageReport } from './claude-brain';
 import { tasteTag } from './brief';
 
 /** Finds each agent may put on the table. */
@@ -186,6 +186,7 @@ export async function scout(setup: ScoutSetup, side: Side): Promise<{ slot: Slot
   const { qloo, emit } = setup;
   const added: { slot: Slot; item: PoolItem }[] = [];
   let message = '';
+  const everyoneNames = setup.members.map((s) => at(setup.names, s));
   emit({ type: 'scout', side, step: 'start' });
 
   // Names the agent may steer by: everyone's favourites and everything on the table.
@@ -241,7 +242,7 @@ export async function scout(setup: ScoutSetup, side: Side): Promise<{ slot: Slot
     if (setup.room[hit.slot] <= 0) return `The table is full for ${hit.slot}. Add for another slot, or stop.`;
     setup.taken.add(hit.item.id);
     setup.room[hit.slot]--;
-    const why = clip(input.why, 160);
+    const why = clip(mendVoice(input.why, everyoneNames), 160);
     const item: PoolItem = { ...hit.item, scoutedBy: side, scoutWhy: why };
     added.push({ slot: hit.slot, item });
     emit({ type: 'scout', side, step: 'add', slot: hit.slot, item: preview(item), why });
@@ -296,6 +297,6 @@ export async function scout(setup: ScoutSetup, side: Side): Promise<{ slot: Slot
   } catch (err) {
     console.warn(`scouting for side ${side} stopped: ${(err as Error).message}`);
   }
-  emit({ type: 'scout', side, step: 'done', message: clip(message, 260) });
+  emit({ type: 'scout', side, step: 'done', message: clip(mendVoice(message, everyoneNames), 260) });
   return added;
 }
