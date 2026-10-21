@@ -9,16 +9,19 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch --env-file=.env src/server/index.ts",
     "start": "node --env-file-if-exists=.env --import tsx src/server/index.ts",
-    "test": "npm run test:qloo && npm run test:bargain && npm run test:ledger",
+    "test": "npm run test:qloo && npm run test:bargain && npm run test:ledger && npm run test:negotiate",
     "test:qloo": "tsx scripts/test-qloo-parse.ts",
     "test:bargain": "tsx scripts/test-bargain.ts",
     "test:ledger": "tsx scripts/test-ledger.ts",
-    "probe": "node --env-file=.env scripts/probe.mjs"
+    "probe": "node --env-file=.env scripts/probe.mjs",
+    "test:negotiate": "tsx scripts/test-negotiate.ts",
+    "smoke": "node --env-file=.env --import tsx scripts/smoke-truce.ts"
   },
   "engines": {
     "node": ">=22.12"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.137.0",
     "@hono/node-server": "^2.1.5",
     "better-sqlite3": "^13.0.3",
     "hono": "^4.13.13",
