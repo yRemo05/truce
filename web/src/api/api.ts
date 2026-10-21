@@ -44,8 +44,8 @@ export class ApiError extends Error {
 
 export interface StreamHandlers {
   onOpen(): void;
-  /** `index` is the event's place in the truce's log, when the server sends one. */
-  onEvent(event: StreamEvent, index: number | null): void;
+  /** `index` is the event's place in the truce's log (its SSE id). */
+  onEvent(event: StreamEvent, index: number): void;
   /** The connection dropped; `willRetry` is false when the caller must reconnect itself. */
   onDrop(willRetry: boolean): void;
 }

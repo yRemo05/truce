@@ -110,9 +110,9 @@ const FILMS = build('film', [
   ['Moonrise Kingdom', '2012', 2012, 'Two twelve-year-olds run away together on a New England island.', false, { genres: 'Comedy, Romance' }],
 ]);
 
-const PLACE = (neighborhood: string, cuisine: string, price: string, ambience: string) => ({
+const PLACE = (neighborhood: string, cuisineType: string, price: string, ambience: string) => ({
   neighborhood,
-  cuisine,
+  cuisineType,
   price,
   ambience,
 });

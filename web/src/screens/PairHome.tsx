@@ -30,7 +30,6 @@ import {
   Page,
   PairNames,
   pullSentence,
-  tiltOf,
   SectionHeader,
   Skeleton,
 } from '@/ui';
@@ -116,7 +115,7 @@ function Tonight({ pair, running, pass }: { pair: PairView; running: string | nu
             </Button>
             <p className="small muted">
               {both
-                ? pullSentence(tiltOf(pair.ledger.tilt, pair.ledger.alphaA), pair.ledger.owed, pair.names, 'tonight')
+                ? pullSentence(pair.ledger.tilt, pair.ledger.owed, pair.names, 'tonight')
                 : `Waiting for ${waiting.map((s) => possessive(pair.names[s])).join(' and ')} picks.`}
             </p>
           </>

@@ -27,14 +27,10 @@ interface LedgerMeterProps {
   delay?: number;
 }
 
-const positionOf = (tilt: number) => 50 - Math.max(-1, Math.min(1, tilt)) * 44;
-
-/** Truces recorded before the server sent a tilt: derive it from the weight (the server's MAX_TILT is 0.15). */
-export const tiltOf = (tilt: number | undefined, alphaA: number) => (Number.isFinite(tilt) ? tilt! : (alphaA - 0.5) / 0.15);
+const positionOf = (tilt: number) => 50 - (Number.isFinite(tilt) ? Math.max(-1, Math.min(1, tilt)) : 0) * 44;
 
 /** The fairness ledger as a balance: the marker leans toward whoever is owed. */
-export function LedgerMeter({ names, letters, alphaA, tilt: given, owed, from, delay = 0 }: LedgerMeterProps) {
-  const tilt = tiltOf(given, alphaA);
+export function LedgerMeter({ names, letters, alphaA, tilt, owed, from, delay = 0 }: LedgerMeterProps) {
   const [shown, setShown] = useState(from ?? tilt);
 
   useEffect(() => {

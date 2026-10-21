@@ -86,18 +86,14 @@ export function useTruce(truceId: string) {
     let ended = false;
 
     const connect = () => {
-      // A server that sends no event ids replays from the start: count instead.
-      let counted = 0;
       close = api.stream(truceId, seen, {
         onOpen() {
-          counted = 0;
           failures = 0;
           if (!cancelled) setLink('live');
         },
         onEvent(event, index) {
-          const at = index ?? counted++;
-          if (cancelled || at < seen) return;
-          seen = at + 1;
+          if (cancelled || index < seen) return;
+          seen = index + 1;
           if (event.type === 'ledger' || event.type === 'error') {
             ended = true;
             setLink('ended');

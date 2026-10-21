@@ -50,8 +50,7 @@ export const httpApi: Api = {
       } catch {
         return;
       }
-      const index = /^\d+$/.test(message.lastEventId) ? Number(message.lastEventId) : null;
-      handlers.onEvent(event, index);
+      handlers.onEvent(event, Number(message.lastEventId));
       // The server closes after these; without this the browser would reconnect and replay.
       if (event.type === 'ledger' || event.type === 'error') source.close();
     };

@@ -1,5 +1,5 @@
 import type { CardItem, Side, Slot } from '@contract';
-import { Button, ButtonLink, cx, ErrorNotice, Icon, LedgerMeter, PairNames, ScoreMeter, Seal, Thumb, tiltOf, Voice } from '@/ui';
+import { Button, ButtonLink, cx, ErrorNotice, Icon, LedgerMeter, PairNames, ScoreMeter, Seal, Thumb, Voice } from '@/ui';
 import { longDate } from '@/lib/format';
 import { agentOf, possessive, SIDES, type Names } from '@/lib/people';
 import { absolute, canShare, copyText, shareLink } from '@/lib/share';
@@ -23,13 +23,10 @@ const firstOf = (list: string | undefined, n = 2) =>
     .map((s) => s.trim())
     .join(', ');
 
-/** Qloo's cuisine field is sometimes a paragraph; only a short one is a label. */
-const shortOnly = (text: string | undefined) => (text && text.length <= 32 ? text : undefined);
-
 /** The line under each article's name. */
 const DETAIL: Record<Slot, (item: CardItem) => (string | null | undefined)[]> = {
   film: (i) => [i.disambiguation, firstOf(i.facts.genres), i.facts.minutes && `${i.facts.minutes} min`],
-  restaurant: (i) => [shortOnly(i.facts.cuisine), i.facts.price],
+  restaurant: (i) => [i.facts.cuisineType, i.facts.price],
   music: (i) => [firstOf(i.facts.genres) ?? i.disambiguation],
 };
 
@@ -161,7 +158,7 @@ export function Plan({ state, pairId, date, stamp }: { state: TruceState; pairId
                 alphaA={state.ledger.after.alphaA}
                 tilt={state.ledger.after.tilt}
                 owed={state.ledger.after.owed}
-                from={stamp ? tiltOf(state.ledger.before.tilt, state.ledger.before.alphaA) : undefined}
+                from={stamp ? state.ledger.before.tilt : undefined}
                 delay={stamp ? 1500 : 0}
               />
             </div>

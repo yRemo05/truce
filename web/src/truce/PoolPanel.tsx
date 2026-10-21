@@ -7,8 +7,10 @@ import { Because } from './Because';
 import { useTruceCtx } from './context';
 import { subLine } from './Evening';
 
+/** The facts worth showing, in this order. */
 const FACT_LABEL: Record<string, string> = {
-  cuisine: 'Cuisine',
+  cuisineType: 'Cuisine',
+  cuisine: 'About',
   price: 'Price',
   ambience: 'Feel',
   dishes: 'Known for',
@@ -43,7 +45,7 @@ function Origin({ item }: { item: CardItem }) {
 const Row = memo(function Row({ item, mark }: { item: CardItem; mark: Mark }) {
   const { names } = useTruceCtx();
   const sub = subLine(item);
-  const facts = Object.entries(item.facts).filter(([k, v]) => v && FACT_LABEL[k]);
+  const facts = Object.keys(FACT_LABEL).flatMap((k) => (item.facts[k] ? [[k, item.facts[k]] as const] : []));
   return (
     <li className={cx('pool-row', mark && `is-${mark}`)}>
       <details>
