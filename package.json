@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Taste agents negotiate one shared evening for a couple or a group of friends, grounded in Qloo's taste graph, with a fairness ledger.",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",

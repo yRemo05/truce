@@ -137,4 +137,6 @@ Or build the single image: `docker build -t truce . && docker run -p 8787:8787 -
 
 ## License
 
-[MIT](LICENSE)
+Copyright (C) 2026 yRemo05.
+
+Truce is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only). You may use, study, change and share it. If you run a changed version for others over a network, you must offer them its source under the same license.
