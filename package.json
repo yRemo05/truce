@@ -1,0 +1,33 @@
+{
+  "name": "truce",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Two taste agents negotiate one shared evening, grounded in Qloo's taste graph, with a fairness ledger.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch --env-file=.env src/server/index.ts",
+    "start": "node --env-file-if-exists=.env --import tsx src/server/index.ts",
+    "test": "npm run test:qloo && npm run test:bargain && npm run test:ledger",
+    "test:qloo": "tsx scripts/test-qloo-parse.ts",
+    "test:bargain": "tsx scripts/test-bargain.ts",
+    "test:ledger": "tsx scripts/test-ledger.ts",
+    "probe": "node --env-file=.env scripts/probe.mjs"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "better-sqlite3": "^13.0.3",
+    "hono": "^4.13.13",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3"
+  }
+}

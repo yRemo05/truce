@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+# Qloo responses stay private (hackathon FAQ: no Qloo data in a public repo)
+.qloo-cache/
+data/
+# Local-only notes and agent folders
+docs/
+.claude/
+.agents/
+CLAUDE.md
