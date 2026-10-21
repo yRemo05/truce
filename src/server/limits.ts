@@ -17,6 +17,7 @@ export const LIMITS = {
   side: { max: 40, windowMs: 10 * 60_000 },
   truce: { max: 8, windowMs: 10 * 60_000 },
   demo: { max: 6, windowMs: 10 * 60_000 },
+  checkin: { max: 20, windowMs: 10 * 60_000 },
 } satisfies Record<string, Limit>;
 
 export type Action = keyof typeof LIMITS;

@@ -2,28 +2,35 @@
  * The HTTP contract between the Truce server and the web app. Types only:
  * the web app imports them with `import type`, so nothing here is bundled.
  *
+ * A "pair" is the group planning together: a couple (two people) or two to
+ * four friends. Each person is a side, a–d, in the order their names were
+ * given; per-person values are `PerSide` maps over `members`.
+ *
  *   GET  /api/search?slot=film&q=moonlight     → SearchResult
  *        [&near=Istanbul]                        (restaurants only: keep to places near there)
  *   POST /api/pairs            body PairInput   → { id }
  *   GET  /api/pairs/:id                         → PairView
  *   PATCH /api/pairs/:id       { location }     → PairView   (fix the place after "no restaurants found")
- *   PUT  /api/pairs/:id/sides/:side  SideInput  → { ready: Record<Side, boolean> }
- *   POST /api/pairs/:id/truces                  → { truceId }   (409 until both sides are ready)
- *   POST /api/demo                              → { pairId, truceId }   (a ready-made pair, truce started)
+ *   PUT  /api/pairs/:id/sides/:side  SideInput  → SideSaved  (with the brief as the agent understood it)
+ *   POST /api/pairs/:id/truces                  → { truceId }   (409 until everyone is ready)
+ *   POST /api/demo             body DemoInput   → { pairId, truceId }   (a ready-made group, truce started)
  *   GET  /api/truces/:id                        → TruceView
  *   GET  /api/truces/:id/stream[?from=n]        → server-sent events, one StreamEvent per `data:` line,
  *                                                 each with `id:` = its index in the truce's log. Replays
  *                                                 from `from` (or from Last-Event-ID + 1, or from 0) and
  *                                                 closes after `ledger` or `error`.
+ *   GET  /api/truces/:id/calendar.ics           → the evening as a calendar event (text/calendar)
+ *   PUT  /api/truces/:id/checkins/:side  CheckinInput → CheckinResult   (how the evening went)
  *
  * Errors are `{ error: { code, message } }` with a 4xx/5xx status;
  * `code: 'rate_limited'` comes with a `retryAfterSeconds`.
  */
-import type { TruceEvent } from './truce/negotiate';
 import type { Mode } from './agents/brain';
-import type { Side, Slot } from './truce/types';
+import type { Rating } from './truce/ledger';
+import type { TruceEvent } from './truce/negotiate';
+import type { PerSide, Side, Slot } from './truce/types';
 
-export type { Mode, Side, Slot, TruceEvent };
+export type { Mode, PerSide, Rating, Side, Slot, TruceEvent };
 export type { TruceResult, SlotEvidence, StrikeCode } from './truce/negotiate';
 
 export interface SearchHit {
@@ -49,8 +56,10 @@ export interface SearchResult {
 }
 
 export interface PairInput {
+  /** A couple is exactly two people; friends are two to four. */
   mode: Mode;
-  names: Record<Side, string>;
+  /** Everyone's first name, in seat order: they become sides a, b, c, d. */
+  names: string[];
   /** Where the restaurant should be: a Qloo locality such as "Manhattan" or "Istanbul". */
   location: string;
 }
@@ -65,23 +74,61 @@ export interface SideInput {
   seeds: Record<Slot, Seed[]>;
   /** How much each slot matters tonight; any positive numbers, normalised by the server. */
   weights: Record<Slot, number>;
+  /** Anything the person wants their agent to know about tonight, in their own words (≤ 280 characters). */
+  brief?: string;
+}
+
+/** One thing the agent took from a brief, and what Qloo matched it to. */
+export interface Understood {
+  /** The slot it applies to; null when it applies to the whole evening (a price cap). */
+  slot: Slot | null;
+  /** The person's own words for it: "nothing scary", "seen Dune". */
+  said: string;
+  /** What it became: a Qloo taste ("Horror"), a title ("Dune (2021)"), or a price ("Up to $$"). */
+  matched: string;
+  kind: 'taste' | 'title' | 'price';
+}
+
+/** A brief as the agent understood it. Private: only the person who wrote it sees it. */
+export interface BriefView {
+  text: string;
+  /** What they'd like tonight. Soft: their agent goes looking for it while scouting. */
+  wishes: Understood[];
+  /** What they ruled out. Hard: kept out of the evening entirely. */
+  vetoes: Understood[];
+  /** Anything else, in a few words for their agent: "an early night". */
+  note: string | null;
+  /** Words nothing in Qloo matched; the agent still reads them. */
+  unmatched: string[];
+}
+
+export interface SideSaved {
+  ready: PerSide<boolean>;
+  /** Null when no brief was given (or no model is configured to read one). */
+  brief: BriefView | null;
 }
 
 export interface LedgerEntry {
   truceId: string;
   at: string;
-  /** How far each person fell short of their own best evening, 0–1. */
-  concession: Record<Side, number>;
+  /** How far each person fell short of their own best evening, 0–1, after any check-ins. */
+  concession: PerSide<number>;
+  /** Who has said how the evening went. */
+  checkedIn: PerSide<boolean>;
   evening: Record<Slot, string>;
+  /** A made-up earlier evening the demo groups start with, so the ledger has a history to show. */
+  earlier: boolean;
 }
 
 export interface LedgerView {
-  /** Positive: A has given more ground; negative: B has. */
-  balance: number;
-  /** A's bargaining weight in the next truce (B's is 1 − alphaA). */
-  alphaA: number;
-  /** The same pull on a −1…1 scale: −1 is the most the ledger can favour B, 1 the most for A. */
-  tilt: number;
+  members: Side[];
+  /** Per person: positive when they have given more ground than the group's average. */
+  balance: PerSide<number>;
+  /** Each person's bargaining weight in the next truce; they sum to 1 (0.5 each for a couple). */
+  alpha: PerSide<number>;
+  /** The same on a −1…1 scale per person: 1 is the most say the ledger can give, −1 the least. */
+  tilt: PerSide<number>;
+  /** Who the ledger favours most next time; null when it is even. */
   owed: Side | null;
   entries: LedgerEntry[];
 }
@@ -89,15 +136,28 @@ export interface LedgerView {
 export interface PairView {
   id: string;
   mode: Mode;
-  names: Record<Side, string>;
+  members: Side[];
+  names: PerSide<string>;
   location: string;
-  ready: Record<Side, boolean>;
+  ready: PerSide<boolean>;
   ledger: LedgerView;
   lastTruceId: string | null;
-  lastTruce: { id: string; status: TruceView['status'] } | null;
+  lastTruce: { id: string; status: TruceView['status']; checkedIn: PerSide<boolean> } | null;
 }
 
-/** One pool item as the audience sees it: both people's scores and what drives them. */
+export type LinkKind = 'imdb' | 'letterboxd' | 'netflix' | 'spotify' | 'maps' | 'website' | 'menu' | 'phone';
+
+/** Somewhere to act on a pick: watch, listen, find, book. Always http(s) or tel:. */
+export interface Link {
+  kind: LinkKind;
+  label: string;
+  url: string;
+}
+
+/** Where a pool item came from: one person's taste, everyone's together (a bridge), or an agent's scouting. */
+export type Origin = Side | 'joint' | 'scout';
+
+/** One pool item as the audience sees it: everyone's scores and what drives them. */
 export interface CardItem {
   id: string;
   slot: Slot;
@@ -107,27 +167,78 @@ export interface CardItem {
   blurb: string | null;
   facts: Record<string, string>;
   /** Each person's score, 0–100. */
-  scores: Record<Side, number>;
-  /** Which recommendation surfaced it: A's taste, B's taste, or both together (a bridge). */
-  origins: ('a' | 'b' | 'joint')[];
+  scores: PerSide<number>;
+  origins: Origin[];
   /** Each person's seeds behind their score, e.g. "In the Mood for Love (56%)". */
-  because: Record<Side, string[]>;
+  because: PerSide<string[]>;
+  /** The agent who brought it to the table while scouting, and why. */
+  scout: { side: Side; why: string } | null;
+  links: Link[];
+  /** Restaurants only: today's opening hours where they are ("17:00–01:00"), and whether they cover the evening. */
+  hours: { today: string | null; openTonight: boolean | null } | null;
+  address: string | null;
 }
 
+/** The evening being planned, in the restaurant city's own time. */
+export interface Tonight {
+  /** YYYY-MM-DD. */
+  date: string;
+  weekday: string;
+  timeZone: string;
+}
+
+/** An item an agent found or added while scouting. */
+export interface ScoutFind {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  disambiguation: string | null;
+}
+
+/** What each agent does in the scouting round, before the pool is scored and frozen. */
+export type ScoutEvent =
+  | { type: 'scout'; side: Side; step: 'start' }
+  | {
+      type: 'scout';
+      side: Side;
+      step: 'search';
+      slot: Slot;
+      /** The favourites or items it steered by. */
+      like: string[];
+      /** The taste words it asked for, and the Qloo tastes they matched. */
+      words: string[];
+      matched: string[];
+      /** Restaurants: where it looked ("Istanbul", or the group's taste hotspot such as "Cihangir"). */
+      area: string | null;
+      found: ScoutFind[];
+    }
+  | { type: 'scout'; side: Side; step: 'add'; slot: Slot; item: ScoutFind; why: string }
+  /** Its one line to the group about what it brought; empty if it found nothing worth adding. */
+  | { type: 'scout'; side: Side; step: 'done'; message: string };
+
 export type StreamEvent =
-  | { type: 'status'; phase: 'scouting' | 'negotiating'; brain: 'claude' | 'rules' }
-  | { type: 'pool'; items: Record<Slot, CardItem[]>; indifferent: Record<Side, Record<Slot, boolean>> }
+  | { type: 'status'; phase: 'gathering' | 'scouting' | 'negotiating'; brain: 'claude' | 'rules' }
+  /** Qloo's words for each person's taste, and the vetoes everyone's briefs put in place. */
+  | { type: 'tastes'; portraits: PerSide<string[]>; vetoes: string[] }
+  | ScoutEvent
+  | {
+      type: 'pool';
+      items: Record<Slot, CardItem[]>;
+      indifferent: PerSide<Record<Slot, boolean>>;
+      tonight: Tonight;
+    }
   | TruceEvent
   | {
       type: 'ledger';
-      before: { balance: number; alphaA: number; tilt: number };
-      after: { balance: number; alphaA: number; tilt: number; owed: Side | null };
+      before: { alpha: PerSide<number>; tilt: PerSide<number> };
+      after: { alpha: PerSide<number>; tilt: PerSide<number>; owed: Side | null };
     }
   | { type: 'error'; code: StreamErrorCode; message: string; retryable: boolean };
 
 /**
  * Why a truce stopped. `no_restaurants`: fix the pair's location (PATCH) and
- * start again. `no_options`: add favourites. `interrupted` / `internal`: try again.
+ * start again. `no_options`: add favourites or loosen a veto. `interrupted` /
+ * `internal`: try again.
  */
 export type StreamErrorCode = 'no_restaurants' | 'no_options' | 'interrupted' | 'internal';
 
@@ -136,11 +247,31 @@ export interface TruceView {
   pairId: string;
   status: 'running' | 'done' | 'failed';
   mode: Mode;
-  names: Record<Side, string>;
+  members: Side[];
+  names: PerSide<string>;
   location: string;
   createdAt: string;
   endedAt: string | null;
+  checkedIn: PerSide<boolean>;
   events: StreamEvent[];
+}
+
+export interface CheckinInput {
+  /** False when the evening didn't happen: nothing changes. */
+  went: boolean;
+  /** Per slot, how it was; a slot left out stays as Qloo predicted. */
+  ratings: Partial<Record<Slot, Rating>>;
+}
+
+export interface CheckinResult {
+  ledger: LedgerView;
+  /** What the check-in taught this person's agent: loved picks become favourites, the rest stay off the table. */
+  learned: { loved: Seed[]; avoided: Seed[] };
+}
+
+export interface DemoInput {
+  /** "couple": Maya and Deniz in Manhattan. "friends": three friends in Istanbul. */
+  kind: 'couple' | 'friends';
 }
 
 export interface ApiError {

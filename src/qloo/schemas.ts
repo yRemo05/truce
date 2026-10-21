@@ -38,7 +38,24 @@ export interface Entity {
   location: { lat: number; lon: number } | null;
   address: string | null;
   priceLevel: number | null;
+  /** Places: opening periods per weekday ("monday"…), times as "HH:MM". Null when Qloo has none. */
+  hours: Hours | null;
+  /** Places: closed for good. */
+  isClosed: boolean;
+  /** The first id per outside service: imdb, letterboxd, netflix, spotify, google_place… */
+  external: Record<string, string>;
+  /** Google's place id, for a maps link that opens the right place. */
+  googlePlaceId: string | null;
+  website: string | null;
+  menuUrl: string | null;
+  phone: string | null;
 }
+
+export interface Period {
+  opens: string;
+  closes: string;
+}
+export type Hours = Record<string, Period[]>;
 
 export interface ScoredEntity extends Entity {
   /** Qloo affinity to the query's signal, 0–1, comparable only within one query. */
@@ -86,6 +103,12 @@ const propertiesSchema = z
     specialty_dishes: z.array(named).nullish(),
     good_for: z.array(named).nullish(),
     is_closed: z.boolean().nullish(),
+    // Shapes these may take vary by endpoint, so they are read by hand below.
+    hours: z.unknown().optional(),
+    external: z.unknown().optional(),
+    website: z.unknown().optional(),
+    menu_url: z.unknown().optional(),
+    phone: z.unknown().optional(),
   })
   .nullish();
 
@@ -114,6 +137,8 @@ export const insightsEntitySchema = z.looseObject({
   tags: z.array(tagSchema).nullish(),
   properties: propertiesSchema,
   location: locationSchema,
+  // Insights puts external ids at the top level, as arrays.
+  external: z.unknown().optional(),
   query: z
     .looseObject({
       affinity: z.number(),
@@ -225,6 +250,50 @@ function factsOf(kind: EntityKind, p: Properties): Record<string, string> {
   return out;
 }
 
+const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+/** "T17:00:00" or "17:00" → "17:00"; anything else → null. */
+function clock(v: unknown): string | null {
+  const m = typeof v === 'string' ? /^T?(\d{1,2}):(\d{2})/.exec(v.trim()) : null;
+  return m ? `${m[1]!.padStart(2, '0')}:${m[2]}` : null;
+}
+
+/** Qloo's `hours`: `{ monday: [{ opens: "T17:00:00", closes: "T01:00:00", closed: false }], … }`. */
+function hoursOf(raw: unknown): Hours | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const out: Hours = {};
+  for (const [day, periods] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(periods)) continue;
+    out[day.toLowerCase()] = periods.flatMap((p) => {
+      if (!p || typeof p !== 'object' || (p as { closed?: unknown }).closed === true) return [];
+      const opens = clock((p as { opens?: unknown }).opens);
+      const closes = clock((p as { closes?: unknown }).closes);
+      return opens && closes ? [{ opens, closes }] : [];
+    });
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * External ids, from either shape: `{ imdb: [{ id }] }` (Insights, top level)
+ * or `{ imdb: { id } }` (Search and Entities, under properties).
+ */
+function externalOf(...sources: unknown[]): { ids: Record<string, string>; googlePlaceId: string | null } {
+  const ids: Record<string, string> = {};
+  let googlePlaceId: string | null = null;
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    for (const [service, value] of Object.entries(source as Record<string, unknown>)) {
+      const first = Array.isArray(value) ? value[0] : value;
+      if (!first || typeof first !== 'object') continue;
+      const id = text((first as { id?: unknown }).id);
+      if (id && !ids[service]) ids[service] = id;
+      if (service === 'google_place') googlePlaceId ??= text((first as { place_id?: unknown }).place_id);
+    }
+  }
+  return { ids, googlePlaceId };
+}
+
 /** A restaurant's cuisine as a short label ("Italian"), from its genre tags. */
 const CUISINE_TAG = 'urn:tag:genre:place:restaurant:';
 
@@ -233,6 +302,7 @@ function baseEntity(
   kind: EntityKind,
 ): Entity {
   const p = raw.properties;
+  const external = externalOf('external' in raw ? raw.external : undefined, p?.external);
   const facts = factsOf(kind, p);
   if (kind === 'place') {
     // Prefer a cuisine ("Korean") over a format ("Fine dining restaurant", "Wine bar").
@@ -258,6 +328,13 @@ function baseEntity(
     location: raw.location ? { lat: raw.location.lat, lon: raw.location.lon } : null,
     address: p?.address ?? null,
     priceLevel: p?.price_level ?? null,
+    hours: hoursOf(p?.hours),
+    isClosed: p?.is_closed === true,
+    external: external.ids,
+    googlePlaceId: external.googlePlaceId,
+    website: text(p?.website),
+    menuUrl: text(p?.menu_url),
+    phone: text(p?.phone),
   };
 }
 

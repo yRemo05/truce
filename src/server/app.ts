@@ -3,29 +3,47 @@
  * Every input is validated with zod, every action is rate-limited per
  * client, and bodies are capped; the demo is public.
  */
+import type Anthropic from '@anthropic-ai/sdk';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { streamSSE } from 'hono/streaming';
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
-import type { ApiError, PairView, SearchHit, SearchResult, SideInput, StreamEvent, TruceView } from '../contract';
+import { BRIEF_MAX, groundBrief, readBrief, type InterpretedBrief } from '../agents/brief';
+import { usageOf } from '../agents/claude-brain';
+import type {
+  ApiError,
+  CardItem,
+  PairView,
+  SearchHit,
+  SearchResult,
+  SideSaved,
+  StreamEvent,
+  TruceView,
+} from '../contract';
 import { QlooError, type QlooClient } from '../qloo/client';
 import { locate, searchEntities, type Locality } from '../qloo/queries';
-import { KIND_OF_SLOT, SLOTS, type Side } from '../truce/types';
+import { KIND_OF_SLOT, MAX_PEOPLE, MIN_PEOPLE, SIDES, SLOTS, perSide, type Side, type Slot } from '../truce/types';
+import { eveningIcs } from './calendar';
 import type { Store } from './db';
+import { createDemos } from './demo';
 import { clientOf, createLimiter, type Action } from './limits';
-import { ledgerOf, newId, UserFacingError, type Runner } from './runner';
+import { costOf, newId, pairLedger, UserFacingError, type Runner } from './runner';
 
 const slot = z.enum(SLOTS);
-const side = z.enum(['a', 'b']);
+const side = z.enum(SIDES);
 const name = z.string().trim().min(1).max(24);
+const location = z.string().trim().min(2).max(60);
 
-const pairInput = z.object({
-  mode: z.enum(['couple', 'bff']),
-  names: z.object({ a: name, b: name }),
-  location: z.string().trim().min(2).max(60),
-});
+const pairInput = z
+  .object({
+    mode: z.enum(['couple', 'bff']),
+    names: z.array(name).min(MIN_PEOPLE).max(MAX_PEOPLE),
+    location,
+  })
+  .refine((p) => p.mode !== 'couple' || p.names.length === 2, 'A couple is two people.')
+  .refine((p) => new Set(p.names.map((n) => n.toLowerCase())).size === p.names.length, 'Give everyone a different name.');
 
 const seed = z.object({
   id: z.string().regex(/^[0-9A-Fa-f-]{36}$/, 'not a Qloo entity id'),
@@ -35,32 +53,33 @@ const sideInput = z
   .object({
     seeds: z.object({ film: z.array(seed).max(3), restaurant: z.array(seed).max(3), music: z.array(seed).max(3) }),
     weights: z.object({ film: z.number().min(0).max(100), restaurant: z.number().min(0).max(100), music: z.number().min(0).max(100) }),
+    brief: z.string().trim().max(BRIEF_MAX).optional(),
   })
   .refine((v) => SLOTS.some((s) => v.seeds[s].length > 0), 'Pick at least one thing you love.');
 
+const rating = z.enum(['loved', 'fine', 'not_for_me']);
+const checkinInput = z.object({
+  went: z.boolean(),
+  ratings: z.object({ film: rating.optional(), restaurant: rating.optional(), music: rating.optional() }),
+});
+const demoInput = z.object({ kind: z.enum(['couple', 'friends']).default('couple') });
+
 /** Search hits below this popularity percentile are listed after the rest. */
 const OBSCURE = 0.2;
-
-/** The ready-made pair behind "Try the demo": tastes far enough apart to make a real negotiation. */
-const DEMO = {
-  pair: { mode: 'couple' as const, names: { a: 'Maya', b: 'Deniz' }, location: 'Manhattan' },
-  loves: {
-    a: { film: ['In the Mood for Love', 'Lost in Translation'], restaurant: ['Carbone New York'], music: ['Radiohead'] },
-    b: { film: ['Mad Max: Fury Road', 'John Wick'], restaurant: ['Shake Shack Madison Square Park'], music: ['Bad Bunny'] },
-  },
-  weights: { a: { film: 50, restaurant: 25, music: 25 }, b: { film: 25, restaurant: 50, music: 25 } },
-};
 
 export interface AppDeps {
   store: Store;
   qloo: QlooClient;
   runner: Runner;
+  anthropic: Anthropic | null;
   webDir?: string;
 }
 
-export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps) {
+export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' }: AppDeps) {
   const app = new Hono();
   const limiter = createLimiter();
+  const demos = createDemos(qloo, anthropic);
+  demos.warm();
 
   const fail = (c: Context, status: number, code: string, message: string, retryAfterSeconds?: number) =>
     c.json<ApiError>({ error: { code, message, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) } }, status as 400);
@@ -112,7 +131,7 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
     const blocked = limited(c, 'search');
     if (blocked) return blocked;
     const { slot: s, q, near } = z
-      .object({ slot, q: z.string().trim().min(1).max(80), near: pairInput.shape.location.optional() })
+      .object({ slot, q: z.string().trim().min(1).max(80), near: location.optional() })
       .parse({ slot: c.req.query('slot'), q: c.req.query('q'), near: c.req.query('near') || undefined });
     // A restaurant you love counts most when it is in the city you're going
     // out in, so with `near` the search keeps to it. A place Qloo doesn't know
@@ -152,18 +171,25 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
     const pair = store.pair(pairId);
     if (!pair) return null;
     const sides = store.sides(pair.id);
-    const truces = store.trucesOf(pair.id);
-    const last = truces.at(-1);
+    const last = store.trucesOf(pair.id).filter((t) => !t.earlier).at(-1);
+    const said = last ? store.checkinsOf(last.id) : [];
     return {
       id: pair.id,
       mode: pair.mode,
+      members: pair.members,
       names: pair.names,
       location: pair.location,
-      ready: { a: Boolean(sides.a), b: Boolean(sides.b) },
-      ledger: ledgerOf(truces),
+      ready: perSide(pair.members, (s) => Boolean(sides[s])),
+      ledger: pairLedger(store, pair),
       lastTruceId: last?.id ?? null,
-      lastTruce: last ? { id: last.id, status: last.status } : null,
+      lastTruce: last ? { id: last.id, status: last.status, checkedIn: perSide(pair.members, (s) => said.some((x) => x.side === s)) } : null,
     };
+  };
+
+  const memberOf = (pairId: string, raw: string): Side => {
+    const s = side.parse(raw);
+    if (!store.pair(pairId)?.members.includes(s)) throw new UserFacingError('Nobody sits there in this group.', 404, 'not_found');
+    return s;
   };
 
   app.get('/api/pairs/:id', (c) => {
@@ -176,21 +202,41 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
     if (blocked) return blocked;
     const pair = store.pair(c.req.param('id'));
     if (!pair) return fail(c, 404, 'not_found', 'This truce link does not exist.');
-    const { location } = z.object({ location: pairInput.shape.location }).parse(await c.req.json());
-    store.setLocation(pair.id, location);
+    const body = z.object({ location }).parse(await c.req.json());
+    store.setLocation(pair.id, body.location);
     return c.json<PairView>(pairView(pair.id)!);
   });
+
+  /** Reads and grounds a brief; null without a model. A failed reading keeps the words for the agent. */
+  async function interpret(text: string, place: string): Promise<InterpretedBrief | null> {
+    if (!anthropic) return null;
+    try {
+      let usage: Anthropic.Usage | null = null;
+      const intent = await readBrief(anthropic, text, (u) => (usage = u));
+      const brief = await groundBrief(qloo, text, intent, await localityOf(place));
+      if (usage) console.log(`brief read, ≈$${costOf([usageOf(usage)]).toFixed(5)}`);
+      return brief;
+    } catch (err) {
+      console.warn(`reading a brief failed: ${(err as Error).message}`);
+      return {
+        view: { text, wishes: [], vetoes: [], note: null, unmatched: [] },
+        rules: { wishTags: { film: [], restaurant: [], music: [] }, excludeTags: { film: [], restaurant: [], music: [] }, excludeEntities: [], maxPrice: null },
+      };
+    }
+  }
 
   app.put('/api/pairs/:id/sides/:side', async (c) => {
     const blocked = limited(c, 'side');
     if (blocked) return blocked;
     const pair = store.pair(c.req.param('id'));
     if (!pair) return fail(c, 404, 'not_found', 'This truce link does not exist.');
-    const s = side.parse(c.req.param('side'));
-    const input: SideInput = sideInput.parse(await c.req.json());
-    store.saveSide(pair.id, s, input);
+    const s = memberOf(pair.id, c.req.param('side'));
+    const input = sideInput.parse(await c.req.json());
+    const text = input.brief?.trim() || undefined;
+    const brief = text ? await interpret(text, pair.location) : null;
+    store.saveSide(pair.id, s, { ...input, brief: text }, brief);
     const sides = store.sides(pair.id);
-    return c.json({ ready: { a: Boolean(sides.a), b: Boolean(sides.b) } });
+    return c.json<SideSaved>({ ready: perSide(pair.members, (x) => Boolean(sides[x])), brief: brief?.view ?? null });
   });
 
   app.post('/api/pairs/:id/truces', (c) => {
@@ -201,34 +247,12 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
     return c.json({ truceId: runner.start(pair.id) }, 201);
   });
 
-  // The demo's seeds are resolved once (at boot, then kept), so "Try the demo" starts at once.
-  let demoSeeds: Promise<Record<Side, SideInput['seeds']>> | null = null;
-  const resolveDemoSeeds = () =>
-    (demoSeeds ??= (async () => {
-      const out = {} as Record<Side, SideInput['seeds']>;
-      for (const side of ['a', 'b'] as const) {
-        out[side] = { film: [], restaurant: [], music: [] };
-        for (const sl of SLOTS) {
-          for (const title of DEMO.loves[side][sl]) {
-            const [top] = await searchEntities(qloo, title, KIND_OF_SLOT[sl], 1);
-            if (top) out[side][sl].push({ id: top.id, name: top.name });
-          }
-        }
-      }
-      return out;
-    })().catch((err) => {
-      demoSeeds = null; // try again on the next request
-      throw err;
-    }));
-  void resolveDemoSeeds().catch((err) => console.warn(`demo seeds not ready: ${(err as Error).message}`));
-
   app.post('/api/demo', async (c) => {
     const blocked = limited(c, 'demo');
     if (blocked) return blocked;
-    const seeds = await resolveDemoSeeds();
-    const pairId = newId();
-    store.createPair(pairId, DEMO.pair);
-    for (const side of ['a', 'b'] as const) store.saveSide(pairId, side, { seeds: seeds[side], weights: DEMO.weights[side] });
+    const raw = await c.req.text();
+    const { kind } = demoInput.parse(raw ? JSON.parse(raw) : {});
+    const pairId = await demos.create(store, kind);
     return c.json({ pairId, truceId: runner.start(pairId) }, 201);
   });
 
@@ -236,17 +260,47 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
     const truce = store.truce(c.req.param('id'));
     if (!truce) return fail(c, 404, 'not_found', 'This truce does not exist.');
     const pair = store.pair(truce.pairId)!;
+    const said = store.checkinsOf(truce.id);
     return c.json<TruceView>({
       id: truce.id,
       pairId: truce.pairId,
       status: truce.status,
       mode: pair.mode,
+      members: pair.members,
       names: pair.names,
       location: pair.location,
       createdAt: truce.createdAt,
       endedAt: truce.finishedAt,
+      checkedIn: perSide(pair.members, (s) => said.some((x) => x.side === s)),
       events: truce.events,
     });
+  });
+
+  app.get('/api/truces/:id/calendar.ics', (c) => {
+    const truce = store.truce(c.req.param('id'));
+    if (!truce?.result) return fail(c, 404, 'not_found', 'This evening is not planned yet.');
+    const pool = truce.events.find((e): e is Extract<StreamEvent, { type: 'pool' }> => e.type === 'pool');
+    if (!pool) return fail(c, 404, 'not_found', 'This evening is not planned yet.');
+    const items = Object.fromEntries(
+      SLOTS.map((s) => [s, pool.items[s].find((i) => i.id === truce.result!.bundle[s])]),
+    ) as Record<Slot, CardItem | undefined>;
+    if (SLOTS.some((s) => !items[s])) return fail(c, 404, 'not_found', 'This evening is not planned yet.');
+    const host = new URL(c.req.url).host;
+    const ics = eveningIcs({ truceId: truce.id, tonight: pool.tonight, items: items as Record<Slot, CardItem>, host });
+    return c.body(ics, 200, {
+      'Content-Type': 'text/calendar; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="truce-evening.ics"',
+    });
+  });
+
+  app.put('/api/truces/:id/checkins/:side', async (c) => {
+    const blocked = limited(c, 'checkin');
+    if (blocked) return blocked;
+    const truce = store.truce(c.req.param('id'));
+    if (!truce) return fail(c, 404, 'not_found', 'This truce does not exist.');
+    const s = memberOf(truce.pairId, c.req.param('side'));
+    const input = checkinInput.parse(await c.req.json());
+    return c.json(runner.checkin(truce.id, s, input));
   });
 
   app.get('/api/truces/:id/stream', (c) => {

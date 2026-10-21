@@ -1,6 +1,6 @@
 /**
- * The vocabulary of a truce: three slots make an evening, two sides
- * negotiate it, and a bundle is one pick per slot.
+ * The vocabulary of a truce: three slots make an evening, two to four people
+ * (sides a–d) negotiate it, and a bundle is one pick per slot.
  */
 import type { SlotKind } from '../qloo/queries';
 
@@ -13,8 +13,30 @@ export const KIND_OF_SLOT: Record<Slot, SlotKind> = {
   music: 'artist',
 };
 
-export type Side = 'a' | 'b';
-export const other = (side: Side): Side => (side === 'a' ? 'b' : 'a');
+export const SIDES = ['a', 'b', 'c', 'd'] as const;
+export type Side = (typeof SIDES)[number];
+export const MIN_PEOPLE = 2;
+export const MAX_PEOPLE = 4;
+
+/** One value per person taking part; the member list says which keys are there. */
+export type PerSide<T> = Partial<Record<Side, T>>;
+
+/** The sides of a group of `n` people, in order: a, b, … */
+export const membersOf = (n: number): Side[] => SIDES.slice(0, n);
+
+/** Builds a per-side map over the members. */
+export function perSide<T>(members: readonly Side[], f: (side: Side) => T): PerSide<T> {
+  const out: PerSide<T> = {};
+  for (const s of members) out[s] = f(s);
+  return out;
+}
+
+/** A member's value from a per-side map; a missing one is a bug, not a case to handle. */
+export function at<T>(map: PerSide<T>, side: Side): T {
+  const v = map[side];
+  if (v === undefined) throw new Error(`no value for side "${side}"`);
+  return v;
+}
 
 /** One entity id per slot. */
 export type Bundle = Record<Slot, string>;
