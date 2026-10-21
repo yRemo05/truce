@@ -6,7 +6,7 @@
  * are computed from the pool and each person's weights, so every number on
  * screen is consistent with every other.
  */
-import type { CardItem, Mode, Side, SideInput, Slot, StreamEvent, TruceResult } from '@contract';
+import type { CardItem, Mode, Side, SideInput, Slot, StreamEvent, TruceEvent, TruceResult } from '@contract';
 import type { Names } from '@/lib/people';
 import { bySlot, SLOTS, type Bundle } from '@/lib/truce';
 import { byName, hashOf } from './catalog';
@@ -56,7 +56,7 @@ interface Turn {
   pick?: Pick;
   say: Line;
   /** The model's move was struck and the rule-based agent's stands instead. */
-  struck?: Line;
+  struck?: { code: Extract<TruceEvent, { type: 'rejected' }>['code']; reason: Line };
 }
 
 const SCRIPTS: { opener: Side; turns: Turn[] }[] = [
@@ -65,7 +65,7 @@ const SCRIPTS: { opener: Side; turns: Turn[] }[] = [
     turns: [
       { side: 'a', action: 'counter', pick: ['Chungking Express', 'Osteria Lume', 'Massive Attack'], say: (n) => `${n.a} would start with Chungking Express, dinner at Osteria Lume and Massive Attack on the walk home. Neon, romance, a little rain.` },
       { side: 'b', action: 'counter', pick: ['The Raid', 'Smokehouse 41', 'Burna Boy'], say: (n) => `Respectfully, no subtitles tonight. ${n.b} counters with The Raid, brisket at Smokehouse 41 and Burna Boy loud enough to feel.` },
-      { side: 'a', action: 'counter', pick: ['Chungking Express', 'Brass Lantern Noodle Bar', 'Khruangbin'], struck: (n) => `offer below ${n.a}'s minimum`, say: (n) => `${n.a} can meet you partway.` },
+      { side: 'a', action: 'counter', pick: ['Chungking Express', 'Brass Lantern Noodle Bar', 'Khruangbin'], struck: { code: 'below_minimum', reason: (n) => `offer below ${n.a}'s minimum` }, say: (n) => `${n.a} can meet you partway.` },
       { side: 'b', action: 'counter', pick: ['Baby Driver', 'Kisa Izakaya', 'Khruangbin'], say: (n) => `Khruangbin we can share. Swap the arthouse for Baby Driver and ${n.b} will trade the brisket for Kisa Izakaya.` },
       { side: 'a', action: 'counter', pick: ['Drive', 'Brass Lantern Noodle Bar', 'Frank Ocean'], say: (n) => `Same getaway car, better film: Drive. Noodles at Brass Lantern, Frank Ocean after. That's ${n.a} giving ground on two of three.` },
       { side: 'b', action: 'counter', pick: ['Drive', 'Kisa Izakaya', 'Khruangbin'], say: (n) => `Drive, done. But Kisa over Brass Lantern, and Khruangbin over Frank Ocean. That's ${n.b}'s last offer.` },
@@ -79,7 +79,7 @@ const SCRIPTS: { opener: Side; turns: Turn[] }[] = [
       { side: 'a', action: 'counter', pick: ['Chungking Express', 'Osteria Lume', 'Massive Attack'], say: (n) => `${n.a} has the ledger's ear tonight. Chungking Express, Osteria Lume, Massive Attack.` },
       { side: 'b', action: 'counter', pick: ['Edge of Tomorrow', 'Neon Taquería', 'Rosalía'], say: (n) => `Edge of Tomorrow is basically a romance if you squint. Tacos at Neon, Rosalía after. ${n.b} is being generous.` },
       { side: 'a', action: 'counter', pick: ['Arrival', 'Café Meridian', 'Frank Ocean'], say: () => `Arrival is a film about listening, which feels relevant. Café Meridian, then Frank Ocean.` },
-      { side: 'b', action: 'counter', pick: ['Baby Driver', 'Neon Taquería', 'Khruangbin'], struck: () => `unknown film "F9"`, say: (n) => `${n.b} can meet you partway.` },
+      { side: 'b', action: 'counter', pick: ['Baby Driver', 'Neon Taquería', 'Khruangbin'], struck: { code: 'unknown_item', reason: () => `unknown film "F9"` }, say: (n) => `${n.b} can meet you partway.` },
       { side: 'a', action: 'counter', pick: ['Arrival', 'Brass Lantern Noodle Bar', 'Frank Ocean'], say: (n) => `Arrival, Brass Lantern, Frank Ocean. ${n.a} won't go further than this tonight.` },
       { side: 'b', action: 'decline', say: (n) => `Two of three are ${n.a}'s picks. ${n.b} would rather the referee called it.` },
     ],
@@ -230,7 +230,7 @@ export function buildTimeline(input: TimelineInput): { timeline: Timed[]; result
     push(350, { type: 'thinking', side: t.side, turn });
     let moveBrain: string = brain;
     if (t.struck) {
-      push(1300, { type: 'rejected', turn, side: t.side, reason: t.struck(names) });
+      push(1300, { type: 'rejected', turn, side: t.side, code: t.struck.code, reason: t.struck.reason(names) });
       moveBrain = 'rules';
     }
     const delay = t.struck ? 1100 : 1900;
@@ -263,11 +263,12 @@ export function buildTimeline(input: TimelineInput): { timeline: Timed[]; result
 
   const fair = nash(all, alphaA);
   let final: Bundle = agreed ?? fair.bundle;
-  if (!agreed) push(900, { type: 'ruling', bundle: final });
+  const pct = (x: Scored) => ({ a: Math.round(x.a * 100), b: Math.round(x.b * 100) });
+  if (!agreed) push(900, { type: 'ruling', bundle: final, scores: pct(fair) });
   const current = all.find((x) => same(x.bundle, final))!;
   const better = betterForBoth(all, current);
   if (better) {
-    push(1000, { type: 'polish', from: final, to: better.bundle });
+    push(1000, { type: 'polish', from: final, to: better.bundle, scores: { from: pct(current), to: pct(better) } });
     final = better.bundle;
   }
   const scored = all.find((x) => same(x.bundle, final))!;

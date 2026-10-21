@@ -176,7 +176,6 @@
   }
 }
 .turns__status {
-  font-variant-numeric: tabular-nums;
   font-size: var(--text-small);
   font-weight: 620;
   white-space: nowrap;
@@ -984,4 +983,64 @@
   .plan__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ---------- Endings ---------- */
+.plan__verdict {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  font-family: var(--font-display);
+  font-size: var(--text-display-s);
+  line-height: 1.2;
+}
+.plan__verdict .icon {
+  color: var(--ok);
+}
+.plan__verdict--ruled .icon {
+  color: var(--ink-2);
+}
+.plan__verdict + .plan__how {
+  margin-top: var(--s-1);
+}
+
+/* The evening the referee picked, inside its note. */
+.referee__evening {
+  display: grid;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: var(--paper-sunk);
+  text-align: left;
+}
+.referee__scores {
+  display: grid;
+  gap: 0.25rem;
+}
+@media (min-width: 45em) {
+  .referee__scores {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--s-4);
+  }
+}
+
+/* A truce that stopped early. */
+.stopped {
+  display: grid;
+  gap: var(--s-4);
+}
+.stopped__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--s-3);
+}
+.stopped__form .field {
+  flex: 1 1 16rem;
+}
+.stopped__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
 }

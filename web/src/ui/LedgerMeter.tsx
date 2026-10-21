@@ -4,50 +4,51 @@ import { agentOf, type Names } from '@/lib/people';
 import { cx } from './cx';
 import { Monogram } from './Monogram';
 
-/** The most the ledger moves a side's weight from 0.5 (the server's MAX_TILT). */
-const MAX_TILT = 0.15;
-
 /**
  * Whom the ledger favours, and how strongly, in words. `owed` is the server's
- * verdict where it has one; the weight alone only says how much.
+ * verdict on who; `tilt` (−1 favours B fully, 1 favours A) says how much.
  */
-export function pullSentence(alphaA: number, names: Names, when: 'next' | 'tonight', owed?: Side | null): string {
-  const side = owed !== undefined ? owed : Math.abs(alphaA - 0.5) < 0.01 ? null : alphaA > 0.5 ? 'a' : 'b';
-  if (!side) return when === 'next' ? 'The ledger is even. Next time starts level.' : 'The ledger is even tonight.';
-  const tilt = Math.abs(alphaA - 0.5) / MAX_TILT;
-  const words = tilt < 0.4 ? 'a little more pull' : tilt < 0.75 ? 'more pull' : 'a lot more pull';
-  return when === 'next' ? `Next time, ${agentOf(names[side])} gets ${words}.` : `The ledger gives ${agentOf(names[side])} ${words} tonight.`;
+export function pullSentence(tilt: number, owed: Side | null, names: Names, when: 'next' | 'tonight'): string {
+  if (!owed) return when === 'next' ? 'The ledger is even. Next time starts level.' : 'The ledger is even tonight.';
+  const strength = Math.abs(tilt);
+  const words = strength < 0.4 ? 'a little more pull' : strength < 0.75 ? 'more pull' : 'a lot more pull';
+  return when === 'next' ? `Next time, ${agentOf(names[owed])} gets ${words}.` : `The ledger gives ${agentOf(names[owed])} ${words} tonight.`;
 }
 
 interface LedgerMeterProps {
   names: Names;
   letters: Names;
-  /** A's bargaining weight; B's is 1 − alphaA. */
+  /** A's bargaining weight, shown as A's share of the pull. */
   alphaA: number;
+  tilt: number;
   owed: Side | null;
-  /** Animate from this weight to `alphaA`. */
+  /** Animate from this tilt to `tilt`. */
   from?: number;
   delay?: number;
 }
 
-const positionOf = (alphaA: number) => 50 - Math.max(-1, Math.min(1, (alphaA - 0.5) / MAX_TILT)) * 44;
+const positionOf = (tilt: number) => 50 - Math.max(-1, Math.min(1, tilt)) * 44;
+
+/** Truces recorded before the server sent a tilt: derive it from the weight (the server's MAX_TILT is 0.15). */
+export const tiltOf = (tilt: number | undefined, alphaA: number) => (Number.isFinite(tilt) ? tilt! : (alphaA - 0.5) / 0.15);
 
 /** The fairness ledger as a balance: the marker leans toward whoever is owed. */
-export function LedgerMeter({ names, letters, alphaA, owed, from, delay = 0 }: LedgerMeterProps) {
-  const [shown, setShown] = useState(from ?? alphaA);
+export function LedgerMeter({ names, letters, alphaA, tilt: given, owed, from, delay = 0 }: LedgerMeterProps) {
+  const tilt = tiltOf(given, alphaA);
+  const [shown, setShown] = useState(from ?? tilt);
 
   useEffect(() => {
     if (from === undefined) {
-      setShown(alphaA);
+      setShown(tilt);
       return;
     }
     setShown(from);
-    const timer = setTimeout(() => setShown(alphaA), delay);
+    const timer = setTimeout(() => setShown(tilt), delay);
     return () => clearTimeout(timer);
-  }, [alphaA, from, delay]);
+  }, [tilt, from, delay]);
 
   const pos = positionOf(shown);
-  const sentence = pullSentence(alphaA, names, 'next', owed);
+  const sentence = pullSentence(tilt, owed, names, 'next');
   const pct = Math.round(alphaA * 100);
 
   return (
@@ -65,9 +66,9 @@ export function LedgerMeter({ names, letters, alphaA, owed, from, delay = 0 }: L
       <div
         className="ledger__track"
         role="meter"
-        aria-valuemin={Math.round((0.5 - MAX_TILT) * 100)}
-        aria-valuemax={Math.round((0.5 + MAX_TILT) * 100)}
-        aria-valuenow={pct}
+        aria-valuemin={-100}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(tilt * 100)}
         aria-valuetext={`${names.a} ${pct}, ${names.b} ${100 - pct}. ${sentence}`}
         aria-label="Fairness ledger"
       >

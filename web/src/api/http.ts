@@ -33,14 +33,15 @@ export const httpApi: Api = {
 
   createPair: (input) => request('/api/pairs', json('POST', input)),
   getPair: (id) => request(`/api/pairs/${encodeURIComponent(id)}`),
+  setLocation: (pairId, location) => request(`/api/pairs/${encodeURIComponent(pairId)}`, json('PATCH', { location })),
   saveSide: (pairId, side, input) =>
     request(`/api/pairs/${encodeURIComponent(pairId)}/sides/${side}`, json('PUT', input)),
   startTruce: (pairId) => request(`/api/pairs/${encodeURIComponent(pairId)}/truces`, json('POST')),
   demo: () => request('/api/demo', json('POST')),
   getTruce: (id) => request(`/api/truces/${encodeURIComponent(id)}`),
 
-  stream(truceId, handlers) {
-    const source = new EventSource(`/api/truces/${encodeURIComponent(truceId)}/stream`);
+  stream(truceId, from, handlers) {
+    const source = new EventSource(`/api/truces/${encodeURIComponent(truceId)}/stream?from=${from}`);
     source.onopen = () => handlers.onOpen();
     source.onmessage = (message) => {
       let event: StreamEvent;
@@ -49,7 +50,8 @@ export const httpApi: Api = {
       } catch {
         return;
       }
-      handlers.onEvent(event);
+      const index = /^\d+$/.test(message.lastEventId) ? Number(message.lastEventId) : null;
+      handlers.onEvent(event, index);
       // The server closes after these; without this the browser would reconnect and replay.
       if (event.type === 'ledger' || event.type === 'error') source.close();
     };

@@ -21,10 +21,9 @@
  * wifi-off (reconnecting), fast-forward (skip ahead), arrow-down (jump), retry.
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '@/api';
-import { Button, ButtonLink, Chip, ErrorNotice, Icon, Notice, Page, PairNames, Spinner } from '@/ui';
+import { Button, Chip, ErrorNotice, Icon, Notice, Page, PairNames, Spinner } from '@/ui';
 import { agentOf, monograms } from '@/lib/people';
-import { isTurnEntry, scoresBefore, SLOTS, type FeedEntry, type TruceState } from '@/lib/truce';
+import { isTurnEntry, SLOTS, type FeedEntry, type TruceState } from '@/lib/truce';
 import { useTruce, type Link as LinkState } from '@/lib/useTruce';
 import { TruceContext, type TruceCtx } from '@/truce/context';
 import { DeclinedCard, MoveCard, ThinkingCard } from '@/truce/Moves';
@@ -32,6 +31,7 @@ import { Plan } from '@/truce/Plan';
 import { PoolPanel, PoolSkeleton } from '@/truce/PoolPanel';
 import { RefereeNote } from '@/truce/RefereeNote';
 import { Scouting } from '@/truce/Scouting';
+import { Stopped } from '@/truce/Stopped';
 import { TurnTrack } from '@/truce/TurnTrack';
 import { NotFound } from './NotFound';
 
@@ -59,7 +59,7 @@ function PhaseChip({ state, link }: { state: TruceState; link: LinkState }) {
     case 'settled':
     case 'done':
       return state.ruled ? (
-        <Chip icon="gavel">Ruled</Chip>
+        <Chip icon="gavel">Truce’s call</Chip>
       ) : (
         <Chip tone="ok" icon="check-circle">
           Agreed
@@ -74,13 +74,8 @@ function PhaseChip({ state, link }: { state: TruceState; link: LinkState }) {
   }
 }
 
-interface PolishScores {
-  result: TruceState['result'];
-  before: ReturnType<typeof scoresBefore>;
-}
-
 /** One line of the talks. Memoised: the reducer only appends, so earlier entries never re-render. */
-const FeedItem = memo(function FeedItem({ entry, polish }: { entry: FeedEntry; polish?: PolishScores }) {
+const FeedItem = memo(function FeedItem({ entry }: { entry: FeedEntry }) {
   const side = isTurnEntry(entry) ? entry.event.side : null;
   return (
     <li className={side ? `feed__item feed__item--${side}` : 'feed__item feed__item--referee'}>
@@ -88,8 +83,6 @@ const FeedItem = memo(function FeedItem({ entry, polish }: { entry: FeedEntry; p
         <MoveCard move={entry.event} live={entry.live} />
       ) : entry.kind === 'declined' ? (
         <DeclinedCard event={entry.event} live={entry.live} />
-      ) : entry.kind === 'polish' ? (
-        <RefereeNote entry={entry} result={polish?.result} before={polish?.before} />
       ) : (
         <RefereeNote entry={entry} />
       )}
@@ -110,6 +103,8 @@ function announcement(entry: FeedEntry | undefined, ctx: TruceCtx): string {
       return `${agentOf(names[entry.event.side])} declines the last call.`;
     case 'rejected':
       return `The referee struck a move by ${agentOf(names[entry.event.side])}.`;
+    case 'lastcall':
+      return `Last call. ${agentOf(names[entry.event.side])} decides.`;
     case 'agreement':
       return 'Agreed.';
     case 'ruling':
@@ -124,7 +119,6 @@ function announcement(entry: FeedEntry | undefined, ctx: TruceCtx): string {
 export function TrucePage({ truceId }: { truceId: string }) {
   const { state, meta, loadError, link, arrivedLive, backlog, skipAhead, reload } = useTruce(truceId);
   const [following, setFollowing] = useState(true);
-  const [date, setDate] = useState<string | null>(null);
   const [feedEnd, setFeedEnd] = useState<HTMLLIElement | null>(null);
   const planRef = useRef<HTMLDivElement | null>(null);
 
@@ -162,25 +156,8 @@ export function TrucePage({ truceId }: { truceId: string }) {
   }, [lastLive, state.thinking, moved, following, done, feedEnd]);
 
   useEffect(() => {
-    if (!done || archive) return;
-    setDate(new Date().toISOString());
-    reveal(planRef.current, 'start');
+    if (done && !archive) reveal(planRef.current, 'start');
   }, [done, archive]);
-
-  useEffect(() => {
-    if (!archive || !meta) return;
-    let cancelled = false;
-    api
-      .getPair(meta.pairId)
-      .then((pair) => {
-        const entry = pair.ledger.entries.find((e) => e.truceId === truceId);
-        if (!cancelled && entry) setDate(entry.at);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [archive, meta, truceId]);
 
   if (loadError?.status === 404) return <NotFound what="truce" />;
 
@@ -204,11 +181,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
   const talks = (
     <ol className="feed" aria-label="The talks">
       {feed.map((entry) => (
-        <FeedItem
-          key={entry.key}
-          entry={entry}
-          polish={entry.kind === 'polish' ? { result: state.result, before: scoresBefore(state) } : undefined}
-        />
+        <FeedItem key={entry.key} entry={entry} />
       ))}
       {state.thinking && (
         <li className={`feed__item feed__item--${state.thinking.side}`}>
@@ -298,23 +271,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
 
         {state.error && (
           <div className="truce__lead">
-            <Notice
-              tone="error"
-              live
-              title="This truce stopped early"
-              action={
-                <span className="notice__buttons">
-                  <ButtonLink size="sm" icon="arrow-left" href={`/p/${meta.pairId}`}>
-                    Pair page
-                  </ButtonLink>
-                  <ButtonLink size="sm" icon="plus" href="/new">
-                    Start over
-                  </ButtonLink>
-                </span>
-              }
-            >
-              {state.error}
-            </Notice>
+            <Stopped error={state.error} pairId={meta.pairId} location={meta.location} />
           </div>
         )}
 
@@ -337,7 +294,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
 
         {done && (
           <div className="truce__plan" ref={planRef}>
-            <Plan state={state} pairId={meta.pairId} date={date} stamp={!archive && state.sawLive} />
+            <Plan state={state} pairId={meta.pairId} date={meta.endedAt ?? meta.createdAt ?? null} stamp={!archive && state.sawLive} />
           </div>
         )}
       </Page>

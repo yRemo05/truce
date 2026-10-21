@@ -5,7 +5,7 @@ export { cx } from './cx';
 export { ErrorNotice } from './ErrorNotice';
 export { Footer } from './Footer';
 export { Icon, IconSprite, type IconName } from './Icon';
-export { LedgerMeter, pullSentence } from './LedgerMeter';
+export { LedgerMeter, pullSentence, tiltOf } from './LedgerMeter';
 export { Monogram } from './Monogram';
 export { Notice } from './Notice';
 export { Page, useTitle } from './Page';

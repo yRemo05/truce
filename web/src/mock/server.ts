@@ -87,15 +87,16 @@ const trucesOf = (db: Db, pairId: string) =>
     .sort((x, y) => x.createdAt - y.createdAt);
 
 const DECAY = 0.7;
-const alphaOf = (balance: number) => 0.5 + 0.15 * Math.tanh(balance / 0.3);
 const owedOf = (balance: number): Side | null => (balance > 0.02 ? 'a' : balance < -0.02 ? 'b' : null);
 
 function ledgerOf(done: readonly MockTruce[], extra?: Record<Side, number>): LedgerView {
   const concessions = [...done.map((t) => t.concession), ...(extra ? [extra] : [])];
   const balance = concessions.reduce((b, c) => b * DECAY + (c.a - c.b), 0);
+  const tilt = Math.tanh(balance / 0.3);
   return {
     balance,
-    alphaA: alphaOf(balance),
+    alphaA: 0.5 + 0.15 * tilt,
+    tilt,
     owed: owedOf(balance),
     entries: done.map((t) => ({
       truceId: t.id,
@@ -103,6 +104,23 @@ function ledgerOf(done: readonly MockTruce[], extra?: Record<Side, number>): Led
       concession: t.concession,
       evening: t.evening,
     })),
+  };
+}
+
+const statusOf = (t: MockTruce): TruceView['status'] => (!isDone(t) ? 'running' : t.failed ? 'failed' : 'done');
+
+function pairView(db: Db, pair: MockPair): PairView {
+  const all = trucesOf(db, pair.id);
+  const last = all[all.length - 1];
+  return {
+    id: pair.id,
+    mode: pair.mode,
+    names: pair.names,
+    location: pair.location,
+    ready: { a: Boolean(pair.sides.a), b: Boolean(pair.sides.b) },
+    ledger: ledgerOf(all.filter(settled)),
+    lastTruceId: last?.id ?? null,
+    lastTruce: last ? { id: last.id, status: statusOf(last) } : null,
   };
 }
 
@@ -115,7 +133,7 @@ function pairOr404(db: Db, id: string): MockPair {
 const fold = (s: string) =>
   s
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/\p{M}/gu, '')
     .toLowerCase();
 
 function start(db: Db, pairId: string): string {
@@ -140,8 +158,8 @@ function start(db: Db, pairId: string): string {
       const after = ledgerOf(done, concession);
       return {
         type: 'ledger',
-        before: { balance: before.balance, alphaA: before.alphaA },
-        after: { balance: after.balance, alphaA: after.alphaA, owed: after.owed },
+        before: { balance: before.balance, alphaA: before.alphaA, tilt: before.tilt },
+        after: { balance: after.balance, alphaA: after.alphaA, tilt: after.tilt, owed: after.owed },
       };
     },
   });
@@ -168,7 +186,7 @@ function failing(db: Db, pairId: string, location: string): string {
     createdAt: Date.now(),
     timeline: [
       { at: 0, event: { type: 'status', phase: 'scouting', brain: 'claude' } },
-      { at: 3500, event: { type: 'error', message } },
+      { at: 3500, event: { type: 'error', code: 'no_restaurants', message, retryable: false } },
     ],
     concession: { a: 0, b: 0 },
     evening: { film: '', restaurant: '', music: '' },
@@ -241,16 +259,16 @@ export const mockApi: Api = {
     await wait(180);
     const db = read();
     const pair = pairOr404(db, id);
-    const all = trucesOf(db, id);
-    return {
-      id,
-      mode: pair.mode,
-      names: pair.names,
-      location: pair.location,
-      ready: { a: Boolean(pair.sides.a), b: Boolean(pair.sides.b) },
-      ledger: ledgerOf(all.filter(settled)),
-      lastTruceId: all[all.length - 1]?.id ?? null,
-    };
+    return pairView(db, pair);
+  },
+
+  async setLocation(pairId, location) {
+    await wait(250);
+    const db = read();
+    const pair = pairOr404(db, pairId);
+    pair.location = location.trim();
+    write(db);
+    return pairView(db, pair);
   },
 
   async saveSide(pairId, side, input) {
@@ -287,19 +305,23 @@ export const mockApi: Api = {
     return {
       id,
       pairId: t.pairId,
-      status: t.failed && isDone(t) ? 'failed' : isDone(t) ? 'done' : 'running',
+      status: statusOf(t),
       mode: pair.mode,
       names: pair.names,
       location: pair.location,
+      createdAt: new Date(t.createdAt).toISOString(),
+      endedAt: isDone(t) ? new Date(t.createdAt + endOf(t)).toISOString() : null,
       events: t.timeline.filter((x) => x.at <= elapsed).map((x) => x.event),
     } satisfies TruceView;
   },
 
-  stream(truceId, handlers) {
+  stream(truceId, from, handlers) {
     const timers: ReturnType<typeof setTimeout>[] = [];
     const clear = () => timers.splice(0).forEach(clearTimeout);
     let closed = false;
     let dropped = !new URLSearchParams(location.search).has('drop');
+    // Like Last-Event-ID: a reconnect resumes after the last event sent.
+    let next = from;
 
     const open = () => {
       timers.push(
@@ -309,11 +331,17 @@ export const mockApi: Api = {
           if (!t) return handlers.onDrop(false);
           handlers.onOpen();
           const elapsed = Date.now() - t.createdAt;
-          for (const item of t.timeline) {
+          const send = (index: number) => {
+            if (closed) return;
+            next = index + 1;
+            handlers.onEvent(t.timeline[index]!.event, index);
+          };
+          t.timeline.forEach((item, index) => {
+            if (index < next) return;
             const delay = item.at - elapsed;
-            if (delay <= 0) handlers.onEvent(item.event);
-            else timers.push(setTimeout(() => !closed && handlers.onEvent(item.event), delay));
-          }
+            if (delay <= 0) send(index);
+            else timers.push(setTimeout(() => send(index), delay));
+          });
           if (!dropped && endOf(t) - elapsed > 7000) {
             dropped = true;
             timers.push(

@@ -15,10 +15,9 @@
  * Icons: check-circle / pencil (status), arrow-right, play (start), eye (watch),
  * scale (ledger), calendar (history dates), link, heart / users (mode), pin.
  */
-import type { PairView, Side, TruceView } from '@contract';
+import type { PairView, Side } from '@contract';
 import { useEffect, useState } from 'react';
 import { Link, useSearch } from 'wouter';
-import { api } from '@/api';
 import {
   Button,
   ButtonLink,
@@ -31,6 +30,7 @@ import {
   Page,
   PairNames,
   pullSentence,
+  tiltOf,
   SectionHeader,
   Skeleton,
 } from '@/ui';
@@ -116,7 +116,7 @@ function Tonight({ pair, running, pass }: { pair: PairView; running: string | nu
             </Button>
             <p className="small muted">
               {both
-                ? pullSentence(pair.ledger.alphaA, pair.names, 'tonight', pair.ledger.owed)
+                ? pullSentence(tiltOf(pair.ledger.tilt, pair.ledger.alphaA), pair.ledger.owed, pair.names, 'tonight')
                 : `Waiting for ${waiting.map((s) => possessive(pair.names[s])).join(' and ')} picks.`}
             </p>
           </>
@@ -133,7 +133,7 @@ function Ledger({ pair }: { pair: PairView }) {
   return (
     <section className="card ledger-card" aria-labelledby="ledger-title">
       <SectionHeader icon="scale" id="ledger-title" title="The ledger" meta="Who gave ground, and how that tilts the next truce." />
-      <LedgerMeter names={pair.names} letters={letters} alphaA={pair.ledger.alphaA} owed={pair.ledger.owed} />
+      <LedgerMeter names={pair.names} letters={letters} alphaA={pair.ledger.alphaA} tilt={pair.ledger.tilt} owed={pair.ledger.owed} />
 
       <h3 className="eyebrow history__title">
         <Icon name="calendar" size={16} />
@@ -195,28 +195,11 @@ function PairSkeleton() {
 
 export function PairHome({ pairId }: { pairId: string }) {
   const pass = isPassMode(useSearch());
-  const [running, setRunning] = useState<string | null>(null);
-  const [checked, setChecked] = useState<string | null>(null);
   const [poll, setPoll] = useState(true);
   const { pair, error, reload } = usePair(pairId, { poll });
 
-  // Whether the last truce is still going: a link to watch it beats starting another.
-  const last = pair?.lastTruceId ?? null;
-  useEffect(() => {
-    if (!last || last === checked) return;
-    let cancelled = false;
-    api
-      .getTruce(last)
-      .then((t: TruceView) => {
-        if (cancelled) return;
-        setRunning(t.status === 'running' ? t.id : null);
-        if (t.status !== 'running') setChecked(last);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [last, checked, pair]);
+  // A truce still going gets a link to watch it, rather than a second start.
+  const running = pair?.lastTruce?.status === 'running' ? pair.lastTruce.id : null;
 
   // Poll while someone is still picking or a truce runs; once both are in, Start finds any truce the other phone began.
   const settled = Boolean(pair && pair.ready.a && pair.ready.b && !running);

@@ -43,9 +43,9 @@ export class ApiError extends Error {
 }
 
 export interface StreamHandlers {
-  /** Every (re)connection replays the truce from its first event. */
   onOpen(): void;
-  onEvent(event: StreamEvent): void;
+  /** `index` is the event's place in the truce's log, when the server sends one. */
+  onEvent(event: StreamEvent, index: number | null): void;
   /** The connection dropped; `willRetry` is false when the caller must reconnect itself. */
   onDrop(willRetry: boolean): void;
 }
@@ -55,10 +55,11 @@ export interface Api {
   search(slot: Slot, q: string, signal?: AbortSignal): Promise<SearchHit[]>;
   createPair(input: PairInput): Promise<{ id: string }>;
   getPair(id: string): Promise<PairView>;
+  setLocation(pairId: string, location: string): Promise<PairView>;
   saveSide(pairId: string, side: Side, input: SideInput): Promise<{ ready: Record<Side, boolean> }>;
   startTruce(pairId: string): Promise<{ truceId: string }>;
   demo(): Promise<{ pairId: string; truceId: string }>;
   getTruce(id: string): Promise<TruceView>;
-  /** Opens the live event stream; returns a function that closes it. */
-  stream(truceId: string, handlers: StreamHandlers): () => void;
+  /** Opens the live event stream from event `from` on; returns a function that closes it. */
+  stream(truceId: string, from: number, handlers: StreamHandlers): () => void;
 }

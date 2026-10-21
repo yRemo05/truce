@@ -1,5 +1,5 @@
 import type { CardItem, Side, Slot } from '@contract';
-import { Button, ButtonLink, cx, ErrorNotice, Icon, LedgerMeter, PairNames, ScoreMeter, Seal, Thumb, Voice } from '@/ui';
+import { Button, ButtonLink, cx, ErrorNotice, Icon, LedgerMeter, PairNames, ScoreMeter, Seal, Thumb, tiltOf, Voice } from '@/ui';
 import { longDate } from '@/lib/format';
 import { agentOf, possessive, SIDES, type Names } from '@/lib/people';
 import { absolute, canShare, copyText, shareLink } from '@/lib/share';
@@ -97,9 +97,11 @@ export function Plan({ state, pairId, date, stamp }: { state: TruceState; pairId
   const again = useStartTruce(pairId);
   const result = state.result!;
   const items = SLOTS.map((s) => state.items[result.bundle[s]]).filter((x): x is CardItem => Boolean(x));
+  // Two first-class endings: the agents' deal, or the referee's ruling.
+  const verdict = state.ruled ? 'Truce’s call.' : 'You chose this together.';
   const how = state.ruled
-    ? 'No deal by the last call, so the referee ruled the fairest evening.'
-    : `Agreed ${isLastCall(result.turnsUsed, turns) ? 'on the last call' : `on turn ${result.turnsUsed}`}${result.polished ? ', then polished by the referee' : ''}.`;
+    ? 'No deal by the last call, so the referee picked the fairest evening in the pool, weighted by the ledger.'
+    : `Your agents agreed ${isLastCall(result.turnsUsed, turns) ? 'on the last call' : `on turn ${result.turnsUsed}`}${result.polished ? ', then the referee polished it' : ''}.`;
 
   return (
     <section className={cx('plan', stamp && 'plan--live')} aria-labelledby="plan-title">
@@ -111,6 +113,10 @@ export function Plan({ state, pairId, date, stamp }: { state: TruceState; pairId
         <h2 id="plan-title" className="display-l plan__title">
           <PairNames names={names} />, tonight
         </h2>
+        <p className={cx('plan__verdict', state.ruled && 'plan__verdict--ruled')}>
+          <Icon name={state.ruled ? 'gavel' : 'check-circle'} size={20} />
+          {verdict}
+        </p>
         <p className="plan__how">{how}</p>
 
         <ol className="plan__articles">
@@ -153,8 +159,9 @@ export function Plan({ state, pairId, date, stamp }: { state: TruceState; pairId
                 names={names}
                 letters={letters}
                 alphaA={state.ledger.after.alphaA}
+                tilt={state.ledger.after.tilt}
                 owed={state.ledger.after.owed}
-                from={stamp ? state.ledger.before.alphaA : undefined}
+                from={stamp ? tiltOf(state.ledger.before.tilt, state.ledger.before.alphaA) : undefined}
                 delay={stamp ? 1500 : 0}
               />
             </div>

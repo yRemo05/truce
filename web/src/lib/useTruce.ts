@@ -1,7 +1,7 @@
 /**
- * The live truce: loads what has happened, follows the stream, reconnects
- * when it drops (the server replays from the first event, so events already
- * seen are skipped by count), and paces live events so a burst — the
+ * The live truce: loads what has happened, follows the stream from there,
+ * reconnects when it drops (resuming at the next event index, and skipping
+ * any event already seen), and paces live events so a burst — the
  * rule-based agents answer instantly — still reads one move at a time.
  */
 import type { StreamEvent, TruceView } from '@contract';
@@ -86,17 +86,18 @@ export function useTruce(truceId: string) {
     let ended = false;
 
     const connect = () => {
-      let index = 0;
-      close = api.stream(truceId, {
+      // A server that sends no event ids replays from the start: count instead.
+      let counted = 0;
+      close = api.stream(truceId, seen, {
         onOpen() {
-          index = 0;
+          counted = 0;
           failures = 0;
           if (!cancelled) setLink('live');
         },
-        onEvent(event) {
-          index += 1;
-          if (cancelled || index <= seen) return;
-          seen = index;
+        onEvent(event, index) {
+          const at = index ?? counted++;
+          if (cancelled || at < seen) return;
+          seen = at + 1;
           if (event.type === 'ledger' || event.type === 'error') {
             ended = true;
             setLink('ended');

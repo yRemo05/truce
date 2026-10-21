@@ -2,7 +2,7 @@
  * From the StreamEvent log to what the live page shows. A pure reducer, so
  * a replayed truce and a live one end in exactly the same state.
  */
-import type { CardItem, Side, Slot, StreamEvent, TruceResult } from '@contract';
+import type { CardItem, Side, Slot, StreamEvent, StrikeCode, TruceResult } from '@contract';
 import type { IconName } from '@/ui/Icon';
 import { agentOf } from './people';
 
@@ -24,6 +24,8 @@ export type FeedEntry = { key: string; live: boolean } & (
   | { kind: 'start'; event: EventOf<'start'> }
   | { kind: 'move'; event: MoveEvent }
   | { kind: 'rejected'; event: EventOf<'rejected'> }
+  /** The referee calls the last call: the thinking event that opens it. */
+  | { kind: 'lastcall'; event: EventOf<'thinking'> }
   | { kind: 'declined'; event: EventOf<'declined'> }
   | { kind: 'agreement'; event: EventOf<'agreement'>; accepted: MoveEvent | null }
   | { kind: 'ruling'; event: EventOf<'ruling'> }
@@ -47,7 +49,7 @@ export interface TruceState {
   ruled: boolean;
   result: TruceResult | null;
   ledger: EventOf<'ledger'> | null;
-  error: string | null;
+  error: EventOf<'error'> | null;
   /** True once anything arrived live (not from the replay at load). */
   sawLive: boolean;
 }
@@ -90,8 +92,11 @@ export function applyEvent(state: TruceState, { event, live }: Arrival): TruceSt
     }
     case 'start':
       return { ...add({ kind: 'start', key, live, event }), start: event, turns: event.turns, phase: 'negotiating' };
-    case 'thinking':
-      return { ...s, thinking: { side: event.side, turn: event.turn, struck: false } };
+    case 'thinking': {
+      const thinking = { side: event.side, turn: event.turn, struck: false };
+      const opensLastCall = isLastCall(event.turn, s.turns) && !s.feed.some((e) => e.kind === 'lastcall');
+      return opensLastCall ? { ...add({ kind: 'lastcall', key, live, event }), thinking } : { ...s, thinking };
+    }
     case 'rejected':
       return {
         ...add({ kind: 'rejected', key, live, event }),
@@ -114,7 +119,7 @@ export function applyEvent(state: TruceState, { event, live }: Arrival): TruceSt
     case 'ledger':
       return { ...s, ledger: event };
     case 'error':
-      return { ...s, error: event.message, phase: 'failed', thinking: null };
+      return { ...s, error: event, phase: 'failed', thinking: null };
   }
 }
 
@@ -141,26 +146,16 @@ export function gaveGround(concession: Record<Side, number>): Side | null {
   return Math.abs(gap) < 0.02 ? null : gap > 0 ? 'a' : 'b';
 }
 
-/** Both people's scores for the evening before the referee's polish. */
-export function scoresBefore(state: TruceState): Record<Side, number> | null {
-  const agreement = state.feed.find((e) => e.kind === 'agreement');
-  if (agreement?.kind === 'agreement' && agreement.accepted) return agreement.accepted.scores;
-  if (state.result && state.ruled) return { a: Math.round(state.result.fair.a * 100), b: Math.round(state.result.fair.b * 100) };
-  return null;
-}
+const STRIKE: Record<StrikeCode, (agent: string, name: string) => string> = {
+  agent_failed: (agent) => `${agent} didn\u2019t answer in time.`,
+  no_counter: (agent) => `${agent} didn\u2019t put an evening on the table.`,
+  nothing_to_accept: (agent) => `${agent} accepted an offer nobody had made.`,
+  unknown_item: (agent) => `${agent} named something that isn\u2019t in the pool.`,
+  below_minimum: (agent, name) => `${agent} went below what ${name} should settle for this early.`,
+};
 
-/** What a referee strike reason means, in plain words. Unknown reasons pass through. */
-export function strikeReason(reason: string, mover: string): string {
-  const agent = agentOf(mover);
-  if (reason.startsWith('agent failed')) return `${agent} didn’t answer in time.`;
-  if (reason === 'no move') return `${agent} didn’t make a move.`;
-  if (reason === 'no counter offered') return `${agent} didn’t put an evening on the table.`;
-  if (reason === 'accepted with nothing on the table') return `${agent} accepted an offer nobody had made.`;
-  if (reason.startsWith('unknown ')) return `${agent} named something that isn’t in the pool.`;
-  const below = /^(accepted|offer) below (.+)'s minimum$/.exec(reason);
-  if (below) {
-    const verb = below[1] === 'accepted' ? 'tried to accept' : 'offered';
-    return `${agent} ${verb} less than ${below[2]} should settle for this early.`;
-  }
-  return reason.charAt(0).toUpperCase() + reason.slice(1) + '.';
+/** Why the referee struck a move, in plain words. */
+export function strikeReason(event: Pick<EventOf<'rejected'>, 'code' | 'reason'>, mover: string): string {
+  const say = STRIKE[event.code];
+  return say ? say(agentOf(mover), mover) : event.reason.charAt(0).toUpperCase() + event.reason.slice(1) + '.';
 }

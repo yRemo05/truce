@@ -15,15 +15,16 @@ export const api: Api = {
   search: async (...args) => (await load()).search(...args),
   createPair: async (...args) => (await load()).createPair(...args),
   getPair: async (...args) => (await load()).getPair(...args),
+  setLocation: async (...args) => (await load()).setLocation(...args),
   saveSide: async (...args) => (await load()).saveSide(...args),
   startTruce: async (...args) => (await load()).startTruce(...args),
   demo: async (...args) => (await load()).demo(...args),
   getTruce: async (...args) => (await load()).getTruce(...args),
-  stream(truceId, handlers) {
+  stream(truceId, from, handlers) {
     let close = () => {};
     let closed = false;
     void load().then((a) => {
-      if (!closed) close = a.stream(truceId, handlers);
+      if (!closed) close = a.stream(truceId, from, handlers);
     });
     return () => {
       closed = true;

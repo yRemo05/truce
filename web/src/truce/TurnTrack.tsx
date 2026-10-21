@@ -7,7 +7,7 @@ import { useTruceCtx } from './context';
 const VERB = { accept: 'accepted', counter: 'offered', decline: 'declined' } as const;
 
 function statusOf(state: TruceState, names: Names, latest: number): string {
-  if (state.phase === 'settled' || state.phase === 'done') return state.ruled ? 'Ruled by the referee' : 'Agreed';
+  if (state.phase === 'settled' || state.phase === 'done') return state.ruled ? 'Truce’s call' : 'Agreed';
   const { thinking, turns } = state;
   if (thinking && isLastCall(thinking.turn, turns)) return `Last call: ${agentOf(names[thinking.side])}`;
   if (thinking) return `Turn ${thinking.turn} of ${turns}`;
