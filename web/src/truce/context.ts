@@ -1,13 +1,15 @@
-import type { CardItem } from '@contract';
+import type { CardItem, Side } from '@contract';
 import { createContext, useContext } from 'react';
 import type { Names } from '@/lib/people';
 
 export interface TruceCtx {
+  /** Everyone taking part, in seat order. */
+  members: Side[];
   names: Names;
   letters: Names;
   location: string;
   items: Record<string, CardItem>;
-  /** Turns before the last call. */
+  /** Turns before the last calls. */
   turns: number;
   /** The overall brain; per-move fallbacks are only worth flagging when the model is running. */
   brain: 'claude' | 'rules' | null;

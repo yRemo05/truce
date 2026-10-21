@@ -1,47 +1,55 @@
 /**
- * The sample move on the landing page, which teaches how to read a truce.
- * Public titles, invented scores; not Qloo data.
+ * The sample message on the landing page: one move from the friends demo
+ * (Ada, Kerem and Lina in Istanbul). Public titles, an invented restaurant,
+ * invented scores; not Qloo data.
  */
-import type { CardItem } from '@contract';
+import type { CardItem, PerSide } from '@contract';
 import type { MoveEvent } from '@/lib/truce';
 import type { TruceCtx } from './context';
 
-const card = (id: string, slot: CardItem['slot'], name: string, disambiguation: string | null, scores: [number, number], because: [string[], string[]], facts: Record<string, string> = {}): CardItem => ({
+const card = (id: string, slot: CardItem['slot'], name: string, disambiguation: string | null, scores: PerSide<number>, because: PerSide<string[]>): CardItem => ({
   id,
   slot,
   name,
   disambiguation,
   imageUrl: null,
   blurb: null,
-  facts,
-  scores: { a: scores[0], b: scores[1] },
+  facts: {},
+  scores,
   origins: ['joint'],
-  because: { a: because[0], b: because[1] },
+  because,
+  scout: null,
+  links: [],
+  hours: null,
+  address: null,
 });
 
 const items = [
-  card('s-film', 'film', 'Drive', '2011', [78, 84], [['Lost in Translation (64%)', 'In the Mood for Love (21%)'], ['John Wick (58%)', 'Mad Max: Fury Road (30%)']]),
-  card('s-place', 'restaurant', 'Kisa Izakaya', '12 Bond St, New York', [66, 86], [['Trattoria Sole (52%)', 'Lost in Translation (25%)'], ['Patty Wagon (61%)', 'Bad Bunny (22%)']], { neighborhood: 'NoHo' }),
-  card('s-music', 'music', 'Khruangbin', 'Texan instrumental trio', [86, 78], [['Radiohead (57%)', 'In the Mood for Love (24%)'], ['Bad Bunny (49%)', 'Mad Max: Fury Road (28%)']]),
+  card('s-film', 'film', 'Paddington 2', '2017', { a: 80, b: 62, c: 98 }, { a: ['Amélie'], b: ['Inception'], c: ['Spirited Away'] }),
+  card('s-place', 'restaurant', 'Cihangir Sofrası', 'Cihangir, Istanbul', { a: 93, b: 76, c: 78 }, { a: ['Kuzguncuk Bostan'], b: ['Etçi Mehmet'], c: ['Karaköy Lokanta Evi'] }),
+  card('s-music', 'music', 'Khruangbin', 'Texan instrumental trio', { a: 86, b: 78, c: 90 }, { a: ['Norah Jones'], b: ['Duman'], c: ['Tame Impala'] }),
 ];
 
 export const specimenCtx: TruceCtx = {
-  names: { a: 'Maya', b: 'Deniz' },
-  letters: { a: 'M', b: 'D' },
-  location: 'Manhattan',
+  members: ['a', 'b', 'c'],
+  names: { a: 'Ada', b: 'Kerem', c: 'Lina' },
+  letters: { a: 'A', b: 'K', c: 'L' },
+  location: 'Istanbul',
   items: Object.fromEntries(items.map((i) => [i.id, i])),
-  turns: 6,
+  turns: 9,
   brain: 'claude',
 };
 
 export const specimenMove: MoveEvent = {
   type: 'move',
-  turn: 6,
+  turn: 8,
   side: 'b',
-  action: 'counter',
+  action: 'accept',
   bundle: { film: 's-film', restaurant: 's-place', music: 's-music' },
-  message: 'Drive, done. But Kisa over Brass Lantern, and Khruangbin over Frank Ocean. That’s Deniz’s last offer.',
-  scores: { a: 77, b: 84 },
+  message: 'Cihangir Sofrası has a charcoal grill, and nothing on this plan breaks the bank. Kerem can say yes to that. Over to Lina’s agent.',
+  scores: { a: 86, b: 73, c: 91 },
   evidence: [],
   brain: 'claude',
+  acceptedBy: ['a', 'b'],
+  shortlisted: false,
 };

@@ -20,6 +20,8 @@ export const api: Api = {
   startTruce: async (...args) => (await load()).startTruce(...args),
   demo: async (...args) => (await load()).demo(...args),
   getTruce: async (...args) => (await load()).getTruce(...args),
+  checkin: async (...args) => (await load()).checkin(...args),
+  calendarUrl: async (...args) => (await load()).calendarUrl(...args),
   stream(truceId, from, handlers) {
     let close = () => {};
     let closed = false;

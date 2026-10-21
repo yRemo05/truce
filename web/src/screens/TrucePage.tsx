@@ -2,8 +2,9 @@
  * The live truce (/t/:truceId).
  *
  * Inventory, by priority:
- *   primary   — the talks: each move (agent words + the Qloo evening), referee notes, thinking
- *   primary   — the plan, once settled (the peak: the seal presses in, the ledger leans)
+ *   primary   — before the talks: how Qloo reads each person, each agent scouting
+ *   primary   — the talks: each move (agent words + the Qloo evening, who said yes), referee notes, thinking
+ *   primary   — the plan, once settled: links to act on, add to calendar, the ledger leaning
  *   secondary — the pool (what's on offer, origin badges, what's on the table now)
  *   secondary — turn progress and phase, in the sticky bar; reconnecting state; skip ahead
  *   rare      — retry after an error, jump to the latest move when scrolled away
@@ -14,16 +15,18 @@
  *
  * Grid ≥1024px: the chat and the plan in a wide column, the options as a sticky
  * side panel (20–24rem).
- * Below that one column: scouting, pool, talks, plan. A truce opened after it
- * finished reads as a document: the plan first, the talks folded under it.
+ * Below that one column: scouting, pool, talks, plan. Once the talks start,
+ * the scouting folds into "Before the talks" above them. A truce opened after
+ * it finished reads as a document: the plan first, the talks folded under it.
  *
  * Icons: gavel (referee), exchange/check/x (move kinds), data (Qloo), quote
  * (agent), bridge (origin), film/restaurant/music (slots), pin (place),
  * wifi-off (reconnecting), fast-forward (skip ahead), arrow-down (jump), retry.
  */
+import type { Side } from '@contract';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Badge, Button, ErrorNotice, Icon, Notice, Page, PairNames, Spinner } from '@/ui';
-import { agentOf, monograms } from '@/lib/people';
+import { agentOf, groupNames, monograms, nameOf } from '@/lib/people';
 import { isTurnEntry, SLOTS, type FeedEntry, type TruceState } from '@/lib/truce';
 import { useTruce, type Link as LinkState } from '@/lib/useTruce';
 import { TruceContext, type TruceCtx } from '@/truce/context';
@@ -49,6 +52,7 @@ function PhaseBadge({ state, link }: { state: TruceState; link: LinkState }) {
     );
   switch (state.phase) {
     case 'connecting':
+    case 'gathering':
     case 'scouting':
       return <Badge icon="search">Finding options</Badge>;
     case 'negotiating':
@@ -77,9 +81,8 @@ function PhaseBadge({ state, link }: { state: TruceState; link: LinkState }) {
 
 /** One line of the talks. Memoised: the reducer only appends, so earlier entries never re-render. */
 const FeedItem = memo(function FeedItem({ entry }: { entry: FeedEntry }) {
-  const side = isTurnEntry(entry) ? entry.event.side : null;
   return (
-    <li className={side ? `feed__item feed__item--${side}` : 'feed__item feed__item--referee'}>
+    <li className="feed__item">
       {entry.kind === 'move' ? (
         <MoveCard move={entry.event} live={entry.live} />
       ) : entry.kind === 'declined' ? (
@@ -94,18 +97,20 @@ const FeedItem = memo(function FeedItem({ entry }: { entry: FeedEntry }) {
 /** One short sentence per live event, for screen readers. */
 function announcement(entry: FeedEntry | undefined, ctx: TruceCtx): string {
   if (!entry) return '';
-  const { names, items } = ctx;
+  const { names, items, members } = ctx;
+  const agent = (s: Side) => agentOf(nameOf(names, s));
   switch (entry.kind) {
     case 'move': {
       const picks = SLOTS.map((s) => items[entry.event.bundle[s]]?.name).join(', ');
-      return `${agentOf(names[entry.event.side])} ${entry.event.action === 'accept' ? 'accepts' : 'offers'}: ${picks}. Fit ${names.a} ${entry.event.scores.a}, ${names.b} ${entry.event.scores.b}.`;
+      const fit = members.map((s) => `${nameOf(names, s)} ${entry.event.scores[s] ?? 0}`).join(', ');
+      return `${agent(entry.event.side)} ${entry.event.action === 'accept' ? 'says yes to' : 'offers'}: ${picks}. Fit ${fit}.`;
     }
     case 'declined':
-      return `${agentOf(names[entry.event.side])} declines the last call.`;
+      return `${agent(entry.event.side)} says no to the last call.`;
     case 'rejected':
-      return `The referee struck a move by ${agentOf(names[entry.event.side])}.`;
+      return `The referee struck a move by ${agent(entry.event.side)}.`;
     case 'lastcall':
-      return `Last call. ${agentOf(names[entry.event.side])} decides.`;
+      return 'Last call.';
     case 'agreement':
       return 'Agreed.';
     case 'ruling':
@@ -126,8 +131,9 @@ export function TrucePage({ truceId }: { truceId: string }) {
   const ctx = useMemo<TruceCtx | null>(
     () =>
       meta && {
+        members: meta.members,
         names: meta.names,
-        letters: monograms(meta.names),
+        letters: monograms(meta.names, meta.members),
         location: meta.location,
         items: state.items,
         turns: state.turns,
@@ -176,8 +182,9 @@ export function TrucePage({ truceId }: { truceId: string }) {
     );
   }
 
-  const { names } = ctx;
-  const scouting = state.phase === 'connecting' || state.phase === 'scouting';
+  const { names, members } = ctx;
+  const scouting = state.phase === 'connecting' || state.phase === 'gathering' || state.phase === 'scouting';
+  const scouted = state.tastes !== null || Object.keys(state.scouts).length > 0;
 
   const talks = (
     <ol className="feed" aria-label="The talks">
@@ -185,7 +192,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
         <FeedItem key={entry.key} entry={entry} />
       ))}
       {state.thinking && (
-        <li className={`feed__item feed__item--${state.thinking.side}`}>
+        <li className="feed__item">
           <ThinkingCard side={state.thinking.side} struck={state.thinking.struck} />
         </li>
       )}
@@ -196,14 +203,14 @@ export function TrucePage({ truceId }: { truceId: string }) {
   return (
     <TruceContext.Provider value={ctx}>
       <Page
-        title={`${names.a} & ${names.b}`}
+        title={groupNames(names, members)}
         stickyBar
         skipLabel="Skip to the talks"
         className={archive ? 'truce truce--archive' : 'truce'}
         context={
           <div className="truce-bar">
             <p className="truce-bar__names">
-              <PairNames names={names} />
+              <PairNames names={names} members={members} />
             </p>
             <span className="truce-bar__place small muted">
               <Icon name="pin" size={16} />
@@ -234,7 +241,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
 
         {scouting && !state.error && (
           <div className="truce__lead">
-            <Scouting />
+            <Scouting state={state} />
           </div>
         )}
 
@@ -250,6 +257,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
 
         {feed.length > 0 && (
           <div className="truce__talks">
+            {scouted && <Scouting state={state} folded />}
             {archive ? (
               <details className="talks-fold">
                 <summary className="talks-fold__summary">
@@ -295,7 +303,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
 
         {done && (
           <div className="truce__plan" ref={planRef}>
-            <Plan state={state} pairId={meta.pairId} date={meta.endedAt ?? meta.createdAt ?? null} stamp={!archive && state.sawLive} />
+            <Plan state={state} truceId={truceId} pairId={meta.pairId} stamp={!archive && state.sawLive} />
           </div>
         )}
       </Page>

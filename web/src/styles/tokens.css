@@ -2,9 +2,8 @@
  * Truce design tokens: the Bamboo Teal theme (dark), sampled from the owner's
  * palette. One typeface (Inter), radius 0.625rem, a teal primary.
  *
- * The two people: the first person is teal, the second a light neutral, and
- * both are always named and placed (left / right), so colour is never the
- * only cue.
+ * People: up to four, each with their own colour (teal, light neutral, sand,
+ * lilac). A name always sits beside the colour, so colour is never the only cue.
  */
 :root {
   color-scheme: dark;
@@ -23,16 +22,17 @@
   --muted-foreground: #93a5a4;
   --destructive: #f27984;
   --destructive-foreground: #0e1312;
+  --warning: #e5c07b;
   --border: #2c3b3a;
   --input: #2c3b3a;
   --ring: #6ea8a3;
   --track: #273836;
 
-  /* The two people's marks */
+  /* Each person's mark */
   --person-a: #6ea8a3;
-  --person-a-foreground: #0e1312;
   --person-b: #d3dcdb;
-  --person-b-foreground: #0e1312;
+  --person-c: #dcbb7e;
+  --person-d: #b9a6e0;
 
   --font-sans: 'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
 
@@ -83,4 +83,18 @@
     --gutter: 1.5rem;
     --card-pad: 1.5rem;
   }
+}
+
+/* Each person's colour, for any mark that carries it (avatar, bar, ledger). */
+.p-a {
+  --p: var(--person-a);
+}
+.p-b {
+  --p: var(--person-b);
+}
+.p-c {
+  --p: var(--person-c);
+}
+.p-d {
+  --p: var(--person-d);
 }

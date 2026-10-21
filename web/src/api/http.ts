@@ -36,8 +36,11 @@ export const httpApi: Api = {
   saveSide: (pairId, side, input) =>
     request(`/api/pairs/${encodeURIComponent(pairId)}/sides/${side}`, json('PUT', input)),
   startTruce: (pairId) => request(`/api/pairs/${encodeURIComponent(pairId)}/truces`, json('POST')),
-  demo: () => request('/api/demo', json('POST')),
+  demo: (kind) => request('/api/demo', json('POST', { kind })),
   getTruce: (id) => request(`/api/truces/${encodeURIComponent(id)}`),
+  checkin: (truceId, side, input) =>
+    request(`/api/truces/${encodeURIComponent(truceId)}/checkins/${side}`, json('PUT', input)),
+  calendarUrl: async (truceId) => `/api/truces/${encodeURIComponent(truceId)}/calendar.ics`,
 
   stream(truceId, from, handlers) {
     const source = new EventSource(`/api/truces/${encodeURIComponent(truceId)}/stream?from=${from}`);

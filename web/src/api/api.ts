@@ -1,10 +1,14 @@
 import type {
   ApiError as ApiErrorBody,
+  CheckinInput,
+  CheckinResult,
+  DemoInput,
   PairInput,
   PairView,
   SearchResult,
   Side,
   SideInput,
+  SideSaved,
   Slot,
   StreamEvent,
   TruceView,
@@ -57,10 +61,13 @@ export interface Api {
   createPair(input: PairInput): Promise<{ id: string }>;
   getPair(id: string): Promise<PairView>;
   setLocation(pairId: string, location: string): Promise<PairView>;
-  saveSide(pairId: string, side: Side, input: SideInput): Promise<{ ready: Record<Side, boolean> }>;
+  saveSide(pairId: string, side: Side, input: SideInput): Promise<SideSaved>;
   startTruce(pairId: string): Promise<{ truceId: string }>;
-  demo(): Promise<{ pairId: string; truceId: string }>;
+  demo(kind: DemoInput['kind']): Promise<{ pairId: string; truceId: string }>;
   getTruce(id: string): Promise<TruceView>;
+  checkin(truceId: string, side: Side, input: CheckinInput): Promise<CheckinResult>;
+  /** Where to download the evening as a calendar event. */
+  calendarUrl(truceId: string): Promise<string>;
   /** Opens the live event stream from event `from` on; returns a function that closes it. */
   stream(truceId: string, from: number, handlers: StreamHandlers): () => void;
 }

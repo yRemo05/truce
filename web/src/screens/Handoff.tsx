@@ -1,34 +1,37 @@
 /*
- * Pass the phone (/p/:pairId/handoff), between the two sides in same-phone mode.
+ * Pass the phone (/p/:pairId/handoff/:side), between people in same-phone mode.
  *
- * Inventory: who to hand to, the promise that the first favourites are hidden,
- * one primary action for the second person. Nothing of the first person's
- * favourites is on this screen. One card, one viewport at both sizes.
+ * Inventory: who to hand to, the promise that the favourites so far are hidden,
+ * one primary action for the next person. Nothing anyone picked is on this
+ * screen. One card, one viewport at both sizes.
  * Icons: eye-off (hidden), arrow-right.
  */
+import type { Side } from '@contract';
 import { Avatar, ButtonLink, Icon, Page, Skeleton } from '@/ui';
 import { withPass } from '@/lib/flow';
-import { monograms, possessive } from '@/lib/people';
+import { listNames, monograms, nameOf, possessive } from '@/lib/people';
 import { usePair } from '@/lib/usePair';
 import { NotFound } from './NotFound';
 
-export function Handoff({ pairId }: { pairId: string }) {
+export function Handoff({ pairId, side }: { pairId: string; side: Side }) {
   const { pair, error } = usePair(pairId);
   if (error?.status === 404) return <NotFound what="pair" />;
-  const names = pair?.names;
+  if (pair && !pair.members.includes(side)) return <NotFound what="pair" />;
+  const name = pair ? nameOf(pair.names, side) : '';
+  const done = pair ? pair.members.filter((s) => s !== side && pair.ready[s]).map((s) => possessive(nameOf(pair.names, s))) : [];
 
   return (
     <Page title="Pass the phone" className="handoff">
       <div className="card handoff__card">
-        {names ? <Avatar side="b" letters={monograms(names).b} size="lg" /> : <Skeleton w="2.5rem" h="2.5rem" round />}
-        <h1 className="h2">{names ? `Pass the phone to ${names.b}` : <Skeleton w="12ch" h="1.5rem" />}</h1>
+        {pair ? <Avatar side={side} letters={nameOf(monograms(pair.names, pair.members), side)} size="lg" /> : <Skeleton w="2.5rem" h="2.5rem" round />}
+        <h1 className="h2">{pair ? `Pass the phone to ${name}` : <Skeleton w="12ch" h="1.5rem" />}</h1>
         <p className="handoff__note muted">
           <Icon name="eye-off" size={16} />
-          <span>{names ? `${possessive(names.a)} favourites are saved and hidden.` : ' '}</span>
+          <span>{done.length ? `${listNames(done)} favourites are saved and hidden.` : ' '}</span>
         </p>
-        {names && (
-          <ButtonLink variant="primary" iconEnd="arrow-right" href={withPass(`/p/${pairId}/b`, true)}>
-            {`I’m ${names.b}, let’s go`}
+        {pair && (
+          <ButtonLink variant="primary" iconEnd="arrow-right" href={withPass(`/p/${pairId}/${side}`, true)}>
+            {`I’m ${name}, let’s go`}
           </ButtonLink>
         )}
       </div>

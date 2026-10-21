@@ -1,14 +1,16 @@
-import type { CardItem, Slot } from '@contract';
-import { Badge, Button, ButtonLink, cx, ErrorNotice, Icon, InfoTip, LedgerMeter, PairNames, ScoreMeter, Thumb } from '@/ui';
-import { longDate } from '@/lib/format';
+import type { CardItem, LinkKind, Slot } from '@contract';
+import { useEffect, useState } from 'react';
+import { api } from '@/api';
+import { Badge, Button, ButtonLink, cx, ErrorNotice, Icon, InfoTip, LedgerMeter, PairNames, ScoreMeter, Thumb, type IconName } from '@/ui';
+import { eveningLabel } from '@/lib/format';
 import { EXPLAIN } from '@/lib/glossary';
-import { agentOf, possessive, SIDES } from '@/lib/people';
+import { agentOf, nameOf, possessive } from '@/lib/people';
 import { absolute, canShare, copyText, shareLink } from '@/lib/share';
 import { gaveGround, isLastCall, SLOT_ICON, SLOT_LABEL, SLOTS, type TruceState } from '@/lib/truce';
 import { useStartTruce } from '@/lib/useAction';
 import { useFlash } from '@/lib/useFlash';
 import { useTruceCtx } from './context';
-import { placeLine } from './Evening';
+import { Hours } from './Hours';
 
 /** The first few items of a comma-separated Qloo list. */
 const firstOf = (list: string | undefined, n = 2) =>
@@ -25,11 +27,43 @@ const DETAIL: Record<Slot, (item: CardItem) => (string | null | undefined)[]> = 
   music: (i) => [firstOf(i.facts.genres) ?? i.disambiguation],
 };
 
+const LINK_ICON: Record<LinkKind, IconName> = {
+  imdb: 'film',
+  letterboxd: 'film',
+  netflix: 'play',
+  spotify: 'music',
+  maps: 'pin',
+  website: 'link',
+  menu: 'restaurant',
+  phone: 'phone',
+};
+
+/** Where to act on a pick: watch, listen, find, book. */
+function Links({ item }: { item: CardItem }) {
+  if (!item.links.length) return null;
+  return (
+    <ul className="act-links" aria-label={`Links for ${item.name}`}>
+      {item.links.map((l) => (
+        <li key={l.url}>
+          <a
+            className="btn btn--outline btn--sm"
+            href={l.url}
+            {...(l.kind === 'phone' ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+          >
+            <Icon name={LINK_ICON[l.kind]} size={16} />
+            <span className="btn__label">{l.label}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Pick({ item, index, animate }: { item: CardItem; index: number; animate: boolean }) {
-  const { names } = useTruceCtx();
+  const { names, members } = useTruceCtx();
   const detail = DETAIL[item.slot](item).filter(Boolean).join(' · ');
-  const place = item.slot === 'restaurant' ? placeLine(item) : null;
-  const address = place && item.disambiguation !== place ? item.disambiguation : null;
+  const area = item.slot === 'restaurant' ? item.facts.neighborhood : undefined;
+  const address = item.slot === 'restaurant' ? (item.address ?? item.disambiguation) : null;
   return (
     <li className={cx('pick-row', animate && 'enter')} style={{ ['--delay' as string]: `${120 + index * 90}ms` }}>
       <Thumb name={item.name} imageUrl={item.imageUrl} slot={item.slot} size="lg" />
@@ -40,18 +74,19 @@ function Pick({ item, index, animate }: { item: CardItem; index: number; animate
         </p>
         <h3 className="pick-row__name">{item.name}</h3>
         {detail && <p className="small muted">{detail}</p>}
-        {place && (
-          <p className="pick-row__place small">
-            <Icon name="pin" size={16} />
+        {(area || address) && (
+          <p className="pick-row__line small">
+            <Icon name="pin" size={16} className="muted" />
             <span>
-              {place}
-              {address && <span className="muted"> · {address}</span>}
+              {area}
+              {area && address && address !== area && <span className="muted"> · </span>}
+              {address && address !== area && <span className="muted">{address}</span>}
             </span>
           </p>
         )}
-        <p className="small muted num">
-          Fit: {names.a} {item.scores.a} · {names.b} {item.scores.b}
-        </p>
+        <Hours hours={item.hours} />
+        <p className="small muted num">Fit: {members.map((s) => `${nameOf(names, s)} ${item.scores[s] ?? 0}`).join(' · ')}</p>
+        <Links item={item} />
       </div>
     </li>
   );
@@ -76,15 +111,36 @@ function ShareButton({ text }: { text: string }) {
   );
 }
 
-export function Plan({ state, pairId, date, stamp }: { state: TruceState; pairId: string; date: string | null; stamp: boolean }) {
-  const { names, letters, turns } = useTruceCtx();
+/** "Add to calendar": the server builds the .ics; the mock makes one in the browser. */
+function CalendarLink({ truceId }: { truceId: string }) {
+  const [href, setHref] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void api.calendarUrl(truceId).then((url) => alive && setHref(url));
+    return () => {
+      alive = false;
+    };
+  }, [truceId]);
+  if (!href) return null;
+  return (
+    <a className="btn btn--outline" href={href} download="tonight.ics">
+      <Icon name="calendar" size={20} />
+      <span className="btn__label">Add to calendar</span>
+    </a>
+  );
+}
+
+export function Plan({ state, truceId, pairId, stamp }: { state: TruceState; truceId: string; pairId: string; stamp: boolean }) {
+  const { names, letters, members, turns } = useTruceCtx();
   const again = useStartTruce(pairId);
   const result = state.result!;
   const items = SLOTS.map((s) => state.items[result.bundle[s]]).filter((x): x is CardItem => Boolean(x));
-  const gave = gaveGround(result.concession);
+  const gave = gaveGround(result.concession, members);
   const how = state.ruled
     ? 'Your agents didn’t agree, so the referee picked the fairest evening.'
     : `Your agents agreed ${isLastCall(result.turnsUsed, turns) ? 'on the last call' : `on turn ${result.turnsUsed}`}${result.polished ? ', and the referee made a small improvement' : ''}.`;
+  const tonight = state.tonight;
+  const owed = state.ledger?.after.owed ?? null;
 
   return (
     <section className={cx('plan', stamp && 'plan--live')} aria-labelledby="plan-title">
@@ -105,10 +161,10 @@ export function Plan({ state, pairId, date, stamp }: { state: TruceState; pairId
             )}
           </div>
           <h2 id="plan-title" className="h2">
-            Tonight’s plan for <PairNames names={names} />
+            Tonight’s plan for <PairNames names={names} members={members} />
           </h2>
           <p className="muted">{how}</p>
-          {date && <p className="small muted">{longDate(date)}</p>}
+          {tonight && <p className="small muted">{eveningLabel(tonight.date, tonight.weekday)}</p>}
         </header>
 
         <ul className="plan__picks">
@@ -124,37 +180,31 @@ export function Plan({ state, pairId, date, stamp }: { state: TruceState; pairId
               <InfoTip label="What how close means">{EXPLAIN.closeness}</InfoTip>
             </h3>
             <div className="plan__close">
-              {SIDES.map((side) => {
-                const close = Math.round((1 - result.concession[side]) * 100);
+              {members.map((side) => {
+                const close = Math.round((1 - (result.concession[side] ?? 0)) * 100);
+                const name = nameOf(names, side);
                 return (
-                  <ScoreMeter
-                    key={side}
-                    side={side}
-                    name={names[side]}
-                    value={close}
-                    label={`${names[side]}: ${close} of 100, where 100 is ${possessive(names[side])} best evening tonight`}
-                  />
+                  <ScoreMeter key={side} side={side} name={name} value={close} label={`${name}: ${close} of 100, where 100 is ${possessive(name)} best evening tonight`} />
                 );
               })}
             </div>
-            <p className="small muted">{gave ? `${names[gave]} gave a little more ground tonight.` : 'You met in the middle tonight.'}</p>
+            <p className="small muted">{gave ? `${nameOf(names, gave)} gave a little more ground tonight.` : 'You met in the middle tonight.'}</p>
           </div>
 
           {state.ledger && (
             <div className={cx('plan__block', stamp && 'enter')} style={{ ['--delay' as string]: '560ms' }}>
               <h3 className="plan__label">
                 Fairness ledger
-                <InfoTip label="What the fairness ledger does">
-                  {EXPLAIN.ledger}
-                </InfoTip>
+                <InfoTip label="What the fairness ledger does">{EXPLAIN.ledger}</InfoTip>
               </h3>
               <LedgerMeter
+                members={members}
                 names={names}
                 letters={letters}
-                alphaA={state.ledger.after.alphaA}
+                alpha={state.ledger.after.alpha}
                 tilt={state.ledger.after.tilt}
-                owed={state.ledger.after.owed}
-                from={stamp ? state.ledger.before.alphaA : undefined}
+                owed={owed}
+                from={stamp ? state.ledger.before.alpha : undefined}
                 delay={stamp ? 900 : 0}
               />
             </div>
@@ -165,14 +215,14 @@ export function Plan({ state, pairId, date, stamp }: { state: TruceState; pairId
           <Button variant="primary" icon="plus" busy={again.busy} onClick={() => void again.run()}>
             New truce
           </Button>
+          <CalendarLink truceId={truceId} />
           <ShareButton text={`Our plan for tonight: ${items.map((i) => i.name).join(', ')}.`} />
           <ButtonLink variant="ghost" icon="home" href={`/p/${pairId}`}>
-            Pair page
+            Group page
           </ButtonLink>
         </div>
         <p className="small muted">
-          New truce runs again with the same favourites
-          {state.ledger?.after.owed ? `, and ${agentOf(names[state.ledger.after.owed])} gets a bit more say` : ''}.
+          New truce runs again with the same favourites{owed ? `, and ${agentOf(nameOf(names, owed))} gets a bit more say` : ''}.
         </p>
         {again.error && <ErrorNotice error={again.error} title="Couldn't start another truce" />}
       </div>

@@ -1,12 +1,13 @@
-import type { CardItem, Side, Slot } from '@contract';
+import type { CardItem, PerSide, Side, Slot } from '@contract';
 import { memo, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Badge, cx, Icon, InfoTip, Notice, ScoreMeter, SectionHeader, Skeleton, Thumb, Voice } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
-import { possessive, SIDES } from '@/lib/people';
+import { agentOf, nameOf, possessive } from '@/lib/people';
 import { isBridge, SLOT_ICON, SLOT_LABEL, SLOTS, type Bundle } from '@/lib/truce';
 import { Because } from './Because';
 import { useTruceCtx } from './context';
 import { subLine } from './Evening';
+import { Hours } from './Hours';
 
 /** The facts worth showing, in this order. */
 const FACT_LABEL: Record<string, string> = {
@@ -37,12 +38,26 @@ function Origin({ item }: { item: CardItem }) {
       </span>
     );
   }
-  const side = item.origins.includes('a') ? 'a' : 'b';
-  return <Badge variant="outline">From {possessive(names[side])} taste</Badge>;
+  const side = item.origins.find((o): o is Side => o !== 'joint' && o !== 'scout');
+  return side ? <Badge variant="outline">From {possessive(nameOf(names, side))} taste</Badge> : null;
+}
+
+/** "Scouted by Ömer's agent", for items an agent brought to the table. */
+function Scouted({ item }: { item: CardItem }) {
+  const { names } = useTruceCtx();
+  if (!item.scout) return null;
+  return (
+    <span className="pool-row__origin">
+      <Badge variant="secondary" icon="search">
+        Scouted by {agentOf(nameOf(names, item.scout.side))}
+      </Badge>
+      <InfoTip label="What scouting is">{EXPLAIN.scout}</InfoTip>
+    </span>
+  );
 }
 
 const Row = memo(function Row({ item, mark }: { item: CardItem; mark: Mark }) {
-  const { names } = useTruceCtx();
+  const { names, members } = useTruceCtx();
   const [open, setOpen] = useState(false);
   const moreId = useId();
   const sub = subLine(item);
@@ -58,6 +73,7 @@ const Row = memo(function Row({ item, mark }: { item: CardItem; mark: Mark }) {
           </p>
           <div className="pool-row__badges">
             <Origin item={item} />
+            <Scouted item={item} />
             {mark && (
               <Badge variant="default" icon={mark === 'plan' ? 'check' : 'exchange'}>
                 {mark === 'plan' ? 'In the plan' : 'On the table'}
@@ -76,13 +92,20 @@ const Row = memo(function Row({ item, mark }: { item: CardItem; mark: Mark }) {
           <Icon name="chevron-down" size={16} className={cx('pool-row__chevron', open && 'is-open')} />
         </button>
       </div>
-      <div className="pool-row__meters">
-        {SIDES.map((side) => (
-          <ScoreMeter key={side} side={side} name={names[side]} value={item.scores[side]} size="sm" />
+      <div className="pool-row__meters" style={{ ['--n' as string]: members.length }}>
+        {members.map((side) => (
+          <ScoreMeter key={side} side={side} name={nameOf(names, side)} value={item.scores[side] ?? 0} size="stack" />
         ))}
       </div>
       <div id={moreId} className="pool-row__more" hidden={!open}>
+        {item.scout && (
+          <p className="small">
+            <span className="because__who">Why {agentOf(nameOf(names, item.scout.side))} added it:</span>{' '}
+            <span className="muted">{item.scout.why}</span>
+          </p>
+        )}
         {item.blurb && <p className="small">{item.blurb}</p>}
+        <Hours hours={item.hours} />
         {facts.length > 0 && (
           <dl className="pool-row__facts small">
             {facts.slice(0, 4).map(([k, v]) => (
@@ -93,7 +116,7 @@ const Row = memo(function Row({ item, mark }: { item: CardItem; mark: Mark }) {
             ))}
           </dl>
         )}
-        {SIDES.map((side) => (
+        {members.map((side) => (
           <Because key={side} item={item} side={side} />
         ))}
       </div>
@@ -127,7 +150,7 @@ export function PoolSkeleton() {
 
 interface PoolPanelProps {
   pool: Record<Slot, CardItem[]>;
-  indifferent: Record<Side, Record<Slot, boolean>> | null;
+  indifferent: PerSide<Record<Slot, boolean>> | null;
   /** The evening on the table now, and the final one once there is one. */
   table: Bundle | null;
   final: Bundle | null;
@@ -136,14 +159,17 @@ interface PoolPanelProps {
 const STEP: Record<string, number> = { ArrowRight: 1, ArrowLeft: -1 };
 
 export function PoolPanel({ pool, indifferent, table, final }: PoolPanelProps) {
-  const { names } = useTruceCtx();
+  const { names, members } = useTruceCtx();
   const [slot, setSlot] = useState<Slot>('film');
   const [expanded, setExpanded] = useState(false);
   const tabs = useRef<Partial<Record<Slot, HTMLButtonElement | null>>>({});
 
-  const items = useMemo(() => [...pool[slot]].sort((x, y) => y.scores.a + y.scores.b - (x.scores.a + x.scores.b)), [pool, slot]);
+  const items = useMemo(() => {
+    const sum = (i: CardItem) => members.reduce((t, s) => t + (i.scores[s] ?? 0), 0);
+    return [...pool[slot]].sort((x, y) => sum(y) - sum(x));
+  }, [pool, slot, members]);
   const total = useMemo(() => SLOTS.reduce((t, s) => t + pool[s].length, 0), [pool]);
-  const flat = indifferent ? SIDES.filter((side) => indifferent[side][slot]) : [];
+  const flat = indifferent ? members.filter((side) => indifferent[side]?.[slot]) : [];
 
   const markOf = (item: CardItem): Mark => {
     if (final) return final[item.slot] === item.id ? 'plan' : null;
@@ -198,7 +224,7 @@ export function PoolPanel({ pool, indifferent, table, final }: PoolPanelProps) {
       <div className="pool__panel" role="tabpanel" id="pool-panel" aria-labelledby={`pool-tab-${slot}`}>
         {flat.map((side) => (
           <Notice key={side} tone="info" className="pool__flat">
-            {names[side]} has no strong preference here, so every {SLOT_LABEL[slot].toLowerCase()} scores 50 for {names[side]}.
+            {nameOf(names, side)} has no strong preference here, so every {SLOT_LABEL[slot].toLowerCase()} scores 50 for {nameOf(names, side)}.
           </Notice>
         ))}
         <ul className="pool__list">

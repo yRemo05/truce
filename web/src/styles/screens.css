@@ -102,6 +102,17 @@
   gap: var(--s-3);
   align-items: start;
 }
+.setup__people {
+  display: grid;
+  gap: var(--s-3);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.setup__add {
+  justify-self: start;
+}
 .examples {
   display: flex;
   flex-wrap: wrap;
@@ -250,6 +261,57 @@
   display: grid;
   gap: var(--s-4);
 }
+.brief {
+  margin-top: var(--s-4);
+  display: grid;
+  gap: var(--s-3);
+}
+.brief__examples {
+  margin-top: 0;
+}
+.side__understood {
+  margin-top: var(--s-6);
+  max-width: 40rem;
+  display: grid;
+  gap: var(--s-4);
+}
+.side__understood-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.brief-summary {
+  display: grid;
+  gap: var(--s-4);
+}
+.brief-summary__private {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.brief-summary__group {
+  display: grid;
+  gap: var(--s-2);
+}
+.brief-summary__label {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
+  font-size: var(--text-sm);
+  font-weight: 550;
+}
+.understood {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+}
+.understood__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
 .side__footer {
   margin-top: var(--s-5);
   display: grid;
@@ -313,14 +375,21 @@
   row-gap: var(--s-5);
   align-items: start;
 }
-.tonight,
+.pair__main,
 .ledger-card {
   grid-column: 1 / -1;
+}
+.pair__main {
+  display: grid;
+  gap: var(--s-5);
+}
+.tonight,
+.ledger-card {
   display: grid;
   gap: var(--s-4);
 }
 @media (min-width: 64em) {
-  .tonight {
+  .pair__main {
     grid-column: 1 / span 7;
   }
   .ledger-card {
@@ -334,8 +403,9 @@
 }
 .person {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--s-3);
+  gap: var(--s-2) var(--s-3);
   padding-block: var(--s-3);
   border-top: 1px solid var(--border);
 }
@@ -344,7 +414,7 @@
   padding-top: 0;
 }
 .person__text {
-  flex: 1;
+  flex: 1 1 7rem;
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
@@ -356,17 +426,19 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.checkin-card__plan {
+  justify-self: start;
+  margin-left: calc(-1 * var(--s-3));
+}
+/* When a row is too narrow, the actions drop under the name, still on the right. */
+.person__actions {
+  display: flex;
+  flex: none;
+  gap: var(--s-2);
+  margin-left: auto;
+}
 .person--skeleton {
   border: 0;
-}
-.tonight__invite {
-  display: grid;
-  gap: var(--s-2);
-}
-.tonight__invite > p {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
 }
 .tonight__action {
   display: flex;
@@ -390,7 +462,8 @@
   grid-template-columns: 3.5rem minmax(0, 1fr) auto;
   grid-template-areas:
     'date evening go'
-    'date who go';
+    'date who go'
+    'date checkins go';
   gap: 0.125rem var(--s-3);
   align-items: center;
   padding: var(--s-3) var(--s-2);
@@ -399,7 +472,7 @@
   text-decoration: none;
   transition: background-color var(--dur-fast) var(--ease-out);
 }
-.history__row:hover {
+.history__row--link:hover {
   background: var(--secondary);
 }
 .history__date {
@@ -423,6 +496,12 @@
   align-items: center;
   gap: var(--s-2);
 }
+.history__checkins {
+  grid-area: checkins;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
 .history__go {
   grid-area: go;
   color: var(--muted-foreground);
@@ -442,4 +521,107 @@
   place-items: center;
   min-height: 40vh;
   color: var(--muted-foreground);
+}
+
+/* ---------- Check-in ---------- */
+.checkin .page__main {
+  padding-top: var(--s-6);
+}
+.checkin__body {
+  max-width: 40rem;
+  display: grid;
+  gap: var(--s-5);
+}
+.checkin__head {
+  display: grid;
+  gap: var(--s-2);
+}
+.checkin__head .muted {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+}
+.checkin__went {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.checkin__q {
+  font-weight: 600;
+  padding: 0;
+}
+.checkin__went .examples {
+  margin-top: var(--s-2);
+}
+.checkin__card {
+  display: grid;
+  gap: var(--s-4);
+}
+.checkin__picks {
+  list-style: none;
+  padding: 0;
+  display: grid;
+}
+.checkin__pick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'thumb name'
+    'thumb rates';
+  gap: var(--s-2) var(--s-3);
+  align-items: center;
+  padding-block: var(--s-3);
+  border-top: 1px solid var(--border);
+}
+.checkin__pick:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.checkin__pick > .thumb {
+  grid-area: thumb;
+  align-self: start;
+}
+.checkin__pick-name {
+  grid-area: name;
+  display: grid;
+  font-weight: 600;
+  min-width: 0;
+}
+.checkin__slot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  font-weight: 400;
+}
+.checkin__rates {
+  grid-area: rates;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.checkin__learned {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+.checkin__learned .icon {
+  margin-top: 0.2rem;
+  flex: none;
+}
+.checkin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+}
+@media (min-width: 48em) {
+  .checkin__pick {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'thumb name rates';
+  }
+  .checkin__pick > .thumb {
+    align-self: center;
+  }
 }

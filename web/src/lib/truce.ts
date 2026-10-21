@@ -2,13 +2,14 @@
  * From the StreamEvent log to what the live page shows. A pure reducer, so
  * a replayed truce and a live one end in exactly the same state.
  */
-import type { CardItem, Side, Slot, StreamEvent, StrikeCode, TruceResult } from '@contract';
+import type { CardItem, PerSide, Side, Slot, StreamEvent, StrikeCode, Tonight, TruceResult } from '@contract';
 import type { IconName } from '@/ui/Icon';
 import { agentOf } from './people';
 
 export type Bundle = TruceResult['bundle'];
 export type EventOf<T extends StreamEvent['type']> = Extract<StreamEvent, { type: T }>;
 export type MoveEvent = EventOf<'move'>;
+export type ScoutStep = EventOf<'scout'>;
 
 export const SLOTS: readonly Slot[] = ['film', 'restaurant', 'music'];
 export const SLOT_LABEL: Record<Slot, string> = { film: 'Film', restaurant: 'Restaurant', music: 'Music' };
@@ -24,26 +25,31 @@ export type FeedEntry = { key: string; live: boolean } & (
   | { kind: 'start'; event: EventOf<'start'> }
   | { kind: 'move'; event: MoveEvent }
   | { kind: 'rejected'; event: EventOf<'rejected'> }
-  /** The referee calls the last call: the thinking event that opens it. */
-  | { kind: 'lastcall'; event: EventOf<'thinking'> }
+  /** The referee opens the last calls: the first thinking event after the last turn. */
+  | { kind: 'lastcall'; event: EventOf<'thinking'>; offer: MoveEvent | null }
   | { kind: 'declined'; event: EventOf<'declined'> }
-  | { kind: 'agreement'; event: EventOf<'agreement'>; accepted: MoveEvent | null }
+  | { kind: 'agreement'; event: EventOf<'agreement'> }
   | { kind: 'ruling'; event: EventOf<'ruling'> }
   | { kind: 'polish'; event: EventOf<'polish'> }
 );
 
 export interface TruceState {
-  phase: 'connecting' | 'scouting' | 'negotiating' | 'settled' | 'done' | 'failed';
+  phase: 'connecting' | 'gathering' | 'scouting' | 'negotiating' | 'settled' | 'done' | 'failed';
   brain: 'claude' | 'rules' | null;
+  /** Qloo's taste words per person, and the vetoes in play. */
+  tastes: EventOf<'tastes'> | null;
+  /** Each agent's scouting steps, in order. */
+  scouts: PerSide<ScoutStep[]>;
   pool: Record<Slot, CardItem[]> | null;
   items: Record<string, CardItem>;
-  indifferent: Record<Side, Record<Slot, boolean>> | null;
+  indifferent: PerSide<Record<Slot, boolean>> | null;
+  tonight: Tonight | null;
   start: EventOf<'start'> | null;
-  /** Turns before the last call. */
+  /** Turns before the last calls. */
   turns: number;
   feed: FeedEntry[];
   thinking: { side: Side; turn: number; struck: boolean } | null;
-  /** The latest full evening offered or accepted. */
+  /** The latest offer and who has said yes to it. */
   onTable: MoveEvent | null;
   /** No deal by the last call: the referee ruled. */
   ruled: boolean;
@@ -57,9 +63,12 @@ export interface TruceState {
 export const initialTruce: TruceState = {
   phase: 'connecting',
   brain: null,
+  tastes: null,
+  scouts: {},
   pool: null,
   items: {},
   indifferent: null,
+  tonight: null,
   start: null,
   turns: DEFAULT_TURNS,
   feed: [],
@@ -77,6 +86,8 @@ export interface Arrival {
   live: boolean;
 }
 
+const EARLY: readonly TruceState['phase'][] = ['connecting', 'gathering', 'scouting'];
+
 export function applyEvent(state: TruceState, { event, live }: Arrival): TruceState {
   const s: TruceState = live && !state.sawLive ? { ...state, sawLive: true } : state;
   const key = `${s.feed.length}-${event.type}`;
@@ -84,18 +95,22 @@ export function applyEvent(state: TruceState, { event, live }: Arrival): TruceSt
 
   switch (event.type) {
     case 'status':
-      return { ...s, brain: event.brain, phase: s.phase === 'connecting' || s.phase === 'scouting' ? event.phase : s.phase };
+      return { ...s, brain: event.brain, phase: EARLY.includes(s.phase) ? event.phase : s.phase };
+    case 'tastes':
+      return { ...s, tastes: event };
+    case 'scout':
+      return { ...s, scouts: { ...s.scouts, [event.side]: [...(s.scouts[event.side] ?? []), event] } };
     case 'pool': {
       const items: Record<string, CardItem> = {};
       for (const slot of SLOTS) for (const item of event.items[slot]) items[item.id] = item;
-      return { ...s, pool: event.items, items, indifferent: event.indifferent };
+      return { ...s, pool: event.items, items, indifferent: event.indifferent, tonight: event.tonight };
     }
     case 'start':
       return { ...add({ kind: 'start', key, live, event }), start: event, turns: event.turns, phase: 'negotiating' };
     case 'thinking': {
       const thinking = { side: event.side, turn: event.turn, struck: false };
       const opensLastCall = isLastCall(event.turn, s.turns) && !s.feed.some((e) => e.kind === 'lastcall');
-      return opensLastCall ? { ...add({ kind: 'lastcall', key, live, event }), thinking } : { ...s, thinking };
+      return opensLastCall ? { ...add({ kind: 'lastcall', key, live, event, offer: s.onTable }), thinking } : { ...s, thinking };
     }
     case 'rejected':
       return {
@@ -106,10 +121,8 @@ export function applyEvent(state: TruceState, { event, live }: Arrival): TruceSt
       return { ...add({ kind: 'move', key, live, event }), thinking: null, onTable: event };
     case 'declined':
       return { ...add({ kind: 'declined', key, live, event }), thinking: null };
-    case 'agreement': {
-      const accepted = s.onTable?.action === 'accept' ? s.onTable : null;
-      return { ...add({ kind: 'agreement', key, live, event, accepted }), phase: 'settled', thinking: null };
-    }
+    case 'agreement':
+      return { ...add({ kind: 'agreement', key, live, event }), phase: 'settled', thinking: null };
     case 'ruling':
       return { ...add({ kind: 'ruling', key, live, event }), phase: 'settled', ruled: true, thinking: null };
     case 'polish':
@@ -123,8 +136,9 @@ export function applyEvent(state: TruceState, { event, live }: Arrival): TruceSt
   }
 }
 
+/** Found from everyone's tastes together, or from more than one person's. */
 export const isBridge = (item: Pick<CardItem, 'origins'>) =>
-  item.origins.includes('joint') || (item.origins.includes('a') && item.origins.includes('b'));
+  item.origins.includes('joint') || item.origins.filter((o) => o !== 'joint' && o !== 'scout').length > 1;
 
 export const isLastCall = (turn: number, turns: number) => turn > turns;
 export const turnLabel = (turn: number, turns: number) => (isLastCall(turn, turns) ? 'Last call' : `Turn ${turn}`);
@@ -140,17 +154,23 @@ export const turnsOf = (feed: readonly FeedEntry[]) =>
     action: e.kind === 'declined' ? ('decline' as const) : e.event.action,
   }));
 
-/** Who gave more ground in one truce, by the ledger's measure; null when it's within a hair. */
-export function gaveGround(concession: Record<Side, number>): Side | null {
-  const gap = concession.a - concession.b;
-  return Math.abs(gap) < 0.02 ? null : gap > 0 ? 'a' : 'b';
+/** Who gave the most ground in one truce, by the ledger's measure; null when everyone is within a hair. */
+export function gaveGround(concession: PerSide<number>, members: readonly Side[]): Side | null {
+  const values = members.map((s) => concession[s] ?? 0);
+  const mean = values.reduce((t, v) => t + v, 0) / Math.max(values.length, 1);
+  let top: Side | null = null;
+  for (const s of members) {
+    const above = (concession[s] ?? 0) - mean;
+    if (above > 0.02 && (top === null || above > (concession[top] ?? 0) - mean)) top = s;
+  }
+  return top;
 }
 
 const STRIKE: Record<StrikeCode, (agent: string, name: string) => string> = {
-  agent_failed: (agent) => `${agent} didn\u2019t answer in time.`,
-  no_counter: (agent) => `${agent} didn\u2019t put an evening on the table.`,
+  agent_failed: (agent) => `${agent} didn’t answer in time.`,
+  no_counter: (agent) => `${agent} didn’t put an evening on the table.`,
   nothing_to_accept: (agent) => `${agent} accepted an offer nobody had made.`,
-  unknown_item: (agent) => `${agent} named something that isn\u2019t in the pool.`,
+  unknown_item: (agent) => `${agent} named something that isn’t in the pool.`,
   below_minimum: (agent, name) => `${agent} went below what ${name} should settle for this early.`,
 };
 

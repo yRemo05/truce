@@ -1,21 +1,22 @@
 import type { Side } from '@contract';
 import { memo, type ReactNode } from 'react';
-import { Avatar, Badge, cx, Icon, Voice } from '@/ui';
-import { agentOf, SIDES } from '@/lib/people';
+import { Avatar, Badge, cx, Icon, InfoTip, Voice } from '@/ui';
+import { EXPLAIN } from '@/lib/glossary';
+import { agentOf, listNames, nameOf } from '@/lib/people';
 import { SLOT_ICON, SLOTS, turnLabel, type EventOf, type MoveEvent } from '@/lib/truce';
 import { Because } from './Because';
 import { useTruceCtx } from './context';
 import { Evening, Scores } from './Evening';
 
-/** One chat message from an agent: avatar on its person's side, a name line, the bubble. */
+/** One chat message from an agent, group-chat style: avatar in its person's colour, a name line, the bubble. */
 function Message({ side, meta, live, children, className }: { side: Side; meta?: ReactNode; live: boolean; children: ReactNode; className?: string }) {
   const { names, letters } = useTruceCtx();
   return (
-    <article className={cx('msg', `msg--${side}`, live && 'enter', className)}>
-      <Avatar side={side} letters={letters[side]} size="md" />
+    <article className={cx('msg', live && 'enter', className)}>
+      <Avatar side={side} letters={nameOf(letters, side)} size="md" />
       <div className="msg__body">
         <p className="msg__meta">
-          <span className="msg__who">{agentOf(names[side])}</span>
+          <span className="msg__who">{agentOf(nameOf(names, side))}</span>
           <Voice kind="agent" />
           {meta}
         </p>
@@ -25,9 +26,26 @@ function Message({ side, meta, live, children, className }: { side: Side; meta?:
   );
 }
 
-/** Qloo's explanation of both scores, per pick, behind a disclosure. */
+/** Who has said yes to an offer so far: "Ömer ✓ Ecrin ✓ · waiting for Deniz". */
+function Accepts({ acceptedBy }: { acceptedBy: readonly Side[] }) {
+  const { members, names } = useTruceCtx();
+  const waiting = members.filter((s) => !acceptedBy.includes(s));
+  return (
+    <p className="accepts small">
+      {acceptedBy.map((s) => (
+        <span key={s} className="accepts__yes">
+          {nameOf(names, s)}
+          <Icon name="check" size={16} label="said yes" />
+        </span>
+      ))}
+      {waiting.length > 0 && <span className="muted">· waiting for {listNames(waiting.map((s) => nameOf(names, s)))}</span>}
+    </p>
+  );
+}
+
+/** Qloo's explanation of everyone's scores, per pick, behind a disclosure. */
 function Why({ move }: { move: MoveEvent }) {
-  const { items } = useTruceCtx();
+  const { items, members } = useTruceCtx();
   return (
     <details className="why">
       <summary className="why__summary">
@@ -44,7 +62,7 @@ function Why({ move }: { move: MoveEvent }) {
                 <Icon name={SLOT_ICON[slot]} size={16} />
                 {item.name}
               </p>
-              {SIDES.map((side) => (
+              {members.map((side) => (
                 <Because key={side} item={item} side={side} />
               ))}
             </div>
@@ -56,7 +74,7 @@ function Why({ move }: { move: MoveEvent }) {
   );
 }
 
-/** An agent's move: its words, then the evening it put forward (Qloo data). */
+/** An agent's move: its words, then the evening it put forward (Qloo data) and who has said yes. */
 export const MoveCard = memo(function MoveCard({ move, live }: { move: MoveEvent; live: boolean }) {
   const { brain, turns } = useTruceCtx();
   const accept = move.action === 'accept';
@@ -65,7 +83,7 @@ export const MoveCard = memo(function MoveCard({ move, live }: { move: MoveEvent
       <span className="msg__turn">{turnLabel(move.turn, turns)}</span>
       {accept && (
         <Badge variant="success" icon="check">
-          Accepts
+          Says yes
         </Badge>
       )}
     </>
@@ -79,13 +97,21 @@ export const MoveCard = memo(function MoveCard({ move, live }: { move: MoveEvent
           The referee wrote this move: the AI&rsquo;s first try broke a rule.
         </p>
       )}
+      {move.shortlisted && (
+        <p className="bubble__note small muted">
+          <Icon name="gavel" size={16} />
+          From the referee&rsquo;s shortlist
+          <InfoTip label="What the referee’s shortlist is">{EXPLAIN.shortlist}</InfoTip>
+        </p>
+      )}
       <div className="offer">
         <p className="offer__head small muted">
           <Voice kind="qloo" />
-          {accept ? 'The evening they accept' : 'The evening they offer'}
+          {accept ? 'The evening they said yes to' : 'The evening they offer'}
         </p>
         <Evening bundle={move.bundle} />
         <Scores scores={move.scores} />
+        <Accepts acceptedBy={move.acceptedBy} />
         <Why move={move} />
       </div>
     </Message>
@@ -98,7 +124,7 @@ export const DeclinedCard = memo(function DeclinedCard({ event, live }: { event:
     <>
       <span className="msg__turn">{turnLabel(event.turn, turns)}</span>
       <Badge variant="destructive" icon="x">
-        Declines
+        Says no
       </Badge>
     </>
   );

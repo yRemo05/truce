@@ -1,17 +1,17 @@
 /*
  * How you'll play (/p/:pairId/play) — step 2 of 3.
  *
- * Inventory: one choice (same phone / send a link), the pair link when sending,
+ * Inventory: one choice (same phone / send a link), the group link when sending,
  * then one primary action: start the first person's picks.
  * Viewport budget: both options and the action above the fold at both sizes.
- * Grid: the two options side by side in columns 1–8 (stacked on a phone),
- * the setup steps in 9–12. Icons: phone, link, eye-off (privacy), arrow-right.
+ * Grid: the two options side by side (stacked on a phone).
+ * Icons: phone, link, arrow-right.
  */
 import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { Button, CopyLink, cx, ErrorNotice, Icon, Page, Skeleton } from '@/ui';
 import { withPass } from '@/lib/flow';
-import { possessive } from '@/lib/people';
+import { listNames, nameOf, possessive } from '@/lib/people';
 import { absolute } from '@/lib/share';
 import { usePair } from '@/lib/usePair';
 import { NotFound } from './NotFound';
@@ -25,21 +25,23 @@ export function HowToPlay({ pairId }: { pairId: string }) {
   const [way, setWay] = useState<Way>('pass');
 
   if (error?.status === 404) return <NotFound what="pair" />;
-  const names = pair?.names;
   const link = absolute(`/p/${pairId}`);
+  const first = pair ? nameOf(pair.names, pair.members[0]!) : '';
+  const others = pair ? listNames(pair.members.slice(1).map((s) => nameOf(pair.names, s))) : '';
+  const couple = pair?.members.length === 2;
 
   const options: { value: Way; icon: 'phone' | 'link'; title: string; text: string }[] = [
     {
       value: 'pass',
       icon: 'phone',
       title: 'Same phone',
-      text: names ? `${names.a} picks, then passes the phone to ${names.b}. Each side stays hidden from the other.` : '',
+      text: pair ? `${first} picks, then passes the phone to ${couple ? others : `${others}, in turn`}. Each person’s picks stay hidden.` : '',
     },
     {
       value: 'link',
       icon: 'link',
       title: 'Send a link',
-      text: names ? `Each of you picks on your own phone. ${names.b} gets a link.` : '',
+      text: pair ? `Everyone picks on their own phone. ${others} ${couple ? 'gets' : 'get'} a link.` : '',
     },
   ];
 
@@ -50,10 +52,10 @@ export function HowToPlay({ pairId }: { pairId: string }) {
           <Steps current={2} />
           <header className="setup__head">
             <h1 className="h2">How will you play?</h1>
-            <p className="muted">Each of you picks your favourites. Neither of you sees the other&rsquo;s.</p>
+            <p className="muted">Each of you picks your favourites. Nobody sees anyone else&rsquo;s.</p>
           </header>
 
-          {error && <ErrorNotice error={error} title="Couldn't load this pair" onRetry={reload} />}
+          {error && <ErrorNotice error={error} title="Couldn't load this truce" onRetry={reload} />}
 
           <fieldset className="ways">
             <legend className="visually-hidden">How you&rsquo;ll play</legend>
@@ -72,12 +74,12 @@ export function HowToPlay({ pairId }: { pairId: string }) {
             ))}
           </fieldset>
 
-          {way === 'link' && names && (
+          {way === 'link' && pair && (
             <div className="setup__link">
               <p className="small">
-                Send {names.b} this link. You can open it too, to see who&rsquo;s ready.
+                Send this to {couple ? others : 'the group'}. Each of you opens it and taps your name.
               </p>
-              <CopyLink url={link} shareTitle="Our truce" shareText={`${names.a} started a truce for tonight. Add your picks:`} />
+              <CopyLink url={link} shareTitle="Our truce" shareText={`${first} started a truce for tonight. Add your picks:`} />
             </div>
           )}
 
@@ -85,10 +87,10 @@ export function HowToPlay({ pairId }: { pairId: string }) {
             <Button
               variant="primary"
               iconEnd="arrow-right"
-              disabled={!names}
-              onClick={() => navigate(withPass(`/p/${pairId}/a`, way === 'pass'))}
+              disabled={!pair}
+              onClick={() => pair && navigate(withPass(`/p/${pairId}/${pair.members[0]}`, way === 'pass'))}
             >
-              {names ? `Continue to ${possessive(names.a)} favourites` : 'Continue'}
+              {pair ? `Continue to ${possessive(first)} favourites` : 'Continue'}
             </Button>
           </div>
         </div>

@@ -1,53 +1,77 @@
 /*
  * Start a truce (/new) — step 1 of 3.
  *
- * Inventory: who it's for (mode), two names, where to eat; Continue (primary).
+ * Inventory: who it's for (couple or friends), two to four names, where to eat;
+ * Add a friend (secondary, friends only); Continue (primary).
  * Viewport budget: the whole form and Continue sit above the fold at 1440×900
- * and at 390×844. Grid: form in columns 1–7, the three steps ahead in 9–12;
- * on a phone the steps shrink to one line above the title.
- * Names sit side by side at every width: they are one decision.
- * Icons: heart / users (mode), pin (place), arrow-right (continue), check (done step).
+ * with four friends, and at 390×844 with two.
+ * Names sit two to a row at every width: they are one decision. A friend's
+ * remove button lives inside their field, so rows keep one height.
+ * Icons: heart / users (mode), plus (add a friend), x (remove), pin (place),
+ * arrow-right (continue).
  */
 import type { Mode } from '@contract';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { useLocation } from 'wouter';
 import { api } from '@/api';
-import { Button, ErrorNotice, Page, Segmented, TextField } from '@/ui';
+import { Button, Chip, ErrorNotice, Icon, Page, Segmented, TextField } from '@/ui';
+import { MAX_PEOPLE, MIN_PEOPLE } from '@/lib/people';
 import { useAction } from '@/lib/useAction';
 import { Steps } from './Steps';
 
 const PLACES = ['Manhattan', 'Brooklyn', 'Istanbul', 'London', 'Paris'];
 const MAX_NAME = 24;
 
+const clean = (s: string) => s.trim().replace(/\s+/g, ' ');
+
+/** "Your name", then "Their name" for a couple or "Friend 1…3" for a group. */
+const labelOf = (mode: Mode, i: number) => (i === 0 ? 'Your name' : mode === 'couple' ? 'Their name' : `Friend ${i}`);
+
 export function NewPair() {
   const [, navigate] = useLocation();
   const [mode, setMode] = useState<Mode>('couple');
-  const [a, setA] = useState('');
-  const [b, setB] = useState('');
+  // A couple shows the first two; switching back to friends brings the rest back.
+  const [names, setNames] = useState<string[]>(['', '']);
   const [location, setLocation] = useState('Manhattan');
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitted, setSubmitted] = useState(false);
+  const fields = useRef<(HTMLInputElement | null)[]>([]);
+  const addButton = useRef<HTMLButtonElement>(null);
+
+  const shown = mode === 'couple' ? names.slice(0, MIN_PEOPLE) : names;
   const create = useAction(async () => {
-    const { id } = await api.createPair({ mode, names: { a: clean(a), b: clean(b) }, location: clean(location) });
+    const { id } = await api.createPair({ mode, names: shown.map(clean), location: clean(location) });
     navigate(`/p/${id}/play`);
   });
 
-  const clean = (s: string) => s.trim().replace(/\s+/g, ' ');
-  const errors = {
-    a: !clean(a) ? 'Add your name for the agents.' : null,
-    b: !clean(b)
-      ? 'Add their name.'
-      : clean(a).toLocaleLowerCase() === clean(b).toLocaleLowerCase()
-        ? `Two ${clean(b)}s? Add an initial so the agents can tell you apart.`
-        : null,
+  const nameError = (i: number): string | null => {
+    const name = clean(shown[i] ?? '');
+    if (!name) return i === 0 ? 'Add your name for the agents.' : i >= MIN_PEOPLE ? 'Add a name, or remove this friend.' : 'Add their name.';
+    const twin = shown.findIndex((other, j) => j < i && clean(other).toLocaleLowerCase() === name.toLocaleLowerCase());
+    return twin >= 0 ? `Two ${name}s? Add an initial so the agents can tell you apart.` : null;
+  };
+  const errors: Record<string, string | null> = {
+    ...Object.fromEntries(shown.map((_, i) => [`name-${i}`, nameError(i)])),
     location: clean(location).length < 2 ? 'Name a city or neighbourhood, like Manhattan or Istanbul.' : null,
   };
-  const show = (k: keyof typeof errors) => (touched[k] || submitted ? errors[k] : null);
+  const show = (k: string) => (touched[k] || submitted ? errors[k] : null);
+  const touch = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
+
+  const setName = (i: number, value: string) => setNames((list) => list.map((n, j) => (j === i ? value : n)));
+  const addFriend = () => {
+    setNames((list) => [...list, '']);
+    requestAnimationFrame(() => fields.current[names.length]?.focus());
+  };
+  const removeFriend = (i: number) => {
+    setNames((list) => list.filter((_, j) => j !== i));
+    setTouched((t) => Object.fromEntries(Object.entries(t).filter(([k]) => !k.startsWith('name-'))));
+    requestAnimationFrame(() => (addButton.current ?? fields.current[i - 1])?.focus());
+  };
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitted(true);
-    const invalid = (['a', 'b', 'location'] as const).find((k) => errors[k]);
+    const invalid = Object.keys(errors).find((k) => errors[k]);
     if (invalid) {
       (e.currentTarget.elements.namedItem(invalid) as HTMLInputElement | null)?.focus();
       return;
@@ -62,7 +86,7 @@ export function NewPair() {
           <Steps current={1} />
           <header className="setup__head">
             <h1 className="h2">Start a truce</h1>
-            <p className="muted">Tell us who it's for and where you'll eat. Next, each of you picks a few favourites.</p>
+            <p className="muted">Tell us who&rsquo;s coming and where you&rsquo;ll eat. Next, each of you picks a few favourites.</p>
           </header>
 
           <Segmented
@@ -71,32 +95,47 @@ export function NewPair() {
             onChange={setMode}
             options={[
               { value: 'couple', label: 'Couple', icon: 'heart' },
-              { value: 'bff', label: 'Best friends', icon: 'users' },
+              { value: 'bff', label: 'Friends', icon: 'users' },
             ]}
           />
 
-          <div className="setup__pair">
-            <TextField
-              label="Your name"
-              name="a"
-              value={a}
-              maxLength={MAX_NAME}
-              autoComplete="given-name"
-              onChange={(e) => setA(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, a: true }))}
-              error={show('a')}
-            />
-            <TextField
-              label="Their name"
-              name="b"
-              value={b}
-              maxLength={MAX_NAME}
-              autoComplete="off"
-              onChange={(e) => setB(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, b: true }))}
-              error={show('b')}
-            />
-          </div>
+          <fieldset className="setup__people">
+            <legend className="visually-hidden">{mode === 'couple' ? 'The two of you' : 'Who’s coming'}</legend>
+            <div className="setup__pair">
+              {shown.map((name, i) => {
+                const label = labelOf(mode, i);
+                const removable = mode !== 'couple' && i >= MIN_PEOPLE;
+                return (
+                  <TextField
+                    key={i}
+                    ref={(el) => {
+                      fields.current[i] = el;
+                    }}
+                    label={label}
+                    name={`name-${i}`}
+                    value={name}
+                    maxLength={MAX_NAME}
+                    autoComplete={i === 0 ? 'given-name' : 'off'}
+                    onChange={(e) => setName(i, e.target.value)}
+                    onBlur={() => touch(`name-${i}`)}
+                    error={show(`name-${i}`)}
+                    trailing={
+                      removable ? (
+                        <button type="button" className="field__clear" aria-label={`Remove ${clean(name) || label}`} onClick={() => removeFriend(i)}>
+                          <Icon name="x" size={16} />
+                        </button>
+                      ) : undefined
+                    }
+                  />
+                );
+              })}
+            </div>
+            {mode !== 'couple' && names.length < MAX_PEOPLE && (
+              <Button ref={addButton} type="button" variant="outline" size="sm" icon="plus" className="setup__add" onClick={addFriend}>
+                Add a friend
+              </Button>
+            )}
+          </fieldset>
 
           <div className="setup__place">
             <TextField
@@ -107,21 +146,15 @@ export function NewPair() {
               maxLength={60}
               autoComplete="address-level2"
               onChange={(e) => setLocation(e.target.value)}
-              onBlur={() => setTouched((t) => ({ ...t, location: true }))}
+              onBlur={() => touch('location')}
               error={show('location')}
               hint="A city or neighbourhood. Qloo looks for restaurants there."
             />
             <div className="examples" role="group" aria-label="Suggestions">
               {PLACES.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  className={p === clean(location) ? 'btn btn--sm btn--secondary is-on' : 'btn btn--sm btn--outline'}
-                  aria-pressed={p === clean(location)}
-                  onClick={() => setLocation(p)}
-                >
+                <Chip key={p} pressed={p === clean(location)} onClick={() => setLocation(p)}>
                   {p}
-                </button>
+                </Chip>
               ))}
             </div>
           </div>

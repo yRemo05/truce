@@ -108,6 +108,9 @@ const FILMS = build('film', [
   ['Top Gun: Maverick', '2022', 2022, 'A veteran pilot trains a squad for an impossible mission.', false, { genres: 'Action' }],
   ['The Grand Budapest Hotel', '2014', 2014, 'A concierge and his lobby boy are caught up in a theft and a family feud.', true, { genres: 'Comedy, Adventure' }],
   ['Moonrise Kingdom', '2012', 2012, 'Two twelve-year-olds run away together on a New England island.', false, { genres: 'Comedy, Romance' }],
+  ['The Dark Knight', '2008', 2008, 'Batman, a district attorney and a clown who wants to watch Gotham burn.', true, { genres: 'Action, Crime', minutes: '152' }],
+  ['Dune', '2021', 2021, 'A young heir is sent to the desert planet everyone wants, and the desert has plans of its own.', true, { genres: 'Sci-fi, Adventure', minutes: '155' }],
+  ['Inception', '2010', 2010, 'A thief who steals secrets from dreams is hired to plant one instead.', true, { genres: 'Sci-fi, Action', minutes: '148' }],
 ]);
 
 const PLACE = (neighborhood: string, cuisineType: string, price: string, ambience: string) => ({
@@ -133,6 +136,20 @@ const RESTAURANTS = build('restaurant', [
   ['Dumpling Society', '52 Bayard St, New York, NY', null, 'Soup dumplings by the dozen.', false, PLACE('Chinatown', 'Chinese', '$', 'Fast, friendly')],
   ['Green Fig', '7 Rue des Martyrs, Paris', null, 'Vegetable-led small plates in a tiny dining room.', false, PLACE('Pigalle', 'Modern European', '$$', 'Intimate')],
   ['Sushi Kaze', '118 W 22nd St, New York, NY', null, 'An eight-seat omakase counter.', true, PLACE('Chelsea', 'Japanese', '$$$$', 'Hushed')],
+  ['Lantern & Lark', '67 Bedford St, New York, NY', null, 'A candlelit wine bar with handmade pasta, and a burger that regulars swear by.', true, PLACE('West Village', 'Italian', '$$', 'Cosy, candlelit')],
+  // Istanbul: invented places in real neighbourhoods.
+  ['Kuzguncuk Bostan', 'Üsküdar, İstanbul', null, 'Garden vegetables, olive-oil dishes and a long table under a fig tree.', false, PLACE('Kuzguncuk', 'Turkish', '$$', 'Leafy, quiet')],
+  ['Etçi Mehmet', 'Şişli, İstanbul', null, 'Dry-aged cuts, grilled over charcoal and carved at the table.', false, PLACE('Nişantaşı', 'Steakhouse', '$$$', 'Smart, busy')],
+  ['Karaköy Lokanta Evi', 'Beyoğlu, İstanbul', null, 'Tiled walls, daily home-style dishes and rakı by the glass.', true, PLACE('Karaköy', 'Turkish', '$$', 'Bright, lively')],
+  ['Yeşil Masa', 'Beyoğlu, İstanbul', null, 'A vegetarian kitchen with mezze, lentil köfte and a terrace.', true, PLACE('Cihangir', 'Vegetarian', '$$', 'Cosy, plants everywhere')],
+  ['Moda İskele Meyhanesi', 'Kadıköy, İstanbul', null, 'Meze, grilled fish and fasıl music by the ferry pier.', true, PLACE('Moda', 'Meyhane', '$$', 'Loud, festive')],
+  ['Ocakbaşı Kömür', 'Kadıköy, İstanbul', null, 'Adana kebab off the grill, eaten at the counter round it.', false, PLACE('Kadıköy', 'Grill', '$$', 'Smoky, crowded')],
+  ['Galata Mantı Evi', 'Beyoğlu, İstanbul', null, 'Tiny dumplings with garlic yoghurt and chilli butter.', false, PLACE('Galata', 'Turkish', '$', 'Small, friendly')],
+  ['Bostan Sofrası', 'Beyoğlu, İstanbul', null, 'Seasonal home cooking, mostly from the market that morning.', false, PLACE('Cihangir', 'Turkish', '$$', 'Warm, homely')],
+  ['Balat Kahvaltı Evi', 'Fatih, İstanbul', null, 'An all-day breakfast spread in a painted wooden house.', true, PLACE('Balat', 'Breakfast', '$', 'Colourful, relaxed')],
+  ['Tünel Pide Salonu', 'Beyoğlu, İstanbul', null, 'Boat-shaped pide from a wood oven, open late.', false, PLACE('Beyoğlu', 'Pide', '$', 'Casual, late-night')],
+  ['Nişantaşı Steak Club', 'Şişli, İstanbul', null, 'Tomahawks, truffle fries and a dress code.', true, PLACE('Nişantaşı', 'Steakhouse', '$$$$', 'Glossy')],
+  ['Cihangir Sofrası', 'Beyoğlu, İstanbul', null, 'Vegetable mezze and a charcoal grill on a cosy side street.', true, PLACE('Cihangir', 'Turkish', '$$', 'Cosy, candlelit')],
 ]);
 
 const ARTISTS = build('music', [
@@ -156,6 +173,8 @@ const ARTISTS = build('music', [
   ['Barış Manço', 'Turkish rock musician', null, 'Anatolian rock pioneer.', false, { genres: 'Anatolian rock' }],
   ['Phoebe Bridgers', 'American singer-songwriter', null, 'Sad songs, skeleton suits.', false, { genres: 'Indie folk' }],
   ['LCD Soundsystem', 'American dance-punk band', null, 'Dance music for people who overthink.', false, { genres: 'Dance-punk' }],
+  ['Norah Jones', 'American singer-songwriter', null, 'Jazz-tinged songs for a slow evening.', true, { genres: 'Jazz, Pop' }],
+  ['Duman', 'Turkish rock band', null, 'Istanbul rock with big choruses.', false, { genres: 'Rock' }],
 ]);
 
 export const CATALOG: Record<Slot, MockEntity[]> = { film: FILMS, restaurant: RESTAURANTS, music: ARTISTS };

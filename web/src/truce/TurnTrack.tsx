@@ -1,11 +1,11 @@
-import { agentOf, type Names } from '@/lib/people';
+import { agentOf, nameOf, type Names } from '@/lib/people';
 import { isLastCall, turnsOf, type TruceState } from '@/lib/truce';
 import { useTruceCtx } from './context';
 
 function statusOf(state: TruceState, names: Names, latest: number): string {
   if (state.phase === 'settled' || state.phase === 'done') return state.ruled ? 'Truce’s call' : 'Deal reached';
   const { thinking, turns } = state;
-  if (thinking && isLastCall(thinking.turn, turns)) return `Last call: ${agentOf(names[thinking.side])} decides`;
+  if (thinking && isLastCall(thinking.turn, turns)) return `Last call: ${agentOf(nameOf(names, thinking.side))} decides`;
   if (thinking) return `Turn ${thinking.turn} of ${turns}`;
   if (latest) return `Turn ${Math.min(latest, turns)} of ${turns}`;
   return state.start ? `Turn 1 of ${turns}` : 'Starting';

@@ -1,4 +1,4 @@
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { Link } from 'wouter';
 import { cx } from './cx';
 import { Icon, type IconName } from './Icon';
@@ -42,7 +42,7 @@ export function Button({
   disabled,
   type = 'button',
   ...rest
-}: Look & ButtonHTMLAttributes<HTMLButtonElement>) {
+}: Look & ButtonHTMLAttributes<HTMLButtonElement> & { ref?: Ref<HTMLButtonElement> }) {
   const look = { variant, size, icon, iconEnd, busy, children };
   return (
     <button

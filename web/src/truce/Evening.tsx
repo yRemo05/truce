@@ -1,12 +1,12 @@
-import type { CardItem, Side } from '@contract';
+import type { CardItem, PerSide } from '@contract';
 import { InfoTip, ScoreMeter, Thumb } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
-import { SIDES } from '@/lib/people';
+import { nameOf } from '@/lib/people';
 import { SLOT_LABEL, SLOTS, type Bundle } from '@/lib/truce';
 import { useTruceCtx } from './context';
 
 /** Where a restaurant is, from Qloo's facts: the neighbourhood, else the address. */
-export function placeLine(item: CardItem): string | null {
+function placeLine(item: CardItem): string | null {
   return item.facts.neighborhood ?? item.disambiguation ?? null;
 }
 
@@ -37,14 +37,21 @@ export function Evening({ bundle }: { bundle: Bundle }) {
   );
 }
 
-/** Both people's scores for an evening, named, with the ⓘ that says what a score is. */
-export function Scores({ scores, size = 'sm' }: { scores: Record<Side, number>; size?: 'sm' | 'md' }) {
-  const { names } = useTruceCtx();
+/** Everyone's scores for an evening, one named bar each, with the ⓘ that says what a score is. */
+export function Scores({ scores, size = 'sm' }: { scores: PerSide<number>; size?: 'sm' | 'md' }) {
+  const { names, members } = useTruceCtx();
   return (
     <div className="scores">
       <div className="scores__bars">
-        {SIDES.map((side) => (
-          <ScoreMeter key={side} side={side} name={names[side]} value={scores[side]} size={size} label={`How well this fits ${names[side]}: ${scores[side]} of 100`} />
+        {members.map((side) => (
+          <ScoreMeter
+            key={side}
+            side={side}
+            name={nameOf(names, side)}
+            value={scores[side] ?? 0}
+            size={size}
+            label={`How well this fits ${nameOf(names, side)}: ${scores[side] ?? 0} of 100`}
+          />
         ))}
       </div>
       <InfoTip label="What the scores mean">

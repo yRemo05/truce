@@ -6,17 +6,17 @@ interface ScoreMeterProps {
   name: string;
   /** 0–100. */
   value: number;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'stack';
   /** What the number is, for screen readers: "Qloo fit for Maya". */
   label?: string;
 }
 
-/** Qloo data: a person's fit as a bar, solid for the first person, hatched for the second. */
+/** Qloo data: a person's fit as a bar in their colour, their name beside it. */
 export function ScoreMeter({ side, name, value, size = 'md', label }: ScoreMeterProps) {
   const v = Math.max(0, Math.min(100, Math.round(value)));
   return (
     <div
-      className={cx('meter', `meter--${side}`, `meter--${size}`)}
+      className={cx('meter', `p-${side}`, `meter--${size}`)}
       role="meter"
       aria-valuemin={0}
       aria-valuemax={100}
@@ -29,7 +29,7 @@ export function ScoreMeter({ side, name, value, size = 'md', label }: ScoreMeter
       <span className="meter__track" aria-hidden="true">
         <span className="meter__fill" style={{ transform: `scaleX(${v / 100})` }} />
       </span>
-      <span className="meter__value data" aria-hidden="true">
+      <span className="meter__value" aria-hidden="true">
         {v}
       </span>
     </div>

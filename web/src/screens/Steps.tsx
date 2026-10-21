@@ -1,6 +1,6 @@
 import { cx } from '@/ui';
 
-const STEPS = ['The two of you', 'How you’ll play', 'Your favourites'];
+const STEPS = ['Who’s coming', 'How you’ll play', 'Your favourites'];
 
 /** Setup progress: "Step 2 of 3", the step's name, and three short bars. */
 export function Steps({ current, className }: { current: 1 | 2 | 3; className?: string }) {

@@ -1,21 +1,22 @@
 /*
- * Pair home (/p/:pairId).
+ * Group home (/p/:pairId).
  *
  * Inventory, by priority:
- *   primary   — Start the truce (only when both sides are ready), or Watch the running one
- *   primary   — who's ready: each person, a status chip, fill in / redo
- *   secondary — the link for the other person (link play), the ledger meter
- *   secondary — past evenings, each opening its plan
+ *   primary   — Start the truce (only when everyone is ready), or Watch the running one
+ *   primary   — who's ready: each person, a status chip, fill in / redo, their own link
+ *   secondary — after an evening: "How was the evening?", each person's check-in
+ *   secondary — the ledger (a split bar for two, a bar each for a group)
+ *   secondary — past evenings, each opening its plan, with who checked in
  *
- * Viewport budget: at 1440×900 everything fits one screen; at 390×844 the two
- * people and the start action are above the fold.
- * Grid: 12 columns — "Tonight" in 1–7, the ledger and history in 8–12.
- * Phone: tonight, ledger, history. Polls every 4 s while someone is still
- * picking or a truce is running, so the other phone's progress shows up here.
- * Icons: check-circle / pencil (status), arrow-right, play (start), eye (watch),
- * scale (ledger), calendar (history dates), link, heart / users (mode), pin.
+ * Viewport budget: at 1440×900 everything fits one screen for a group of four;
+ * at 390×844 the people and the start action are above the fold.
+ * Grid: 12 columns — the check-in and "Tonight" in 1–7, the ledger and history
+ * in 8–12. Phone: check-in, tonight, ledger, history. Polls every 4 s while
+ * someone is still picking, a truce runs or check-ins are due.
+ * Icons: check / pencil (status), arrow-right, copy (link), play (start), eye
+ * (watch), heart (check-in), scale (ledger), calendar (history), pin.
  */
-import type { PairView, Side } from '@contract';
+import type { PairView, PerSide } from '@contract';
 import { useEffect, useState } from 'react';
 import { Link, useSearch } from 'wouter';
 import {
@@ -23,13 +24,14 @@ import {
   Badge,
   Button,
   ButtonLink,
-  CopyLink,
+  CopyButton,
   ErrorNotice,
   Icon,
   InfoTip,
   LedgerMeter,
   Page,
   PairNames,
+  PersonRow,
   pullSentence,
   SectionHeader,
   Skeleton,
@@ -37,70 +39,64 @@ import {
 import { isPassMode, withPass } from '@/lib/flow';
 import { EXPLAIN } from '@/lib/glossary';
 import { dayMonth } from '@/lib/format';
-import { modeLabel, monograms, possessive, SIDES } from '@/lib/people';
+import { groupNames, listNames, modeLabel, monograms, nameOf, possessive, type Names } from '@/lib/people';
 import { absolute } from '@/lib/share';
 import { gaveGround, SLOTS } from '@/lib/truce';
 import { useStartTruce } from '@/lib/useAction';
 import { usePair } from '@/lib/usePair';
 import { NotFound } from './NotFound';
 
-function Person({ pair, side, pass }: { pair: PairView; side: Side; pass: boolean }) {
-  const ready = pair.ready[side];
-  const name = pair.names[side];
-  const href = withPass(`/p/${pair.id}/${side}`, pass);
-  return (
-    <li className="person">
-      <Avatar side={side} letters={monograms(pair.names)[side]} size="lg" />
-      <div className="person__text">
-        <p className="person__name">{name}</p>
-        {ready ? (
-          <Badge variant="success" icon="check">
-            Ready
-          </Badge>
-        ) : (
-          <Badge variant="secondary">Still picking</Badge>
-        )}
-      </div>
-      {ready ? (
-        <ButtonLink size="sm" variant="ghost" icon="pencil" href={href}>
-          Change
-        </ButtonLink>
-      ) : (
-        <ButtonLink size="sm" iconEnd="arrow-right" href={href}>
-          Add favourites
-        </ButtonLink>
-      )}
-    </li>
-  );
-}
-
-function Tonight({ pair, running, pass }: { pair: PairView; running: string | null; pass: boolean }) {
+function Tonight({ pair, letters, running, pass }: { pair: PairView; letters: Names; running: string | null; pass: boolean }) {
   const start = useStartTruce(pair.id);
-  const both = pair.ready.a && pair.ready.b;
-  const waiting = SIDES.filter((s) => !pair.ready[s]);
+  const waiting = pair.members.filter((s) => !pair.ready[s]);
+  const all = waiting.length === 0;
 
   return (
     <section className="card tonight" aria-labelledby="tonight-title">
-      <SectionHeader icon="calendar" id="tonight-title" title="Tonight" meta={both ? 'You’re both ready.' : 'Each of you picks your favourites, privately.'} />
+      <SectionHeader
+        icon="calendar"
+        id="tonight-title"
+        title="Tonight"
+        meta={all ? 'Everyone’s ready.' : pass ? 'Each of you picks your favourites, privately.' : 'Each of you picks on your own phone. Send each person their link.'}
+      />
       <ul className="people">
-        {SIDES.map((side) => (
-          <Person key={side} pair={pair} side={side} pass={pass} />
-        ))}
+        {pair.members.map((side) => {
+          const name = nameOf(pair.names, side);
+          const ready = pair.ready[side];
+          const href = withPass(`/p/${pair.id}/${side}`, pass);
+          return (
+            <PersonRow
+              key={side}
+              side={side}
+              letters={nameOf(letters, side)}
+              name={name}
+              status={
+                ready ? (
+                  <Badge variant="success" icon="check">
+                    Ready
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">Still picking</Badge>
+                )
+              }
+              actions={
+                <>
+                  {!ready && !pass && <CopyButton text={absolute(`/p/${pair.id}/${side}`)} compact description={`Copy link for ${name}`} />}
+                  {ready ? (
+                    <ButtonLink size="sm" variant="ghost" icon="pencil" href={href}>
+                      Change
+                    </ButtonLink>
+                  ) : (
+                    <ButtonLink size="sm" iconEnd="arrow-right" href={href} aria-label={`Add favourites for ${name}`}>
+                      Add favourites
+                    </ButtonLink>
+                  )}
+                </>
+              }
+            />
+          );
+        })}
       </ul>
-
-      {!both && !pass && (
-        <div className="tonight__invite">
-          <p className="small">
-            <Icon name="link" size={16} />
-            {waiting.length === 2 ? 'Send the other person this link:' : `Send ${pair.names[waiting[0]!]} this link:`}
-          </p>
-          <CopyLink
-            url={absolute(`/p/${pair.id}`)}
-            shareTitle="Our truce"
-            shareText={`Truce for tonight: ${pair.names.a} & ${pair.names.b}. Add your picks:`}
-          />
-        </div>
-      )}
 
       <div className="tonight__action">
         {running ? (
@@ -112,13 +108,13 @@ function Tonight({ pair, running, pass }: { pair: PairView; running: string | nu
           </>
         ) : (
           <>
-            <Button variant="primary" icon="play" busy={start.busy} disabled={!both} onClick={() => void start.run()}>
+            <Button variant="primary" icon="play" busy={start.busy} disabled={!all} onClick={() => void start.run()}>
               Start the truce
             </Button>
             <p className="small muted">
-              {both
-                ? pullSentence(pair.ledger.tilt, pair.ledger.owed, pair.names, 'tonight')
-                : `Waiting for ${waiting.map((s) => possessive(pair.names[s])).join(' and ')} picks.`}
+              {all
+                ? pullSentence(pair.ledger.tilt, pair.ledger.owed, pair.names, pair.members, 'tonight')
+                : `Waiting for ${listNames(waiting.map((s) => possessive(nameOf(pair.names, s))))} picks.`}
             </p>
           </>
         )}
@@ -128,22 +124,60 @@ function Tonight({ pair, running, pass }: { pair: PairView; running: string | nu
   );
 }
 
-function Ledger({ pair }: { pair: PairView }) {
-  const letters = monograms(pair.names);
+/** "How was the evening?": each person's way to tell the ledger how it really went. */
+function CheckinCard({ pair, letters, truceId, checkedIn }: { pair: PairView; letters: Names; truceId: string; checkedIn: PerSide<boolean> }) {
+  return (
+    <section className="card tonight checkin-card" aria-labelledby="checkin-title">
+      <SectionHeader
+        icon="heart"
+        id="checkin-title"
+        title="How was the evening?"
+        info={<InfoTip label="What a check-in does">{EXPLAIN.checkin}</InfoTip>}
+        meta="Each of you says how it really went."
+      />
+      <ul className="people">
+        {pair.members.map((side) => {
+          const name = nameOf(pair.names, side);
+          const done = Boolean(checkedIn[side]);
+          return (
+            <PersonRow
+              key={side}
+              side={side}
+              letters={nameOf(letters, side)}
+              name={name}
+              status={
+                done ? (
+                  <Badge variant="success" icon="check">
+                    Answered
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">Not yet</Badge>
+                )
+              }
+              actions={
+                !done && (
+                  <ButtonLink size="sm" iconEnd="arrow-right" href={`/truces/${truceId}/checkin/${side}`} aria-label={`Check in as ${name}`}>
+                    Check in
+                  </ButtonLink>
+                )
+              }
+            />
+          );
+        })}
+      </ul>
+      <ButtonLink size="sm" variant="ghost" iconEnd="arrow-right" href={`/t/${truceId}`} className="checkin-card__plan">
+        See the plan
+      </ButtonLink>
+    </section>
+  );
+}
+
+function Ledger({ pair, letters }: { pair: PairView; letters: Names }) {
   const entries = [...pair.ledger.entries].reverse();
   return (
     <section className="card ledger-card" aria-labelledby="ledger-title">
-      <SectionHeader
-        icon="scale"
-        id="ledger-title"
-        title="Fairness ledger"
-        info={
-          <InfoTip label="What the fairness ledger does">
-            {EXPLAIN.ledger}
-          </InfoTip>
-        }
-      />
-      <LedgerMeter names={pair.names} letters={letters} alphaA={pair.ledger.alphaA} tilt={pair.ledger.tilt} owed={pair.ledger.owed} />
+      <SectionHeader icon="scale" id="ledger-title" title="Fairness ledger" info={<InfoTip label="What the fairness ledger does">{EXPLAIN.ledger}</InfoTip>} />
+      <LedgerMeter members={pair.members} names={pair.names} letters={letters} alpha={pair.ledger.alpha} tilt={pair.ledger.tilt} owed={pair.ledger.owed} />
 
       <h3 className="history__title">
         <Icon name="calendar" size={16} />
@@ -154,24 +188,45 @@ function Ledger({ pair }: { pair: PairView }) {
       ) : (
         <ol className="history">
           {entries.map((e) => {
-            const gave = gaveGround(e.concession);
+            const gave = gaveGround(e.concession, pair.members);
+            const answered = pair.members.filter((s) => e.checkedIn[s]);
+            const body = (
+              <>
+                <span className="history__date">{dayMonth(e.at)}</span>
+                <span className="history__evening">{SLOTS.map((s) => e.evening[s]).filter(Boolean).join(' · ')}</span>
+                <span className="history__who small muted">
+                  {gave ? (
+                    <>
+                      <Avatar side={gave} letters={nameOf(letters, gave)} size="sm" />
+                      {nameOf(pair.names, gave)} gave ground
+                    </>
+                  ) : (
+                    'Met in the middle'
+                  )}
+                </span>
+                {e.earlier && (
+                  <span className="history__checkins">
+                    <Badge variant="outline">earlier (demo)</Badge>
+                  </span>
+                )}
+                {answered.length > 0 && (
+                  <span className="history__checkins small muted">
+                    <Icon name="check" size={16} />
+                    {answered.length === pair.members.length ? 'Everyone checked in' : `${listNames(answered.map((s) => nameOf(pair.names, s)))} checked in`}
+                  </span>
+                )}
+              </>
+            );
             return (
               <li key={e.truceId}>
-                <Link href={`/t/${e.truceId}`} className="history__row">
-                  <span className="history__date">{dayMonth(e.at)}</span>
-                  <span className="history__evening">{SLOTS.map((s) => e.evening[s]).filter(Boolean).join(' · ')}</span>
-                  <span className="history__who small muted">
-                    {gave ? (
-                      <>
-                        <Avatar side={gave} letters={letters[gave]} size="sm" />
-                        {pair.names[gave]} gave ground
-                      </>
-                    ) : (
-                      'Met in the middle'
-                    )}
-                  </span>
-                  <Icon name="chevron-right" size={16} className="history__go" />
-                </Link>
+                {e.earlier ? (
+                  <div className="history__row">{body}</div>
+                ) : (
+                  <Link href={`/t/${e.truceId}`} className="history__row history__row--link">
+                    {body}
+                    <Icon name="chevron-right" size={16} className="history__go" />
+                  </Link>
+                )}
               </li>
             );
           })}
@@ -184,15 +239,17 @@ function Ledger({ pair }: { pair: PairView }) {
 function PairSkeleton() {
   return (
     <div className="grid pair__grid" aria-hidden="true">
-      <div className="card tonight">
-        <Skeleton w="8rem" h="1.5rem" />
-        {[0, 1].map((i) => (
-          <div key={i} className="person person--skeleton">
-            <Skeleton w="2.75rem" h="2.75rem" round delay={i * 80} />
-            <Skeleton w="40%" h="1rem" delay={i * 80} />
-          </div>
-        ))}
-        <Skeleton w="11rem" h="2.75rem" round />
+      <div className="pair__main">
+        <div className="card tonight">
+          <Skeleton w="8rem" h="1.5rem" />
+          {[0, 1].map((i) => (
+            <div key={i} className="person person--skeleton">
+              <Skeleton w="2.75rem" h="2.75rem" round delay={i * 80} />
+              <Skeleton w="40%" h="1rem" delay={i * 80} />
+            </div>
+          ))}
+          <Skeleton w="11rem" h="2.75rem" round />
+        </div>
       </div>
       <div className="card ledger-card">
         <Skeleton w="9rem" h="1.5rem" />
@@ -208,23 +265,28 @@ export function PairHome({ pairId }: { pairId: string }) {
   const [poll, setPoll] = useState(true);
   const { pair, error, reload } = usePair(pairId, { poll });
 
+  const last = pair?.lastTruce ?? null;
   // A truce still going gets a link to watch it, rather than a second start.
-  const running = pair?.lastTruce?.status === 'running' ? pair.lastTruce.id : null;
+  const running = last?.status === 'running' ? last.id : null;
+  const checkinDue = Boolean(pair && last?.status === 'done' && pair.members.some((s) => !last.checkedIn[s]));
 
-  // Poll while someone is still picking or a truce runs; once both are in, Start finds any truce the other phone began.
-  const settled = Boolean(pair && pair.ready.a && pair.ready.b && !running);
+  // Poll while someone is still picking, a truce runs, or check-ins are due on other phones.
+  const settled = Boolean(pair && pair.members.every((s) => pair.ready[s]) && !running && !checkinDue);
   useEffect(() => setPoll(!settled), [settled]);
 
   if (error?.status === 404) return <NotFound what="pair" />;
+  const letters = pair ? monograms(pair.names, pair.members) : {};
 
   return (
     <Page
-      title={pair ? `${pair.names.a} & ${pair.names.b}` : 'Your truce'}
+      title={pair ? groupNames(pair.names, pair.members) : 'Your truce'}
       className="pair"
       context={
         pair && (
           <span className="pair__bar">
-            <Badge variant="outline" icon={pair.mode === 'couple' ? 'heart' : 'users'}>{modeLabel(pair.mode)}</Badge>
+            <Badge variant="outline" icon={pair.mode === 'couple' ? 'heart' : 'users'}>
+              {modeLabel(pair.mode)}
+            </Badge>
             <span className="small muted pair__place">
               <Icon name="pin" size={16} />
               {pair.location}
@@ -233,20 +295,17 @@ export function PairHome({ pairId }: { pairId: string }) {
         )
       }
     >
-      <h1 className="h2 pair__title">
-        {pair ? (
-          <PairNames names={pair.names} />
-        ) : (
-          <Skeleton w="12ch" h="1em" />
-        )}
-      </h1>
+      <h1 className="h2 pair__title">{pair ? <PairNames names={pair.names} members={pair.members} /> : <Skeleton w="12ch" h="1em" />}</h1>
 
-      {error && !pair && <ErrorNotice error={error} title="Couldn't load this pair" onRetry={reload} />}
+      {error && !pair && <ErrorNotice error={error} title="Couldn't load this truce" onRetry={reload} />}
 
       {pair ? (
         <div className="grid pair__grid">
-          <Tonight pair={pair} running={running} pass={pass} />
-          <Ledger pair={pair} />
+          <div className="pair__main">
+            {checkinDue && last && <CheckinCard pair={pair} letters={letters} truceId={last.id} checkedIn={last.checkedIn} />}
+            <Tonight pair={pair} letters={letters} running={running} pass={pass} />
+          </div>
+          <Ledger pair={pair} letters={letters} />
         </div>
       ) : (
         !error && <PairSkeleton />
@@ -254,3 +313,4 @@ export function PairHome({ pairId }: { pairId: string }) {
     </Page>
   );
 }
+

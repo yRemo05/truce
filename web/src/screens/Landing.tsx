@@ -2,16 +2,18 @@
  * Landing (/).
  *
  * Inventory, by priority:
- *   primary   — Try the demo: one tap to a live negotiation (POST /api/demo)
- *   secondary — Start your own (→ /new)
+ *   primary   — Couple demo: one tap to a live negotiation (POST /api/demo {kind})
+ *   secondary — Friends demo (three people), Start your own (→ /new)
  *   info      — what Truce does, in plain words; a real message from a truce; three steps
  *
  * Viewport budget: at 1440×900 the headline, the two buttons and the sample
  * message sit above the fold; the steps follow. At 390×844 the headline and
- * both buttons fit.
+ * all three buttons fit.
  * Grid: 12 columns — copy in 1–6, the sample message in 7–12. Phone: one column.
- * Icons: play (demo), plus (start), users / chat / check (the three steps).
+ * Icons: heart / users (the two demos), plus (start), users / exchange / check (the three steps).
  */
+import type { DemoInput } from '@contract';
+import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { api } from '@/api';
 import { Button, ButtonLink, ErrorNotice, Icon, Page, type IconName } from '@/ui';
@@ -21,15 +23,17 @@ import { MoveCard } from '@/truce/Moves';
 import { specimenCtx, specimenMove } from '@/truce/specimen';
 
 const STEPS: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'users', title: 'Each of you picks a few favourites', text: 'Films, restaurants and music you love. It takes a minute each.' },
-  { icon: 'exchange', title: 'Two AI agents negotiate', text: 'Each agent speaks for one of you, using Qloo’s taste data. A referee keeps it fair.' },
-  { icon: 'check-circle', title: 'You get one plan', text: 'A film, a restaurant and music you’ll both enjoy. Next time, whoever gave more ground gets more say.' },
+  { icon: 'users', title: 'Each of you picks a few favourites', text: 'Films, restaurants and music you love, and a word for your agent about tonight. A minute each.' },
+  { icon: 'exchange', title: 'Your agents scout and negotiate', text: 'One AI agent per person, using Qloo’s taste data. A referee keeps it fair.' },
+  { icon: 'check-circle', title: 'You get one plan', text: 'A film, a restaurant and music for everyone, with links to book. Next time, whoever gave more ground gets more say.' },
 ];
 
 export function Landing() {
   const [, navigate] = useLocation();
-  const demo = useAction(async () => {
-    const { truceId } = await api.demo();
+  const [kind, setKind] = useState<DemoInput['kind']>('couple');
+  const demo = useAction(async (k: DemoInput['kind']) => {
+    setKind(k);
+    const { truceId } = await api.demo(k);
     navigate(`/t/${truceId}`);
   });
 
@@ -41,18 +45,21 @@ export function Landing() {
             Plan tonight together
           </h1>
           <p className="lede landing__lede">
-            Two AI agents find an evening you&rsquo;ll both enjoy: a film, a restaurant and music. Each agent speaks for one of
-            you and negotiates until you both say yes.
+            AI agents find an evening you&rsquo;ll all enjoy: a film, a restaurant and music. Each agent speaks for one person and
+            negotiates until everyone says yes. For a couple or up to four friends.
           </p>
           <div className="landing__actions">
-            <Button variant="primary" icon="play" busy={demo.busy} onClick={() => void demo.run()}>
-              Try the demo
+            <Button variant="primary" icon="heart" busy={demo.busy && kind === 'couple'} disabled={demo.busy} onClick={() => void demo.run('couple')}>
+              Couple demo
             </Button>
-            <ButtonLink variant="outline" icon="plus" href="/new">
+            <Button variant="secondary" icon="users" busy={demo.busy && kind === 'friends'} disabled={demo.busy} onClick={() => void demo.run('friends')}>
+              Friends demo
+            </Button>
+            <ButtonLink variant="ghost" icon="plus" href="/new">
               Start your own
             </ButtonLink>
           </div>
-          <p className="small muted">The demo plays out a truce between Maya and Deniz. It takes about half a minute.</p>
+          <p className="small muted">Maya and Deniz in Manhattan, or three friends in Istanbul. Each demo takes about a minute.</p>
           {demo.error && <ErrorNotice error={demo.error} title="The demo didn't start" />}
         </div>
 

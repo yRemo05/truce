@@ -1,8 +1,9 @@
+import type { Side } from '@contract';
 import { memo, type ReactNode } from 'react';
 import { cx, Icon, InfoTip, Voice, type IconName } from '@/ui';
 import { capitalise, spelled } from '@/lib/format';
 import { EXPLAIN } from '@/lib/glossary';
-import { agentOf, possessive } from '@/lib/people';
+import { agentOf, listNames, nameOf, possessive } from '@/lib/people';
 import { isLastCall, SLOT_ICON, SLOT_LABEL, SLOTS, strikeReason, type EventOf, type FeedEntry } from '@/lib/truce';
 import { useTruceCtx } from './context';
 import { Evening, Scores } from './Evening';
@@ -34,7 +35,7 @@ function System({ icon, title, explain, strong, live, children }: SystemProps) {
 }
 
 function PolishNote({ event, live }: { event: EventOf<'polish'>; live: boolean }) {
-  const { names, items } = useTruceCtx();
+  const { names, items, members } = useTruceCtx();
   const swaps = SLOTS.filter((s) => event.from[s] !== event.to[s]);
   return (
     <System icon="check-circle" title="Small improvement" explain={EXPLAIN.polish} live={live}>
@@ -51,7 +52,7 @@ function PolishNote({ event, live }: { event: EventOf<'polish'>; live: boolean }
       </ul>
       {event.scores && (
         <p className="small num">
-          {names.a} {event.scores.from.a} → {event.scores.to.a} · {names.b} {event.scores.from.b} → {event.scores.to.b}
+          {members.map((s) => `${nameOf(names, s)} ${event.scores.from[s] ?? 0} → ${event.scores.to[s] ?? 0}`).join(' · ')}
         </p>
       )}
     </System>
@@ -59,17 +60,25 @@ function PolishNote({ event, live }: { event: EventOf<'polish'>; live: boolean }
 }
 
 export const RefereeNote = memo(function RefereeNote({ entry }: { entry: Exclude<FeedEntry, { kind: 'move' | 'declined' }> }) {
-  const { names, turns } = useTruceCtx();
+  const { names, members, turns } = useTruceCtx();
+  const name = (s: Side) => nameOf(names, s);
   const { live } = entry;
   switch (entry.kind) {
     case 'start': {
-      const { opener, alphaA } = entry.event;
-      const lean = Math.abs(alphaA - 0.5) < 0.005 ? null : alphaA > 0.5 ? 'a' : 'b';
+      const { order, alpha } = entry.event;
+      const even = 1 / Math.max(members.length, 1);
+      const lean = members.reduce<Side | null>((top, s) => {
+        const a = alpha[s] ?? even;
+        return a > even + 0.005 && (top === null || a > (alpha[top] ?? even)) ? s : top;
+      }, null);
+      const turnsLine = `${capitalise(spelled(entry.event.turns))} turns, then a last call.`;
       return (
         <System icon="gavel" title="The talks begin" live={live}>
           <p>
-            {agentOf(names[opener])} goes first. {capitalise(spelled(entry.event.turns))} turns, then a last call.
-            {lean && ` ${agentOf(names[lean])} has a bit more say tonight, from the ledger.`}
+            {order.length > 2
+              ? `The agents take turns: ${listNames(order.map(name))}. ${turnsLine}`
+              : `${agentOf(name(entry.event.opener))} goes first. ${turnsLine}`}
+            {lean && ` ${agentOf(name(lean))} has a bit more say tonight, from the ledger.`}
           </p>
         </System>
       );
@@ -77,27 +86,30 @@ export const RefereeNote = memo(function RefereeNote({ entry }: { entry: Exclude
     case 'rejected':
       return (
         <System icon="warning" title="Move replaced" explain={entry.event.code === 'below_minimum' ? EXPLAIN.minimum : EXPLAIN.referee} live={live}>
-          <p>{strikeReason(entry.event, names[entry.event.side])} The referee put in a valid move instead.</p>
+          <p>{strikeReason(entry.event, name(entry.event.side))} The referee put in a valid move instead.</p>
         </System>
       );
     case 'lastcall': {
-      const decider = entry.event.side;
-      const offerer = decider === 'a' ? 'b' : 'a';
+      const offer = entry.offer;
+      const pending = offer ? members.filter((s) => !offer.acceptedBy.includes(s)) : [entry.event.side];
       return (
         <System icon="hourglass" title="Last call" explain={EXPLAIN.lastCall} live={live}>
           <p>
-            No deal after {spelled(turns)} turns. {agentOf(names[decider])} can accept {possessive(names[offerer])} last offer or leave it to
-            the referee.
+            No deal after {spelled(turns)} turns.{' '}
+            {offer
+              ? pending.length === 1
+                ? `${agentOf(name(pending[0]!))} can take ${possessive(name(offer.side))} last offer or leave it to the referee.`
+                : `${listNames(pending.map(name))} each get one last chance at ${possessive(name(offer.side))} offer. One no, and the referee decides.`
+              : 'The referee will decide.'}
           </p>
         </System>
       );
     }
     case 'agreement': {
-      const accepter = entry.accepted?.side;
       const when = isLastCall(entry.event.turn, turns) ? 'on the last call' : `on turn ${entry.event.turn}`;
       return (
         <System icon="check-circle" title="Deal" strong live={live}>
-          <p>{accepter ? `${agentOf(names[accepter])} accepted ${when}. You chose this together.` : `Both agents agreed ${when}.`}</p>
+          <p>{`Everyone said yes ${when}. You chose this together.`}</p>
         </System>
       );
     }
