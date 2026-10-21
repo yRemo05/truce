@@ -9,9 +9,9 @@ import { bodyLimit } from 'hono/body-limit';
 import { streamSSE } from 'hono/streaming';
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
-import type { ApiError, PairView, SearchHit, SideInput, StreamEvent, TruceView } from '../contract';
+import type { ApiError, PairView, SearchHit, SearchResult, SideInput, StreamEvent, TruceView } from '../contract';
 import { QlooError, type QlooClient } from '../qloo/client';
-import { searchEntities } from '../qloo/queries';
+import { locate, searchEntities, type Locality } from '../qloo/queries';
 import { KIND_OF_SLOT, SLOTS, type Side } from '../truce/types';
 import type { Store } from './db';
 import { clientOf, createLimiter, type Action } from './limits';
@@ -90,18 +90,41 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
 
   app.get('/api/health', (c) => c.json({ ok: true }));
 
+  // Place names resolved to a Qloo locality, kept for the process's life. A
+  // place Qloo doesn't know is kept as null; a failed lookup is not kept.
+  const localities = new Map<string, Promise<Locality | null>>();
+  const localityOf = (place: string): Promise<Locality | null> => {
+    const key = place.toLocaleLowerCase();
+    let found = localities.get(key);
+    if (!found) {
+      if (localities.size >= 500) localities.clear();
+      found = locate(qloo, place).catch((err) => {
+        localities.delete(key);
+        console.warn(`locating "${place}" failed: ${(err as Error).message}`);
+        return null;
+      });
+      localities.set(key, found);
+    }
+    return found;
+  };
+
   app.get('/api/search', async (c) => {
     const blocked = limited(c, 'search');
     if (blocked) return blocked;
-    const { slot: s, q } = z
-      .object({ slot, q: z.string().trim().min(1).max(80) })
-      .parse({ slot: c.req.query('slot'), q: c.req.query('q') });
+    const { slot: s, q, near } = z
+      .object({ slot, q: z.string().trim().min(1).max(80), near: pairInput.shape.location.optional() })
+      .parse({ slot: c.req.query('slot'), q: c.req.query('q'), near: c.req.query('near') || undefined });
+    // A restaurant you love counts most when it is in the city you're going
+    // out in, so with `near` the search keeps to it. A place Qloo doesn't know
+    // falls back to a worldwide search, and `near: null` says so.
+    const area = s === 'restaurant' && near ? await localityOf(near) : null;
     // Qloo ranks by name match only; near-unknown titles ("Moonlight Soul",
     // popularity 0) would crowd out the one people mean, so they go last.
-    const found = await searchEntities(qloo, q, KIND_OF_SLOT[s], 8);
+    const found = await searchEntities(qloo, q, KIND_OF_SLOT[s], 8, area ?? undefined);
     const known = (e: (typeof found)[number]) => (e.popularity ?? 0) >= OBSCURE;
     const hits = [...found.filter(known), ...found.filter((e) => !known(e))].slice(0, 6);
-    return c.json({
+    return c.json<SearchResult>({
+      near: area?.name ?? null,
       hits: hits.map(
         (e): SearchHit => ({
           id: e.id,

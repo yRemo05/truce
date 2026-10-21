@@ -134,6 +134,27 @@ export const insightsResponseSchema = z.looseObject({
   results: z.looseObject({ entities: z.array(insightsEntitySchema) }),
 });
 
+/** The locality a `filter.location.query` resolved to, which Insights echoes under `query.localities.filter`. */
+export const localityResponseSchema = z.looseObject({
+  query: z
+    .looseObject({
+      localities: z
+        .looseObject({
+          filter: z
+            .array(
+              z.looseObject({
+                name: z.string(),
+                disambiguation: z.string().nullish(),
+                location: z.looseObject({ lat: z.number(), lon: z.number() }),
+              }),
+            )
+            .nullish(),
+        })
+        .nullish(),
+    })
+    .nullish(),
+});
+
 /** The two error bodies Qloo uses: `{errors:[…]}` on /v2/insights, `{error:{…}}` on /search. */
 const insightsErrorSchema = z.looseObject({
   errors: z.array(z.looseObject({ message: z.string() })).min(1),

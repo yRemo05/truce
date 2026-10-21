@@ -2,7 +2,8 @@
  * The HTTP contract between the Truce server and the web app. Types only:
  * the web app imports them with `import type`, so nothing here is bundled.
  *
- *   GET  /api/search?slot=film&q=moonlight     → { hits: SearchHit[] }
+ *   GET  /api/search?slot=film&q=moonlight     → SearchResult
+ *        [&near=Istanbul]                        (restaurants only: keep to places near there)
  *   POST /api/pairs            body PairInput   → { id }
  *   GET  /api/pairs/:id                         → PairView
  *   PATCH /api/pairs/:id       { location }     → PairView   (fix the place after "no restaurants found")
@@ -35,6 +36,16 @@ export interface SearchHit {
   year: number | null;
   /** 0–1 percentile of fame within its domain. */
   popularity: number | null;
+}
+
+export interface SearchResult {
+  hits: SearchHit[];
+  /**
+   * The place the hits were kept near, as Qloo names it ("Istanbul"). Null
+   * when the search ran worldwide: no `near`, not a restaurant, or a place
+   * Qloo doesn't know.
+   */
+  near: string | null;
 }
 
 export interface PairInput {
