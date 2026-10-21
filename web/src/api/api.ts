@@ -2,7 +2,7 @@ import type {
   ApiError as ApiErrorBody,
   PairInput,
   PairView,
-  SearchHit,
+  SearchResult,
   Side,
   SideInput,
   Slot,
@@ -52,7 +52,8 @@ export interface StreamHandlers {
 
 export interface Api {
   readonly kind: 'server' | 'mock';
-  search(slot: Slot, q: string, signal?: AbortSignal): Promise<SearchHit[]>;
+  /** `near` keeps restaurant hits near that place; other slots ignore it. */
+  search(slot: Slot, q: string, near: string | null, signal?: AbortSignal): Promise<SearchResult>;
   createPair(input: PairInput): Promise<{ id: string }>;
   getPair(id: string): Promise<PairView>;
   setLocation(pairId: string, location: string): Promise<PairView>;

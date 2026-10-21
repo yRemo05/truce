@@ -107,6 +107,7 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
             picks={picks[slot]}
             onAdd={(p) => setPicks((all) => ({ ...all, [slot]: [...all[slot], p] }))}
             onRemove={(id) => setPicks((all) => ({ ...all, [slot]: all[slot].filter((p) => p.id !== id) }))}
+            near={slot === 'restaurant' ? pair?.location : null}
           />
         ))}
       </div>

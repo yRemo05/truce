@@ -1,4 +1,4 @@
-import type { SearchHit, Seed, Slot } from '@contract';
+import type { SearchHit, SearchResult, Seed, Slot } from '@contract';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { api, ApiError } from '@/api';
 import { cx, Icon, Skeleton, Spinner, TextField, Thumb } from '@/ui';
@@ -12,12 +12,12 @@ export interface Picked extends Seed {
   disambiguation: string | null;
 }
 
-const cache = new Map<string, SearchHit[]>();
+const cache = new Map<string, SearchResult>();
 
 type Search =
   | { state: 'idle' }
   | { state: 'loading' }
-  | { state: 'done'; hits: SearchHit[] }
+  | { state: 'done'; hits: SearchHit[]; near: string | null }
   | { state: 'error'; message: string };
 
 const COPY: Record<Slot, { title: string; noun: string; hint: string; examples: string[] }> = {
@@ -46,10 +46,12 @@ interface SeedPickerProps {
   picks: Picked[];
   onAdd: (pick: Picked) => void;
   onRemove: (id: string) => void;
+  /** Restaurants only: the pair's city, so the search keeps to places there. */
+  near?: string | null;
 }
 
 /** Search Qloo for one slot, confirm a match, keep it as a pick. A combobox with a listbox of real entities. */
-export function SeedPicker({ slot, picks, onAdd, onRemove }: SeedPickerProps) {
+export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPickerProps) {
   const copy = COPY[slot];
   const uid = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -68,20 +70,20 @@ export function SeedPicker({ slot, picks, onAdd, onRemove }: SeedPickerProps) {
       setSearch({ state: 'idle' });
       return;
     }
-    const key = `${slot}:${settled.toLocaleLowerCase()}`;
+    const key = `${slot}:${near ?? ''}:${settled.toLocaleLowerCase()}`;
     const hit = cache.get(key);
     if (hit) {
-      setSearch({ state: 'done', hits: hit });
+      setSearch({ state: 'done', ...hit });
       setActive(0);
       return;
     }
     const controller = new AbortController();
     setSearch({ state: 'loading' });
     api
-      .search(slot, settled, controller.signal)
-      .then((hits) => {
-        cache.set(key, hits);
-        setSearch({ state: 'done', hits });
+      .search(slot, settled, near, controller.signal)
+      .then((result) => {
+        cache.set(key, result);
+        setSearch({ state: 'done', ...result });
         setActive(0);
       })
       .catch((err: unknown) => {
@@ -93,7 +95,7 @@ export function SeedPicker({ slot, picks, onAdd, onRemove }: SeedPickerProps) {
         });
       });
     return () => controller.abort();
-  }, [settled, slot]);
+  }, [settled, slot, near]);
 
   const typing = query.trim().length >= 2 && query.trim() !== settled;
   const hits = search.state === 'done' ? search.hits : [];
@@ -153,7 +155,7 @@ export function SeedPicker({ slot, picks, onAdd, onRemove }: SeedPickerProps) {
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={showList && hits[active] ? `${listId}-${active}` : undefined}
-          placeholder={full ? 'That’s three, the most you can add' : `Search for ${copy.noun}`}
+          placeholder={full ? 'That’s three, the most you can add' : `Search for ${copy.noun}${near ? ` in ${near}` : ''}`}
           disabled={full}
           value={query}
           autoComplete="off"
@@ -227,7 +229,9 @@ export function SeedPicker({ slot, picks, onAdd, onRemove }: SeedPickerProps) {
           {search.state === 'done' && hits.length === 0 && !typing && (
             <p className="combo__empty small">
               <Icon name="info" size={16} />
-              No match for &ldquo;{settled}&rdquo;. Try the original title, or fewer words.
+              {search.near
+                ? `No match for “${settled}” near ${search.near}. Try fewer words.`
+                : `No match for “${settled}”. Try the original title, or fewer words.`}
             </p>
           )}
           {search.state === 'error' && (
@@ -236,7 +240,15 @@ export function SeedPicker({ slot, picks, onAdd, onRemove }: SeedPickerProps) {
               {search.message}
             </p>
           )}
-          {search.state === 'done' && hits.length > 0 && <p className="combo__credit">Results from Qloo</p>}
+          {search.state === 'done' && hits.length > 0 && (
+            <p className="combo__credit">
+              {search.near
+                ? `Near ${search.near}, from Qloo`
+                : near
+                  ? `Qloo doesn’t know “${near}”, so these are from anywhere`
+                  : 'Results from Qloo'}
+            </p>
+          )}
         </div>
       </div>
 

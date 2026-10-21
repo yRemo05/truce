@@ -25,10 +25,9 @@ const json = (method: string, body?: unknown): RequestInit => ({
 export const httpApi: Api = {
   kind: 'server',
 
-  async search(slot, q, signal) {
-    const params = new URLSearchParams({ slot, q });
-    const { hits } = await request<{ hits: Awaited<ReturnType<Api['search']>> }>(`/api/search?${params}`, { signal });
-    return hits;
+  search(slot, q, near, signal) {
+    const params = new URLSearchParams({ slot, q, ...(near ? { near } : {}) });
+    return request(`/api/search?${params}`, { signal });
   },
 
   createPair: (input) => request('/api/pairs', json('POST', input)),

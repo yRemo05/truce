@@ -226,11 +226,13 @@ const DEMO = {
 export const mockApi: Api = {
   kind: 'mock',
 
-  async search(slot, q, signal) {
+  async search(slot, q, near, signal) {
     await wait(220 + Math.random() * 260, signal);
     const query = fold(q.trim());
-    if (!query) return [];
-    return CATALOG[slot]
+    // The catalogue has no places to filter by; it only echoes the area.
+    const area = slot === 'restaurant' ? near : null;
+    if (!query) return { hits: [], near: area };
+    const hits = CATALOG[slot]
       .filter((e) => fold(e.name).includes(query))
       .slice(0, 6)
       .map(
@@ -244,6 +246,7 @@ export const mockApi: Api = {
           popularity: e.popularity,
         }),
       );
+    return { hits, near: area };
   },
 
   async createPair(input) {
