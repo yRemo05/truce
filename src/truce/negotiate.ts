@@ -165,7 +165,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 export type StrikeCode = 'nothing_to_accept' | 'below_minimum' | 'unknown_item' | 'no_counter' | 'agent_failed';
 
 type Checked =
-  | { ok: true; action: 'accept' | 'counter'; bundle: Bundle }
+  | { ok: true; action: 'accept' | 'counter'; bundle: Bundle; message?: string }
   | { ok: true; action: 'decline' }
   | { ok: false; code: StrikeCode; reason: string };
 
@@ -207,8 +207,8 @@ export function checkMove(view: AgentView, raw: RawMove): Checked {
       continue;
     }
     // Offering exactly what is on the table is accepting it.
-    if (view.onTable && sameBundle(bundle, view.onTable.bundle)) return { ok: true, action: 'accept', bundle };
-    return { ok: true, action: 'counter', bundle };
+    if (view.onTable && sameBundle(bundle, view.onTable.bundle)) return { ok: true, action: 'accept', bundle, message: c.message };
+    return { ok: true, action: 'counter', bundle, message: c.message };
   }
   return { ok: false, ...(problems[0] ?? { code: 'no_counter', reason: 'no counter offered' }) };
 }
@@ -311,7 +311,8 @@ export async function negotiate(
       emit({ type: 'rejected', turn, side, code: 'agent_failed', reason: `agent failed: ${(err as Error).message}` });
     }
     let checked: Checked = raw ? checkMove(view, raw) : { ok: false, code: 'agent_failed', reason: 'no move' };
-    let message = raw?.message ?? '';
+    // The words that go with the counter actually played, when the agent wrote them per counter.
+    let message = (checked.ok && 'message' in checked && checked.message?.trim()) || raw?.message || '';
     if (!checked.ok) {
       if (raw) emit({ type: 'rejected', turn, side, code: checked.code, reason: checked.reason });
       const backup = await fallback.move(view);

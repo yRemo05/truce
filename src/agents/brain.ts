@@ -91,10 +91,14 @@ export interface AgentView {
   lastCall: boolean;
 }
 
-/** An agent's answer, in item codes. Counters are in preference order. */
+/**
+ * An agent's answer, in item codes. Counters are in preference order; each
+ * may carry its own message, so whichever one the referee plays comes with
+ * words about that evening. `message` is for an accept or a decline.
+ */
 export interface RawMove {
   action: 'accept' | 'counter';
-  counters: { film: string; restaurant: string; music: string }[];
+  counters: { film: string; restaurant: string; music: string; message?: string }[];
   message: string;
 }
 
