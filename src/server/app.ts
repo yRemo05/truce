@@ -95,6 +95,8 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     await next();
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('Referrer-Policy', 'same-origin');
+    // The page is always revalidated, so a deploy reaches open tabs on their next load.
+    if (c.res.headers.get('Content-Type')?.startsWith('text/html')) c.header('Cache-Control', 'no-cache');
   });
 
   app.onError((err, c) => {
@@ -356,10 +358,18 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
 
   app.all('/api/*', (c) => fail(c, 404, 'not_found', 'No such endpoint.'));
 
-  // The web app: static files, and index.html for client-side routes.
+  // The web app: static files, and index.html for client-side routes. Built
+  // assets carry a content hash, so they are cached for good; the page itself
+  // is always revalidated, and a missing asset is a 404 rather than the page
+  // (after a redeploy, a stale tab must not get HTML where it asked for code).
   if (existsSync(webDir)) {
     const index = readFileSync(`${webDir}/index.html`, 'utf8');
+    app.use('/assets/*', async (c, next) => {
+      await next();
+      if (c.res.ok) c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    });
     app.use('/*', serveStatic({ root: webDir }));
+    app.get('/assets/*', (c) => c.text('Not found', 404));
     app.get('*', (c) => c.html(index));
   }
 
