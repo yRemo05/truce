@@ -5,12 +5,15 @@
  *   GET  /api/search?slot=film&q=moonlight     → { hits: SearchHit[] }
  *   POST /api/pairs            body PairInput   → { id }
  *   GET  /api/pairs/:id                         → PairView
+ *   PATCH /api/pairs/:id       { location }     → PairView   (fix the place after "no restaurants found")
  *   PUT  /api/pairs/:id/sides/:side  SideInput  → { ready: Record<Side, boolean> }
  *   POST /api/pairs/:id/truces                  → { truceId }   (409 until both sides are ready)
  *   POST /api/demo                              → { pairId, truceId }   (a ready-made pair, truce started)
  *   GET  /api/truces/:id                        → TruceView
- *   GET  /api/truces/:id/stream                 → server-sent events, one StreamEvent per `data:` line,
- *                                                 replayed from the start, closed after `ledger` or `error`
+ *   GET  /api/truces/:id/stream[?from=n]        → server-sent events, one StreamEvent per `data:` line,
+ *                                                 each with `id:` = its index in the truce's log. Replays
+ *                                                 from `from` (or from Last-Event-ID + 1, or from 0) and
+ *                                                 closes after `ledger` or `error`.
  *
  * Errors are `{ error: { code, message } }` with a 4xx/5xx status;
  * `code: 'rate_limited'` comes with a `retryAfterSeconds`.
@@ -20,7 +23,7 @@ import type { Mode } from './agents/brain';
 import type { Side, Slot } from './truce/types';
 
 export type { Mode, Side, Slot, TruceEvent };
-export type { TruceResult, SlotEvidence } from './truce/negotiate';
+export type { TruceResult, SlotEvidence, StrikeCode } from './truce/negotiate';
 
 export interface SearchHit {
   id: string;
@@ -66,6 +69,8 @@ export interface LedgerView {
   balance: number;
   /** A's bargaining weight in the next truce (B's is 1 − alphaA). */
   alphaA: number;
+  /** The same pull on a −1…1 scale: −1 is the most the ledger can favour B, 1 the most for A. */
+  tilt: number;
   owed: Side | null;
   entries: LedgerEntry[];
 }
@@ -78,6 +83,7 @@ export interface PairView {
   ready: Record<Side, boolean>;
   ledger: LedgerView;
   lastTruceId: string | null;
+  lastTruce: { id: string; status: TruceView['status'] } | null;
 }
 
 /** One pool item as the audience sees it: both people's scores and what drives them. */
@@ -103,10 +109,16 @@ export type StreamEvent =
   | TruceEvent
   | {
       type: 'ledger';
-      before: { balance: number; alphaA: number };
-      after: { balance: number; alphaA: number; owed: Side | null };
+      before: { balance: number; alphaA: number; tilt: number };
+      after: { balance: number; alphaA: number; tilt: number; owed: Side | null };
     }
-  | { type: 'error'; message: string };
+  | { type: 'error'; code: StreamErrorCode; message: string; retryable: boolean };
+
+/**
+ * Why a truce stopped. `no_restaurants`: fix the pair's location (PATCH) and
+ * start again. `no_options`: add favourites. `interrupted` / `internal`: try again.
+ */
+export type StreamErrorCode = 'no_restaurants' | 'no_options' | 'interrupted' | 'internal';
 
 export interface TruceView {
   id: string;
@@ -115,6 +127,8 @@ export interface TruceView {
   mode: Mode;
   names: Record<Side, string>;
   location: string;
+  createdAt: string;
+  endedAt: string | null;
   events: StreamEvent[];
 }
 

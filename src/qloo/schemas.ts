@@ -204,11 +204,22 @@ function factsOf(kind: EntityKind, p: Properties): Record<string, string> {
   return out;
 }
 
+/** A restaurant's cuisine as a short label ("Italian"), from its genre tags. */
+const CUISINE_TAG = 'urn:tag:genre:place:restaurant:';
+
 function baseEntity(
   raw: z.infer<typeof searchEntitySchema> | z.infer<typeof insightsEntitySchema>,
   kind: EntityKind,
 ): Entity {
   const p = raw.properties;
+  const facts = factsOf(kind, p);
+  if (kind === 'place') {
+    // Prefer a cuisine ("Korean") over a format ("Fine dining restaurant", "Wine bar").
+    const tags = (raw.tags ?? []).filter((t) => (t.id ?? t.tag_id ?? '').startsWith(CUISINE_TAG) && t.name);
+    const isFormat = (name: string) => /restaurant|\bbar\b|takeout|cafe|shop/i.test(name);
+    const cuisine = tags.find((t) => !isFormat(t.name!)) ?? tags[0];
+    if (cuisine?.name) facts.cuisineType = cuisine.name;
+  }
   return {
     id: raw.entity_id,
     name: raw.name,
@@ -222,7 +233,7 @@ function baseEntity(
       const id = t.id ?? t.tag_id;
       return id && t.name ? [{ id, name: t.name, type: t.type ?? '' }] : [];
     }),
-    facts: factsOf(kind, p),
+    facts,
     location: raw.location ? { lat: raw.location.lat, lon: raw.location.lon } : null,
     address: p?.address ?? null,
     priceLevel: p?.price_level ?? null,

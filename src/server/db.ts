@@ -69,6 +69,7 @@ export interface TruceRow {
   result: TruceResult | null;
   concession: Record<Side, number> | null;
   createdAt: string;
+  finishedAt: string | null;
 }
 
 export type Store = ReturnType<typeof openStore>;
@@ -83,6 +84,7 @@ export function openStore(dataDir: string) {
   const q = {
     insertPair: db.prepare('insert into pairs (id, mode, name_a, name_b, location) values (?, ?, ?, ?, ?)'),
     pair: db.prepare('select * from pairs where id = ?'),
+    setLocation: db.prepare('update pairs set location = ? where id = ?'),
     upsertSide: db.prepare(
       `insert into sides (pair_id, side, input) values (?, ?, ?)
        on conflict (pair_id, side) do update set input = excluded.input,
@@ -125,6 +127,7 @@ export function openStore(dataDir: string) {
     result: r.result ? JSON.parse(r.result) : null,
     concession: r.concession_a === null ? null : { a: r.concession_a, b: r.concession_b },
     createdAt: r.created_at,
+    finishedAt: r.finished_at,
   });
 
   // A truce still "running" when the process starts was cut off by a restart.
@@ -138,6 +141,9 @@ export function openStore(dataDir: string) {
     pair: (id: string): PairRow | null => {
       const r = q.pair.get(id);
       return r ? toPair(r) : null;
+    },
+    setLocation(pairId: string, location: string) {
+      q.setLocation.run(location, pairId);
     },
     saveSide(pairId: string, side: Side, input: SideInput) {
       q.upsertSide.run(pairId, side, JSON.stringify(input));

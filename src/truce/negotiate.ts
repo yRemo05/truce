@@ -72,12 +72,12 @@ export type TruceEvent =
       evidence: SlotEvidence[];
       brain: string;
     }
-  | { type: 'rejected'; turn: number; side: Side; reason: string }
+  | { type: 'rejected'; turn: number; side: Side; code: StrikeCode; reason: string }
   /** The last call was declined: the referee will rule. */
   | { type: 'declined'; turn: number; side: Side; message: string; brain: string }
   | { type: 'agreement'; turn: number; bundle: Bundle }
-  | { type: 'ruling'; bundle: Bundle }
-  | { type: 'polish'; from: Bundle; to: Bundle }
+  | { type: 'ruling'; bundle: Bundle; scores: Record<Side, number> }
+  | { type: 'polish'; from: Bundle; to: Bundle; scores: { from: Record<Side, number>; to: Record<Side, number> } }
   | { type: 'done'; result: TruceResult };
 
 export interface TruceResult {
@@ -127,10 +127,13 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+/** Why the referee struck a move; `reason` is the same in words, for logs. */
+export type StrikeCode = 'nothing_to_accept' | 'below_minimum' | 'unknown_item' | 'no_counter' | 'agent_failed';
+
 type Checked =
   | { ok: true; action: 'accept' | 'counter'; bundle: Bundle }
   | { ok: true; action: 'decline' }
-  | { ok: false; reason: string };
+  | { ok: false; code: StrikeCode; reason: string };
 
 /** Referee check of one raw move against what the mover may do this turn. */
 export function checkMove(view: AgentView, raw: RawMove): Checked {
@@ -142,15 +145,15 @@ export function checkMove(view: AgentView, raw: RawMove): Checked {
   }
   const tolerance = 1e-6;
   if (raw.action === 'accept') {
-    if (!view.onTable) return { ok: false, reason: 'accepted with nothing on the table' };
+    if (!view.onTable) return { ok: false, code: 'nothing_to_accept', reason: 'accepted with nothing on the table' };
     if (scoreOf(view, view.onTable.bundle) < view.minimum - tolerance) {
-      return { ok: false, reason: `accepted below ${view.nickname}'s minimum` };
+      return { ok: false, code: 'below_minimum', reason: `accepted below ${view.nickname}'s minimum` };
     }
     return { ok: true, action: 'accept', bundle: view.onTable.bundle };
   }
   // On the last call there is nothing left to counter with: anything but yes is no.
   if (view.lastCall) return { ok: true, action: 'decline' };
-  const problems: string[] = [];
+  const problems: { code: StrikeCode; reason: string }[] = [];
   for (const c of raw.counters) {
     const picked = { film: c.film, restaurant: c.restaurant, music: c.music };
     const bundle = {} as Bundle;
@@ -159,21 +162,21 @@ export function checkMove(view: AgentView, raw: RawMove): Checked {
       const item = byCode.get(String(picked[s]).trim().toUpperCase());
       if (!item || item.slot !== s) {
         valid = false;
-        problems.push(`unknown ${s} "${picked[s]}"`);
+        problems.push({ code: 'unknown_item', reason: `unknown ${s} "${picked[s]}"` });
         break;
       }
       bundle[s] = item.id;
     }
     if (!valid) continue;
     if (scoreOf(view, bundle) < view.minimum - tolerance) {
-      problems.push(`offer below ${view.nickname}'s minimum`);
+      problems.push({ code: 'below_minimum', reason: `offer below ${view.nickname}'s minimum` });
       continue;
     }
     // Offering exactly what is on the table is accepting it.
     if (view.onTable && sameBundle(bundle, view.onTable.bundle)) return { ok: true, action: 'accept', bundle };
     return { ok: true, action: 'counter', bundle };
   }
-  return { ok: false, reason: problems[0] ?? 'no counter offered' };
+  return { ok: false, ...(problems[0] ?? { code: 'no_counter', reason: 'no counter offered' }) };
 }
 
 export async function negotiate(
@@ -196,6 +199,10 @@ export async function negotiate(
   const floor: Record<Side, number> = { a: floorOf(fair.a), b: floorOf(fair.b) };
   const menus: Record<Side, MenuItem[]> = { a: menuFor(pool, 'a', setup.seedNames), b: menuFor(pool, 'b', setup.seedNames) };
   const utilityOf = (side: Side, bundle: Bundle) => scoreOf({ menu: menus[side], weights: setup.weights[side] }, bundle) / 100;
+  const scoresOf = (bundle: Bundle): Record<Side, number> => ({
+    a: Math.round(utilityOf('a', bundle) * 100),
+    b: Math.round(utilityOf('b', bundle) * 100),
+  });
   const seedNames = (side: Side) =>
     Object.fromEntries(SLOTS.map((s) => [s, setup.seeds[side][s].map((id) => setup.seedNames[id] ?? id)])) as Record<Slot, string[]>;
 
@@ -238,12 +245,12 @@ export async function negotiate(
     try {
       raw = await withTimeout(brains[side].move(view), timeout);
     } catch (err) {
-      emit({ type: 'rejected', turn, side, reason: `agent failed: ${(err as Error).message}` });
+      emit({ type: 'rejected', turn, side, code: 'agent_failed', reason: `agent failed: ${(err as Error).message}` });
     }
-    let checked: Checked = raw ? checkMove(view, raw) : { ok: false, reason: 'no move' };
+    let checked: Checked = raw ? checkMove(view, raw) : { ok: false, code: 'agent_failed', reason: 'no move' };
     let message = raw?.message ?? '';
     if (!checked.ok) {
-      if (raw) emit({ type: 'rejected', turn, side, reason: checked.reason });
+      if (raw) emit({ type: 'rejected', turn, side, code: checked.code, reason: checked.reason });
       const backup = await fallback.move(view);
       checked = checkMove(view, backup);
       message = backup.message;
@@ -259,7 +266,7 @@ export async function negotiate(
     emit({
       type: 'move',
       ...move,
-      scores: { a: Math.round(utilityOf('a', bundle) * 100), b: Math.round(utilityOf('b', bundle) * 100) },
+      scores: scoresOf(bundle),
       evidence: SLOTS.map((slot) => ({
         slot,
         itemId: bundle[slot],
@@ -293,13 +300,13 @@ export async function negotiate(
   }
 
   let bundle = deal.agreed?.bundle ?? fair.bundle;
-  if (!deal.agreed) emit({ type: 'ruling', bundle });
+  if (!deal.agreed) emit({ type: 'ruling', bundle, scores: scoresOf(bundle) });
 
   const current = scored.find((x) => sameBundle(x.bundle, bundle))!;
   const better = betterForBoth(scored, current);
   const polished = better !== null && better.a + better.b - (current.a + current.b) > 0.01;
   if (polished) {
-    emit({ type: 'polish', from: bundle, to: better!.bundle });
+    emit({ type: 'polish', from: bundle, to: better!.bundle, scores: { from: scoresOf(bundle), to: scoresOf(better!.bundle) } });
     bundle = better!.bundle;
   }
 

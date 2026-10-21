@@ -11,9 +11,9 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { randomBytes } from 'node:crypto';
 import { RuleBrain, type AgentBrain } from '../agents/brain';
 import { ClaudeBrain, type UsageReport } from '../agents/claude-brain';
-import type { CardItem, LedgerView, SideInput, StreamEvent } from '../contract';
+import type { CardItem, LedgerView, SideInput, StreamErrorCode, StreamEvent } from '../contract';
 import type { QlooClient } from '../qloo/client';
-import { alphaFromBalance, ledgerBalance, owed } from '../truce/ledger';
+import { MAX_TILT, alphaFromBalance, ledgerBalance, owed } from '../truce/ledger';
 import { menuFor, negotiate } from '../truce/negotiate';
 import { buildPool, type Pool } from '../truce/pool';
 import { SLOTS, type Side, type Slot } from '../truce/types';
@@ -28,9 +28,11 @@ const PRICE = { input: 0.1e-6, cacheRead: 0.01e-6, cacheWrite: 0.125e-6, output:
 export function ledgerOf(truces: readonly TruceRow[]): LedgerView {
   const done = truces.filter((t) => t.status === 'done' && t.concession && t.result);
   const balance = ledgerBalance(done.map((t) => ({ concessionA: t.concession!.a, concessionB: t.concession!.b })));
+  const alphaA = alphaFromBalance(balance);
   return {
     balance,
-    alphaA: alphaFromBalance(balance),
+    alphaA,
+    tilt: (alphaA - 0.5) / MAX_TILT,
     owed: owed(balance),
     entries: done.map((t) => ({
       truceId: t.id,
@@ -123,11 +125,17 @@ export function createRunner(deps: RunnerDeps) {
       });
       const empty = SLOTS.filter((s) => pool.items[s].length === 0);
       if (empty.length) {
-        throw new UserFacingError(
-          empty.includes('restaurant')
-            ? `Qloo found no restaurants for "${pair.location}". Try a city or neighbourhood name like "Manhattan" or "Istanbul".`
-            : `Qloo found no ${empty.join(' or ')} options for these tastes. Try adding another favourite.`,
-        );
+        throw empty.includes('restaurant')
+          ? new UserFacingError(
+              `Qloo found no restaurants for "${pair.location}". Try a city or neighbourhood name like "Manhattan" or "Istanbul".`,
+              422,
+              'no_restaurants',
+            )
+          : new UserFacingError(
+              `Qloo found no ${empty.join(' or ')} options for these tastes. Try adding another favourite.`,
+              422,
+              'no_options',
+            );
       }
       push({ type: 'pool', items: cardsOf(pool, seedNames), indifferent: pool.indifferent });
       push({ type: 'status', phase: 'negotiating', brain });
@@ -153,15 +161,20 @@ export function createRunner(deps: RunnerDeps) {
       const after = ledgerOf(store.trucesOf(pairId));
       push({
         type: 'ledger',
-        before: { balance: before.balance, alphaA: before.alphaA },
-        after: { balance: after.balance, alphaA: after.alphaA, owed: after.owed },
+        before: { balance: before.balance, alphaA: before.alphaA, tilt: before.tilt },
+        after: { balance: after.balance, alphaA: after.alphaA, tilt: after.tilt, owed: after.owed },
       });
     } catch (err) {
-      const message =
-        err instanceof UserFacingError ? err.message : 'Something went wrong while planning this evening. Please try again.';
+      // A known cause the person can fix (place, favourites); anything else is ours and worth a retry.
+      const fixable = err instanceof UserFacingError && (err.code === 'no_restaurants' || err.code === 'no_options') ? err : null;
       log(`truce ${truceId} failed: ${(err as Error).stack ?? err}`);
       store.failTruce(truceId);
-      push({ type: 'error', message });
+      push({
+        type: 'error',
+        code: fixable ? (fixable.code as StreamErrorCode) : 'internal',
+        message: fixable ? fixable.message : 'Something went wrong while planning this evening. Please try again.',
+        retryable: !fixable,
+      });
     } finally {
       const sum = (k: keyof UsageReport) => usage.reduce((t, u) => t + u[k], 0);
       const cost =
@@ -185,7 +198,7 @@ export function createRunner(deps: RunnerDeps) {
       const running = store.runningTruceOf(pairId);
       if (running) return running;
       const sides = store.sides(pairId);
-      if (!sides.a || !sides.b) throw new UserFacingError('Both people need to finish their picks first.', 409);
+      if (!sides.a || !sides.b) throw new UserFacingError('Both people need to finish their picks first.', 409, 'not_ready');
       const past = store.trucesOf(pairId);
       const alphaA = ledgerOf(past).alphaA;
       const opener: Side = past.filter((t) => t.status === 'done').length % 2 === 0 ? 'a' : 'b';
@@ -216,6 +229,7 @@ export class UserFacingError extends Error {
   constructor(
     message: string,
     readonly status = 422,
+    readonly code: StreamErrorCode | 'not_ready' = 'internal',
   ) {
     super(message);
   }

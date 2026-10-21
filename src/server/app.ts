@@ -79,7 +79,7 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
   });
 
   app.onError((err, c) => {
-    if (err instanceof UserFacingError) return fail(c, err.status, 'not_ready', err.message);
+    if (err instanceof UserFacingError) return fail(c, err.status, err.code, err.message);
     if (err instanceof z.ZodError) return fail(c, 400, 'invalid', err.issues[0]?.message ?? 'Invalid request.');
     if (err instanceof QlooError && (err.status === 429 || err.retryable)) {
       return fail(c, 503, 'qloo_busy', 'Qloo is busy right now. Try again in a moment.');
@@ -125,20 +125,37 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
     return c.json({ id }, 201);
   });
 
-  app.get('/api/pairs/:id', (c) => {
-    const pair = store.pair(c.req.param('id'));
-    if (!pair) return fail(c, 404, 'not_found', 'This truce link does not exist.');
+  const pairView = (pairId: string): PairView | null => {
+    const pair = store.pair(pairId);
+    if (!pair) return null;
     const sides = store.sides(pair.id);
     const truces = store.trucesOf(pair.id);
-    return c.json<PairView>({
+    const last = truces.at(-1);
+    return {
       id: pair.id,
       mode: pair.mode,
       names: pair.names,
       location: pair.location,
       ready: { a: Boolean(sides.a), b: Boolean(sides.b) },
       ledger: ledgerOf(truces),
-      lastTruceId: truces.at(-1)?.id ?? null,
-    });
+      lastTruceId: last?.id ?? null,
+      lastTruce: last ? { id: last.id, status: last.status } : null,
+    };
+  };
+
+  app.get('/api/pairs/:id', (c) => {
+    const view = pairView(c.req.param('id'));
+    return view ? c.json<PairView>(view) : fail(c, 404, 'not_found', 'This truce link does not exist.');
+  });
+
+  app.patch('/api/pairs/:id', async (c) => {
+    const blocked = limited(c, 'side');
+    if (blocked) return blocked;
+    const pair = store.pair(c.req.param('id'));
+    if (!pair) return fail(c, 404, 'not_found', 'This truce link does not exist.');
+    const { location } = z.object({ location: pairInput.shape.location }).parse(await c.req.json());
+    store.setLocation(pair.id, location);
+    return c.json<PairView>(pairView(pair.id)!);
   });
 
   app.put('/api/pairs/:id/sides/:side', async (c) => {
@@ -161,22 +178,34 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
     return c.json({ truceId: runner.start(pair.id) }, 201);
   });
 
+  // The demo's seeds are resolved once (at boot, then kept), so "Try the demo" starts at once.
+  let demoSeeds: Promise<Record<Side, SideInput['seeds']>> | null = null;
+  const resolveDemoSeeds = () =>
+    (demoSeeds ??= (async () => {
+      const out = {} as Record<Side, SideInput['seeds']>;
+      for (const side of ['a', 'b'] as const) {
+        out[side] = { film: [], restaurant: [], music: [] };
+        for (const sl of SLOTS) {
+          for (const title of DEMO.loves[side][sl]) {
+            const [top] = await searchEntities(qloo, title, KIND_OF_SLOT[sl], 1);
+            if (top) out[side][sl].push({ id: top.id, name: top.name });
+          }
+        }
+      }
+      return out;
+    })().catch((err) => {
+      demoSeeds = null; // try again on the next request
+      throw err;
+    }));
+  void resolveDemoSeeds().catch((err) => console.warn(`demo seeds not ready: ${(err as Error).message}`));
+
   app.post('/api/demo', async (c) => {
     const blocked = limited(c, 'demo');
     if (blocked) return blocked;
+    const seeds = await resolveDemoSeeds();
     const pairId = newId();
     store.createPair(pairId, DEMO.pair);
-    for (const s of ['a', 'b'] as const) {
-      const seeds = {} as SideInput['seeds'];
-      for (const sl of SLOTS) {
-        seeds[sl] = [];
-        for (const title of DEMO.loves[s][sl]) {
-          const [top] = await searchEntities(qloo, title, KIND_OF_SLOT[sl], 1);
-          if (top) seeds[sl].push({ id: top.id, name: top.name });
-        }
-      }
-      store.saveSide(pairId, s, { seeds, weights: DEMO.weights[s] });
-    }
+    for (const side of ['a', 'b'] as const) store.saveSide(pairId, side, { seeds: seeds[side], weights: DEMO.weights[side] });
     return c.json({ pairId, truceId: runner.start(pairId) }, 201);
   });
 
@@ -191,6 +220,8 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
       mode: pair.mode,
       names: pair.names,
       location: pair.location,
+      createdAt: truce.createdAt,
+      endedAt: truce.finishedAt,
       events: truce.events,
     });
   });
@@ -199,8 +230,18 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
     const id = c.req.param('id');
     const truce = store.truce(id);
     if (!truce) return fail(c, 404, 'not_found', 'This truce does not exist.');
+    // Resume point: ?from=n, else the browser's Last-Event-ID + 1, else the start.
+    const fromQuery = Number(c.req.query('from'));
+    const lastId = Number(c.req.header('last-event-id'));
+    const from = Number.isInteger(fromQuery) && fromQuery >= 0 ? fromQuery : Number.isInteger(lastId) ? lastId + 1 : 0;
+
     return streamSSE(c, async (stream) => {
-      const send = (e: StreamEvent) => stream.writeSSE({ data: JSON.stringify(e) });
+      // Each event's id is its index in the truce's log.
+      let next = 0;
+      const send = async (e: StreamEvent) => {
+        const id = next++;
+        if (id >= from) await stream.writeSSE({ id: String(id), data: JSON.stringify(e) });
+      };
       const queue: StreamEvent[] = [];
       let wake: (() => void) | null = null;
       const following = runner.follow(id, (e) => {
@@ -210,7 +251,9 @@ export function createApp({ store, qloo, runner, webDir = 'web/dist' }: AppDeps)
       if (!following) {
         // Finished (or cut off by a restart): replay what was stored and close.
         for (const e of store.truce(id)!.events) await send(e);
-        if (truce.status === 'running') await send({ type: 'error', message: 'This truce was interrupted. Please start a new one.' });
+        if (truce.status === 'running') {
+          await send({ type: 'error', code: 'interrupted', message: 'This truce was interrupted. Please start a new one.', retryable: true });
+        }
         return;
       }
       stream.onAbort(() => following.stop());

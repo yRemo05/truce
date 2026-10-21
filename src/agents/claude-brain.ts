@@ -48,7 +48,7 @@ function itemLine(m: MenuItem): string {
     m.slot === 'film'
       ? [m.facts.genres, m.facts.tone]
       : m.slot === 'restaurant'
-        ? [m.facts.neighborhood, m.facts.price, m.facts.cuisine]
+        ? [m.facts.cuisineType, m.facts.neighborhood, m.facts.price, m.facts.cuisine]
         : [m.facts.genres, m.facts.sound];
   const detail = facts.filter(Boolean).join(' | ');
   const because = m.because.length ? ` | Qloo links it to: ${m.because.join(', ')}` : '';
@@ -84,7 +84,7 @@ How it works
 - Accepting a good offer early is better than holding out for a perfect one.
 
 Your message
-- One or two short sentences, spoken to ${view.otherNickname}'s side, in plain words.
+- One or two short sentences, at most about 200 characters, spoken to ${view.otherNickname}'s side, in plain words.
 - Talk about the evening you actually offer (your first counter) or accept. Don't pitch items that aren't in it.
 - Give one concrete reason grounded in the menu, such as what Qloo links an item to or a fact listed for it.
 - Never mention scores, minimums, weights or item codes, and never invent facts about ${view.otherNickname}'s taste.
