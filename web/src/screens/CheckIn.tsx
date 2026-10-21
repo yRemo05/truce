@@ -185,7 +185,7 @@ export function CheckIn({ truceId, side }: { truceId: string; side: Side }) {
           <header className="checkin__head">
             <h1 className="h2">{name}, how was the evening?</h1>
             <p className="muted">
-              The ledger counts how it really went, not just Qloo&rsquo;s prediction.
+              The ledger counts how it really went, not just Qloo&rsquo;s prediction.{' '}
               <InfoTip label="What a check-in does">{EXPLAIN.checkin}</InfoTip>
             </p>
           </header>

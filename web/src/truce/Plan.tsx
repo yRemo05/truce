@@ -111,7 +111,7 @@ function ShareButton({ text }: { text: string }) {
   );
 }
 
-/** "Add to calendar": the server builds the .ics; the mock makes one in the browser. */
+/** "Add to calendar": the server builds the .ics; the mock makes one in the browser. Only for truces that know their evening. */
 function CalendarLink({ truceId }: { truceId: string }) {
   const [href, setHref] = useState<string | null>(null);
   useEffect(() => {
@@ -215,7 +215,7 @@ export function Plan({ state, truceId, pairId, stamp }: { state: TruceState; tru
           <Button variant="primary" icon="plus" busy={again.busy} onClick={() => void again.run()}>
             New truce
           </Button>
-          <CalendarLink truceId={truceId} />
+          {tonight && <CalendarLink truceId={truceId} />}
           <ShareButton text={`Our plan for tonight: ${items.map((i) => i.name).join(', ')}.`} />
           <ButtonLink variant="ghost" icon="home" href={`/p/${pairId}`}>
             Group page

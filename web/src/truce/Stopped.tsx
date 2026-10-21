@@ -17,7 +17,7 @@ export function Stopped({ error, pairId, location }: { error: EventOf<'error'>; 
   });
   const pairLink = (
     <ButtonLink size="sm" variant="ghost" icon="arrow-left" href={`/p/${pairId}`}>
-      Pair page
+      Group page
     </ButtonLink>
   );
 
@@ -55,7 +55,7 @@ export function Stopped({ error, pairId, location }: { error: EventOf<'error'>; 
           <span className="notice__buttons">
             {error.code === 'no_options' ? (
               <ButtonLink size="sm" icon="pencil" href={`/p/${pairId}`}>
-                Add favourites
+                Change picks or note
               </ButtonLink>
             ) : (
               <Button size="sm" icon="retry" busy={again.busy} onClick={() => void again.run()}>

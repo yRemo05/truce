@@ -25,7 +25,8 @@
  */
 import type { Side } from '@contract';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Badge, Button, ErrorNotice, Icon, Notice, Page, PairNames, Spinner } from '@/ui';
+import { Badge, Button, ErrorNotice, Icon, InfoTip, Notice, Page, PairNames, Spinner } from '@/ui';
+import { EXPLAIN } from '@/lib/glossary';
 import { agentOf, groupNames, monograms, nameOf } from '@/lib/people';
 import { isTurnEntry, SLOTS, type FeedEntry, type TruceState } from '@/lib/truce';
 import { useTruce, type Link as LinkState } from '@/lib/useTruce';
@@ -185,6 +186,13 @@ export function TrucePage({ truceId }: { truceId: string }) {
   const { names, members } = ctx;
   const scouting = state.phase === 'connecting' || state.phase === 'gathering' || state.phase === 'scouting';
   const scouted = state.tastes !== null || Object.keys(state.scouts).length > 0;
+  // No model today: say so once, above whatever leads the page (the gathering, then the talks).
+  const rulesNote = state.brain === 'rules' && (
+    <Notice tone="info">
+      Rule-based agents today: no AI, same referee, same fairness.{' '}
+      <InfoTip label="Why rule-based agents">{EXPLAIN.rulesMode}</InfoTip>
+    </Notice>
+  );
 
   const talks = (
     <ol className="feed" aria-label="The talks">
@@ -241,6 +249,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
 
         {scouting && !state.error && (
           <div className="truce__lead">
+            {rulesNote}
             <Scouting state={state} />
           </div>
         )}
@@ -257,6 +266,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
 
         {feed.length > 0 && (
           <div className="truce__talks">
+            {rulesNote}
             {scouted && <Scouting state={state} folded />}
             {archive ? (
               <details className="talks-fold">

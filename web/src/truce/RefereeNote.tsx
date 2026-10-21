@@ -86,7 +86,7 @@ export const RefereeNote = memo(function RefereeNote({ entry }: { entry: Exclude
     case 'rejected':
       return (
         <System icon="warning" title="Move replaced" explain={entry.event.code === 'below_minimum' ? EXPLAIN.minimum : EXPLAIN.referee} live={live}>
-          <p>{strikeReason(entry.event, name(entry.event.side))} The referee put in a valid move instead.</p>
+          <p>{strikeReason(entry.event, name(entry.event.side))} The referee played a rule-based move instead.</p>
         </System>
       );
     case 'lastcall': {

@@ -9,15 +9,24 @@ import { useTruceCtx } from './context';
 import { Evening, Scores } from './Evening';
 
 /** One chat message from an agent, group-chat style: avatar in its person's colour, a name line, the bubble. */
-function Message({ side, meta, live, children, className }: { side: Side; meta?: ReactNode; live: boolean; children: ReactNode; className?: string }) {
-  const { names, letters } = useTruceCtx();
+function Message({ side, brain, meta, live, children, className }: { side: Side; brain: string | null; meta?: ReactNode; live: boolean; children: ReactNode; className?: string }) {
+  const { names, letters, brain: truceBrain } = useTruceCtx();
+  // A rule-based move says so, whether the whole truce runs on rules or the referee stood in for one move.
+  const rules = (brain ?? truceBrain) === 'rules';
   return (
     <article className={cx('msg', live && 'enter', className)}>
       <Avatar side={side} letters={nameOf(letters, side)} size="md" />
       <div className="msg__body">
         <p className="msg__meta">
           <span className="msg__who">{agentOf(nameOf(names, side))}</span>
-          <Voice kind="agent" />
+          {rules ? (
+            <span className="msg__voice">
+              <Voice kind="rules" />
+              <InfoTip label="Why a rule-based agent">{EXPLAIN.rulesMode}</InfoTip>
+            </span>
+          ) : (
+            <Voice kind="agent" />
+          )}
           {meta}
         </p>
         <div className="bubble">{children}</div>
@@ -89,12 +98,12 @@ export const MoveCard = memo(function MoveCard({ move, live }: { move: MoveEvent
     </>
   );
   return (
-    <Message side={move.side} meta={meta} live={live}>
+    <Message side={move.side} brain={move.brain} meta={meta} live={live}>
       <p className="bubble__text">{move.message}</p>
       {move.brain === 'rules' && brain === 'claude' && (
         <p className="bubble__note small muted">
           <Icon name="gavel" size={16} />
-          The referee wrote this move: the AI&rsquo;s first try broke a rule.
+          The referee wrote this move with simple rules.
         </p>
       )}
       {move.shortlisted && (
@@ -129,7 +138,7 @@ export const DeclinedCard = memo(function DeclinedCard({ event, live }: { event:
     </>
   );
   return (
-    <Message side={event.side} meta={meta} live={live}>
+    <Message side={event.side} brain={event.brain} meta={meta} live={live}>
       <p className="bubble__text">{event.message}</p>
     </Message>
   );
@@ -138,7 +147,7 @@ export const DeclinedCard = memo(function DeclinedCard({ event, live }: { event:
 export function ThinkingCard({ side, struck }: { side: Side; struck: boolean }) {
   return (
     <div aria-hidden="true">
-      <Message side={side} live className="msg--thinking">
+      <Message side={side} brain={null} live className="msg--thinking">
         <p className="thinking">
           {struck ? 'Trying again by the rules' : 'Thinking'}
           <span className="thinking__dots">

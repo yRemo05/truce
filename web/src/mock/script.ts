@@ -333,9 +333,13 @@ export function buildTimeline(input: TimelineInput): { timeline: Timed[]; result
     ...RESTAURANTS[city].map(([nm, scores]): Row => ({ slot: 'restaurant', name: nm, scores, scout: null })),
     ...MUSIC.map(([nm, scores]): Row => ({ slot: 'music', name: nm, scores, scout: null })),
   ].filter((r) => !vetoed(r, briefs, members) && !members.some((s) => seeds[s]?.[r.slot].includes(r.name)));
-  const plans = members.map((s) => ({ side: s, plan: SCOUTS[city][seat(s)]! })).filter(({ plan }) => !vetoed({ slot: plan.slot, name: plan.item }, briefs, members));
+  // Scouting needs the model: a rule-based truce goes straight from tastes to the pool.
+  const plans =
+    brain === 'rules'
+      ? []
+      : members.map((s) => ({ side: s, plan: SCOUTS[city][seat(s)]! })).filter(({ plan }) => !vetoed({ slot: plan.slot, name: plan.item }, briefs, members));
 
-  push(300, { type: 'status', phase: 'scouting', brain });
+  if (plans.length) push(300, { type: 'status', phase: 'scouting', brain });
   for (const { side } of plans) push(250, { type: 'scout', side, step: 'start' });
   const find = (slot: Slot, nm: string): ScoutFind => {
     const e = byName(slot, nm);

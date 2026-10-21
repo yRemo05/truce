@@ -167,7 +167,7 @@ export function gaveGround(concession: PerSide<number>, members: readonly Side[]
 }
 
 const STRIKE: Record<StrikeCode, (agent: string, name: string) => string> = {
-  agent_failed: (agent) => `${agent} didn’t answer in time.`,
+  agent_failed: (agent) => `${agent} couldn’t answer.`,
   no_counter: (agent) => `${agent} didn’t put an evening on the table.`,
   nothing_to_accept: (agent) => `${agent} accepted an offer nobody had made.`,
   unknown_item: (agent) => `${agent} named something that isn’t in the pool.`,

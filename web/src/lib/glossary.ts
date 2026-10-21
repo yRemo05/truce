@@ -9,6 +9,7 @@ export const EXPLAIN = {
     'When the agents don’t agree, the referee picks the evening that does best by everyone at once, with a little extra say for whoever the ledger favours.',
   minimum:
     'Each agent has a minimum it can’t go below for its person. It starts high and comes down turn by turn, so nobody is talked into a bad evening.',
+  rulesMode: 'Today’s AI budget is used up, so the agents follow simple rules: same referee, same fairness.',
   referee: 'Plain rules, not AI: it checks every move, replaces invalid ones, and decides when there’s no deal.',
   shortlist:
     'In the final round the referee shows each agent evenings it has checked everyone can accept. The agent still decides, and still needs everyone’s yes.',

@@ -536,12 +536,6 @@
   display: grid;
   gap: var(--s-2);
 }
-.checkin__head .muted {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--s-1);
-}
 .checkin__went {
   border: 0;
   padding: 0;

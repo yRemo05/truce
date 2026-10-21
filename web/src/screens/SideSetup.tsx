@@ -43,8 +43,11 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
   const [levels, setLevels] = useState<Record<Slot, Level>>({ film: 'some', restaurant: 'some', music: 'some' });
   const [brief, setBrief] = useState('');
   const [tried, setTried] = useState(false);
-  /** Set once saved with a note: the page shows what the agent understood before moving on. */
-  const [understood, setUnderstood] = useState<{ ready: SideSaved['ready']; brief: BriefView } | null>(null);
+  /**
+   * Set once saved with a note: the page shows what the agent understood before
+   * moving on, or, when the server couldn't read the note (brief: null), says so.
+   */
+  const [understood, setUnderstood] = useState<{ ready: SideSaved['ready']; brief: BriefView | null } | null>(null);
 
   const moveOn = (ready: SideSaved['ready']) => {
     const next = pass && pair ? nextUp(pair.members, ready, side) : null;
@@ -56,7 +59,7 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
     const seeds = bySlot((s) => picks[s].map(({ id, name: n }) => ({ id, name: n })));
     const note = brief.trim();
     const saved = await api.saveSide(pairId, side, { seeds, weights: weightsOf(levels), ...(note ? { brief: note } : {}) });
-    if (saved.brief) setUnderstood({ ready: saved.ready, brief: saved.brief });
+    if (note) setUnderstood({ ready: saved.ready, brief: saved.brief });
     else moveOn(saved.ready);
   });
 
@@ -97,11 +100,19 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
         <div className="side__intro">
           <div>
             <h1 className="h2">Saved</h1>
-            <p className="muted">Your favourites are in. Here&rsquo;s what your agent took from your note.</p>
+            <p className="muted">
+              {understood.brief ? 'Your favourites are in. Here’s what your agent took from your note.' : 'Your favourites are in.'}
+            </p>
           </div>
         </div>
         <div className="side__understood">
-          <BriefSummary brief={understood.brief} />
+          {understood.brief ? (
+            <BriefSummary brief={understood.brief} />
+          ) : (
+            <Notice tone="info" title="Your note wasn’t read">
+              Your agent can&rsquo;t read notes right now, so your favourites and weights will guide it.
+            </Notice>
+          )}
           <div className="side__understood-actions">
             <Button variant="primary" iconEnd="arrow-right" onClick={() => moveOn(understood.ready)}>
               Continue

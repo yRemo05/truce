@@ -4,7 +4,8 @@
  * refresh mid-truce picks up where it was and a reconnect resumes where it
  * left off, as the server does. Add `?drop` to a truce URL to have the stream
  * drop once, seven seconds in; a group whose place is "Atlantis" fails while
- * gathering, as the server does when Qloo finds no restaurants.
+ * gathering, as the server does when Qloo finds no restaurants. Add `?rules`
+ * when starting a truce or saving a side to play a server with no model.
  */
 import type {
   BriefView,
@@ -74,6 +75,9 @@ interface Db {
 }
 
 const KEY = 'truce:mock:v2';
+
+/** `?rules` on the page plays the server without a model: rule-based agents, no scouting, notes unread. */
+const rulesToday = () => new URLSearchParams(location.search).has('rules');
 
 /** Parsed once per page load; every write goes back to localStorage. */
 let cached: Db | null = null;
@@ -218,8 +222,8 @@ function start(db: Db, pairId: string): string {
     alpha: before.alpha,
     opener: members[count % members.length]!,
     variant,
-    strikeAt: variant === 'hardline' ? 5 : members.length === 2 ? 3 : 4,
-    brain: 'claude',
+    strikeAt: rulesToday() ? null : variant === 'hardline' ? 5 : members.length === 2 ? 3 : 4,
+    brain: rulesToday() ? 'rules' : 'claude',
     ledgerAfter: (concession) => {
       const after = ledgerOf(pair, done, concession);
       return {
@@ -439,7 +443,7 @@ export const mockApi: Api = {
     if (!SLOTS.some((s) => input.seeds[s].length > 0)) throw new ApiError(400, 'invalid', 'Pick at least one thing you love.');
     const text = input.brief?.trim() ?? '';
     if (text.length > 280) throw new ApiError(400, 'invalid', 'Keep the note to 280 characters.');
-    const brief = text ? understand(text) : null;
+    const brief = text && !rulesToday() ? understand(text) : null;
     pair.sides[side] = { input, brief };
     write(db);
     return { ready: perSide(pair.members, (s) => Boolean(pair.sides[s])), brief };
