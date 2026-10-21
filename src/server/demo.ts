@@ -1,6 +1,6 @@
 /**
  * The ready-made groups behind "Try the demo": tastes far enough apart to
- * make a real negotiation, a brief each, and a made-up earlier evening or two
+ * make a real negotiation, a brief each, a food someone loves, and a made-up earlier evening or two
  * so the ledger has a history to show (marked as such everywhere it appears).
  *
  * Their favourites and briefs are resolved once (warmed at boot, then kept),
@@ -8,9 +8,9 @@
  */
 import type Anthropic from '@anthropic-ai/sdk';
 import { groundBrief, readBrief, type InterpretedBrief } from '../agents/brief';
-import type { DemoInput, PairInput, Seed, SideInput } from '../contract';
+import type { DemoInput, Food, PairInput, Seed, SideInput } from '../contract';
 import type { QlooClient } from '../qloo/client';
-import { locate, searchEntities } from '../qloo/queries';
+import { findFoods, locate, searchEntities } from '../qloo/queries';
 import type { TruceResult } from '../truce/negotiate';
 import { KIND_OF_SLOT, SLOTS, membersOf, perSide, type Slot } from '../truce/types';
 import { normalizeWeights } from '../truce/utility';
@@ -19,6 +19,8 @@ import { newId } from './runner';
 
 interface DemoPerson {
   loves: Record<Slot, string[]>;
+  /** Foods they love, by English name. */
+  foods?: string[];
   weights: Record<Slot, number>;
   brief: string;
 }
@@ -43,6 +45,7 @@ export const DEMOS: Record<DemoInput['kind'], DemoGroup> = {
     people: [
       {
         loves: { film: ['In the Mood for Love', 'Lost in Translation'], restaurant: ['Carbone New York'], music: ['Radiohead'] },
+        foods: ['ramen'],
         weights: { film: 50, restaurant: 25, music: 25 },
         brief: "Something cosy tonight. I've already seen Past Lives.",
       },
@@ -73,6 +76,7 @@ export const DEMOS: Record<DemoInput['kind'], DemoGroup> = {
       },
       {
         loves: { film: ['Spirited Away', 'Everything Everywhere All at Once'], restaurant: ['Karaköy Lokantası'], music: ['Tame Impala'] },
+        foods: ['meze'],
         weights: { film: 50, restaurant: 25, music: 25 },
         brief: 'No horror, I want to laugh.',
       },
@@ -86,6 +90,7 @@ export const DEMOS: Record<DemoInput['kind'], DemoGroup> = {
 
 interface Resolved {
   seeds: Record<Slot, Seed[]>[];
+  foods: Food[][];
   briefs: (InterpretedBrief | null)[];
 }
 
@@ -111,6 +116,9 @@ export function createDemos(qloo: QlooClient, anthropic: Anthropic | null) {
             return out;
           }),
         );
+        const foods = await Promise.all(
+          group.people.map(async (p) => (await Promise.all((p.foods ?? []).map((word) => findFoods(qloo, [word], 1)))).flat()),
+        );
         const briefs = await Promise.all(
           group.people.map(async (p) => {
             if (!anthropic) return null;
@@ -118,7 +126,7 @@ export function createDemos(qloo: QlooClient, anthropic: Anthropic | null) {
             return groundBrief(qloo, p.brief, intent, near);
           }),
         );
-        return { seeds, briefs };
+        return { seeds, foods, briefs };
       })().catch((err) => {
         resolved.delete(kind); // try again on the next request
         throw err;
@@ -139,13 +147,13 @@ export function createDemos(qloo: QlooClient, anthropic: Anthropic | null) {
     /** Creates a fresh demo group with its earlier evenings; returns its id. */
     async create(store: Store, kind: DemoInput['kind']): Promise<string> {
       const group = DEMOS[kind];
-      const { seeds, briefs } = await resolve(kind);
+      const { seeds, foods, briefs } = await resolve(kind);
       const pairId = newId();
       store.createPair(pairId, group.pair);
       const members = membersOf(group.people.length);
       members.forEach((side, i) => {
         const p = group.people[i]!;
-        const input: SideInput = { seeds: seeds[i]!, weights: p.weights, brief: p.brief };
+        const input: SideInput = { seeds: seeds[i]!, foods: foods[i], weights: p.weights, brief: p.brief };
         store.saveSide(pairId, side, input, briefs[i] ?? null);
       });
       const even = perSide(members, () => 1 / members.length);
