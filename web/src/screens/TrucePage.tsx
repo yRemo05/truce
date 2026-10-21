@@ -29,7 +29,7 @@
 import type { Side } from '@contract';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
-import { Badge, Button, ErrorNotice, Icon, InfoTip, Notice, Page, PairNames, Spinner } from '@/ui';
+import { Badge, Button, cx, ErrorNotice, Icon, InfoTip, Notice, Page, PairNames, Spinner } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
 import { mySide } from '@/lib/mine';
 import { agentOf, groupNames, monograms, nameOf } from '@/lib/people';
@@ -350,7 +350,8 @@ export function TrucePage({ truceId }: { truceId: string }) {
           {tab === 'discussion' && (
             <div className="phase phase--discussion">
               {feed.length > 0 ? (
-                <div className="chat">
+                // No single "me" (a guest, a demo, a shared phone): one centred column instead of everyone leaning left.
+                <div className={cx('chat', ctx.mine === null && 'chat--centered')}>
                   <ol className="feed" aria-label="The talks">
                     {feed.map((entry, i) => (
                       <FeedItem key={entry.key} entry={entry} first={speaker(entry) !== speaker(feed[i - 1])} />

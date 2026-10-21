@@ -468,6 +468,26 @@
   right: -0.5rem;
   clip-path: polygon(0 0, 100% 0, 0 100%);
 }
+/*
+ * Nobody is "me": every bubble sits in one centred column, the bubbles' usual
+ * maximum width, and fills it so the edges line up. The avatar stays just
+ * outside the column on the left. Narrow panes keep the plain left layout.
+ */
+@container (min-width: 40.01rem) {
+  .chat--centered .bubble-row {
+    --col: 65%;
+    --aside: calc(1.375rem + var(--s-2));
+    width: calc(var(--col) + var(--aside));
+    margin-left: calc((100% - var(--col)) / 2 - var(--aside));
+  }
+  .chat--centered .bubble {
+    flex: 1;
+    max-width: none;
+  }
+  .chat--centered .bubble-row--typing .bubble {
+    flex: 0 1 auto;
+  }
+}
 .bubble__who {
   display: flex;
   flex-wrap: wrap;
