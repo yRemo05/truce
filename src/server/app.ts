@@ -282,7 +282,8 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     const truce = store.truce(c.req.param('id'));
     if (!truce?.result) return fail(c, 404, 'not_found', 'This evening is not planned yet.');
     const pool = truce.events.find((e): e is Extract<StreamEvent, { type: 'pool' }> => e.type === 'pool');
-    if (!pool) return fail(c, 404, 'not_found', 'This evening is not planned yet.');
+    // Truces from before plans existed have no `tonight` to put in a calendar.
+    if (!pool?.tonight) return fail(c, 404, 'not_found', 'This evening has no date to add to a calendar.');
     const items = Object.fromEntries(
       SLOTS.map((s) => [s, pool.items[s].find((i) => i.id === truce.result!.bundle[s])]),
     ) as Record<Slot, CardItem | undefined>;
