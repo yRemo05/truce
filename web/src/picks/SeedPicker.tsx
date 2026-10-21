@@ -24,7 +24,7 @@ const COPY: Record<Slot, { title: string; noun: string; hint: string; examples: 
   film: {
     title: 'Films',
     noun: 'a film',
-    hint: 'Films you would happily watch again.',
+    hint: 'Films you’d happily watch again.',
     examples: ['Past Lives', 'Heat', 'Paddington 2'],
   },
   restaurant: {
@@ -36,7 +36,7 @@ const COPY: Record<Slot, { title: string; noun: string; hint: string; examples: 
   music: {
     title: 'Music',
     noun: 'an artist',
-    hint: 'Artists or bands you never skip.',
+    hint: 'Artists or bands you love.',
     examples: ['Nina Simone', 'Daft Punk', 'Mitski'],
   },
 };
@@ -129,7 +129,7 @@ export function SeedPicker({ slot, picks, onAdd, onRemove }: SeedPickerProps) {
   };
 
   return (
-    <section className="picker" aria-labelledby={headingId}>
+    <section className="card picker" aria-labelledby={headingId}>
       <header className="picker__head">
         <h2 id={headingId} className="picker__title">
           <Icon name={SLOT_ICON[slot]} size={20} />
@@ -153,7 +153,7 @@ export function SeedPicker({ slot, picks, onAdd, onRemove }: SeedPickerProps) {
           aria-controls={listId}
           aria-autocomplete="list"
           aria-activedescendant={showList && hits[active] ? `${listId}-${active}` : undefined}
-          placeholder={full ? 'Three is plenty' : `Search for ${copy.noun}`}
+          placeholder={full ? 'That’s three, the most you can add' : `Search for ${copy.noun}`}
           disabled={full}
           value={query}
           autoComplete="off"
@@ -227,7 +227,7 @@ export function SeedPicker({ slot, picks, onAdd, onRemove }: SeedPickerProps) {
           {search.state === 'done' && hits.length === 0 && !typing && (
             <p className="combo__empty small">
               <Icon name="info" size={16} />
-              Qloo doesn&rsquo;t know &ldquo;{settled}&rdquo;. Try the original title, or fewer words.
+              No match for &ldquo;{settled}&rdquo;. Try the original title, or fewer words.
             </p>
           )}
           {search.state === 'error' && (

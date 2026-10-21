@@ -1,35 +1,35 @@
-import type { Side } from '@contract';
 import { memo, type ReactNode } from 'react';
-import { cx, Icon, ScoreMeter, Voice } from '@/ui';
+import { cx, Icon, InfoTip, Voice, type IconName } from '@/ui';
 import { capitalise, spelled } from '@/lib/format';
-import { agentOf, possessive, SIDES } from '@/lib/people';
+import { EXPLAIN } from '@/lib/glossary';
+import { agentOf, possessive } from '@/lib/people';
 import { isLastCall, SLOT_ICON, SLOT_LABEL, SLOTS, strikeReason, type EventOf, type FeedEntry } from '@/lib/truce';
 import { useTruceCtx } from './context';
-import { Evening } from './Evening';
+import { Evening, Scores } from './Evening';
 
-/** The referee speaks between rules, centred, like a stage direction. Code, not a model. */
-function Frame({ tone = 'plain', title, children, live }: { tone?: 'plain' | 'strike' | 'deal'; title: string; children: ReactNode; live: boolean }) {
-  return (
-    <aside className={cx('referee', `referee--${tone}`, live && 'enter')}>
-      <p className="referee__label">
-        <Icon name="gavel" size={16} />
-        <span>Referee</span>
-      </p>
-      <p className="referee__title">{title}</p>
-      <div className="referee__text">{children}</div>
-    </aside>
-  );
+interface SystemProps {
+  icon: IconName;
+  title: string;
+  /** The ⓘ text for the title, when the title is jargon. */
+  explain?: string;
+  /** A deal or a ruling: drawn as a card rather than a line. */
+  strong?: boolean;
+  live: boolean;
+  children: ReactNode;
 }
 
-/** Both people's fit for an evening the referee chose. */
-function Scores({ scores }: { scores: Record<Side, number> }) {
-  const { names } = useTruceCtx();
+/** The referee speaks like a chat system message: centred, small, with a glyph. Rules, not AI. */
+function System({ icon, title, explain, strong, live, children }: SystemProps) {
   return (
-    <div className="referee__scores">
-      {SIDES.map((side) => (
-        <ScoreMeter key={side} side={side} name={names[side]} value={scores[side]} size="sm" />
-      ))}
-    </div>
+    <aside className={cx('sys', strong && 'sys--strong', live && 'enter')}>
+      <p className="sys__head">
+        <Icon name={icon} size={16} className="sys__icon" />
+        <strong>{title}</strong>
+        {explain && <InfoTip label={`About ${title.toLowerCase()}`}>{explain}</InfoTip>}
+        <Voice kind="referee" />
+      </p>
+      <div className="sys__text">{children}</div>
+    </aside>
   );
 }
 
@@ -37,9 +37,8 @@ function PolishNote({ event, live }: { event: EventOf<'polish'>; live: boolean }
   const { names, items } = useTruceCtx();
   const swaps = SLOTS.filter((s) => event.from[s] !== event.to[s]);
   return (
-    <Frame tone="deal" title="Polished" live={live}>
-      <p>The referee found an evening you both like at least as much, so it swapped:</p>
-      <ul className="referee__swaps">
+    <System icon="check-circle" title="Small improvement" explain={EXPLAIN.polish} live={live}>
+      <ul className="sys__swaps">
         {swaps.map((slot) => (
           <li key={slot}>
             <Icon name={SLOT_ICON[slot]} size={16} />
@@ -51,27 +50,11 @@ function PolishNote({ event, live }: { event: EventOf<'polish'>; live: boolean }
         ))}
       </ul>
       {event.scores && (
-        <p className="data referee__delta">
+        <p className="small num">
           {names.a} {event.scores.from.a} → {event.scores.to.a} · {names.b} {event.scores.from.b} → {event.scores.to.b}
         </p>
       )}
-    </Frame>
-  );
-}
-
-function RulingNote({ event, live }: { event: EventOf<'ruling'>; live: boolean }) {
-  return (
-    <Frame tone="deal" title="Truce’s call" live={live}>
-      <p>
-        No deal, so the referee picks the fairest evening in the pool: the one that does best by both of you at once,
-        weighted by the ledger.
-      </p>
-      <div className="referee__evening">
-        <Voice kind="qloo">Qloo · the evening the referee picked</Voice>
-        <Evening bundle={event.bundle} />
-        {event.scores && <Scores scores={event.scores} />}
-      </div>
-    </Frame>
+    </System>
   );
 }
 
@@ -83,43 +66,51 @@ export const RefereeNote = memo(function RefereeNote({ entry }: { entry: Exclude
       const { opener, alphaA } = entry.event;
       const lean = Math.abs(alphaA - 0.5) < 0.005 ? null : alphaA > 0.5 ? 'a' : 'b';
       return (
-        <Frame title="The referee seats the agents" live={live}>
+        <System icon="gavel" title="The talks begin" live={live}>
           <p>
-            {agentOf(names[opener])} opens. {capitalise(spelled(entry.event.turns))} turns, then a last call.{' '}
-            {lean ? `The ledger leans toward ${agentOf(names[lean])} tonight.` : 'The ledger is even tonight.'}
+            {agentOf(names[opener])} goes first. {capitalise(spelled(entry.event.turns))} turns, then a last call.
+            {lean && ` ${agentOf(names[lean])} has a bit more say tonight, from the ledger.`}
           </p>
-        </Frame>
+        </System>
       );
     }
     case 'rejected':
       return (
-        <Frame tone="strike" title="Struck from the record" live={live}>
-          <p>{strikeReason(entry.event, names[entry.event.side])} A by-the-book move stands in for it.</p>
-        </Frame>
+        <System icon="warning" title="Move replaced" explain={entry.event.code === 'below_minimum' ? EXPLAIN.minimum : EXPLAIN.referee} live={live}>
+          <p>{strikeReason(entry.event, names[entry.event.side])} The referee put in a valid move instead.</p>
+        </System>
       );
     case 'lastcall': {
       const decider = entry.event.side;
       const offerer = decider === 'a' ? 'b' : 'a';
       return (
-        <Frame title="Last call" live={live}>
+        <System icon="hourglass" title="Last call" explain={EXPLAIN.lastCall} live={live}>
           <p>
-            {capitalise(spelled(turns))} turns and no deal. {agentOf(names[decider])} can take {possessive(names[offerer])} last offer
-            as it stands, or leave the evening to the referee.
+            No deal after {spelled(turns)} turns. {agentOf(names[decider])} can accept {possessive(names[offerer])} last offer or leave it to
+            the referee.
           </p>
-        </Frame>
+        </System>
       );
     }
     case 'agreement': {
       const accepter = entry.accepted?.side;
       const when = isLastCall(entry.event.turn, turns) ? 'on the last call' : `on turn ${entry.event.turn}`;
       return (
-        <Frame tone="deal" title="Agreed" live={live}>
+        <System icon="check-circle" title="Deal" strong live={live}>
           <p>{accepter ? `${agentOf(names[accepter])} accepted ${when}. You chose this together.` : `Both agents agreed ${when}.`}</p>
-        </Frame>
+        </System>
       );
     }
     case 'ruling':
-      return <RulingNote event={entry.event} live={live} />;
+      return (
+        <System icon="gavel" title="Truce’s call" explain={EXPLAIN.ruling} strong live={live}>
+          <p>No deal, so the referee picked the fairest evening.</p>
+          <div className="sys__evening">
+            <Evening bundle={entry.event.bundle} />
+            {entry.event.scores && <Scores scores={entry.event.scores} />}
+          </div>
+        </System>
+      );
     case 'polish':
       return <PolishNote event={entry.event} live={live} />;
   }

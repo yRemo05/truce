@@ -1,64 +1,49 @@
 /*
- * Truce design tokens.
+ * Truce design tokens: the Bamboo Teal theme (dark), sampled from the owner's
+ * palette. One typeface (Inter), radius 0.625rem, a teal primary.
  *
- * Paper and ink, one accent: sealing-wax red. Two people are told apart by
- * position and by solid (first person) versus open/hatched (second person)
- * marks, never by a second hue. Radius system: mixed — paper, cards and
- * fields are square; pills, monograms and seals are round.
+ * The two people: the first person is teal, the second a light neutral, and
+ * both are always named and placed (left / right), so colour is never the
+ * only cue.
  */
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  /* Paper */
-  --paper: oklch(96.4% 0.013 84);
-  --paper-raised: oklch(98.7% 0.007 84);
-  --paper-sunk: oklch(93.4% 0.017 82);
-  --paper-deep: oklch(89.6% 0.021 80);
+  --background: #0e1312;
+  --foreground: #e9ecec;
+  --card: #151b1a;
+  --popover: #151b1a;
+  --primary: #6ea8a3;
+  --primary-hover: #7fb5b0;
+  --primary-foreground: #0e1312;
+  --secondary: #212d2b;
+  --secondary-hover: #2a3836;
+  --accent: #4a5d5a;
+  --muted: #1a2524;
+  --muted-foreground: #93a5a4;
+  --destructive: #f27984;
+  --destructive-foreground: #0e1312;
+  --border: #2c3b3a;
+  --input: #2c3b3a;
+  --ring: #6ea8a3;
+  --track: #273836;
 
-  /* Ink (blue-black) */
-  --ink: oklch(24% 0.03 262);
-  --ink-2: oklch(41% 0.026 262);
-  --ink-3: oklch(50% 0.02 262);
-  --rule: oklch(24% 0.03 262 / 0.12);
-  --rule-strong: oklch(24% 0.03 262 / 0.26);
-  --ink-wash: oklch(24% 0.03 262 / 0.06);
+  /* The two people's marks */
+  --person-a: #6ea8a3;
+  --person-a-foreground: #0e1312;
+  --person-b: #d3dcdb;
+  --person-b-foreground: #0e1312;
 
-  /* The one accent: the seal */
-  --seal: oklch(51% 0.175 29);
-  --seal-press: oklch(45% 0.165 29);
-  --seal-tint: oklch(93% 0.032 35);
-  --seal-text: oklch(44% 0.155 29);
-  --on-seal: oklch(98.5% 0.01 84);
+  --font-sans: 'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
 
-  /* Status, muted */
-  --ok: oklch(46% 0.09 152);
-  --ok-tint: oklch(93.5% 0.03 152);
-  --warn: oklch(50% 0.1 70);
-  --warn-tint: oklch(93.5% 0.04 82);
-  --danger: oklch(43% 0.13 18);
-  --danger-tint: oklch(93% 0.03 18);
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-hero: clamp(2rem, 1.4rem + 2.6vw, 3rem);
 
-  /* Second-person mark: ink hatching */
-  --hatch: repeating-linear-gradient(-45deg, var(--ink) 0 1.25px, transparent 1.25px 3.5px);
-
-  /* Type */
-  --font-display: 'Libre Caslon Display', 'Libre Caslon Text', Georgia, 'Times New Roman', serif;
-  --font-serif: 'Libre Caslon Text', Georgia, 'Times New Roman', serif;
-  --font-sans: 'Schibsted Grotesk Variable', 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-
-  --text-display-xl: clamp(2.875rem, 1.75rem + 4.6vw, 5.5rem);
-  --text-display-l: clamp(2.125rem, 1.6rem + 2.2vw, 3.375rem);
-  --text-display-m: clamp(1.625rem, 1.4rem + 0.9vw, 2.125rem);
-  --text-display-s: 1.375rem;
-  --text-title: 1.0625rem;
-  --text-body: 1rem;
-  --text-small: 0.875rem;
-  --text-micro: 0.75rem;
-  --text-speech: 1.1875rem;
-  --text-data: 0.8125rem;
-
-  /* Space (4 pt) */
   --s-1: 0.25rem;
   --s-2: 0.5rem;
   --s-3: 0.75rem;
@@ -69,46 +54,33 @@
   --s-8: 2.5rem;
   --s-9: 3rem;
   --s-10: 4rem;
-  --s-11: 5rem;
 
-  --gutter: 1.25rem;
-  --wrap: 76rem;
+  --gutter: 1rem;
+  --wrap: 72rem;
   --bar-h: 3.5rem;
 
-  /* Sizes: one per role */
-  --control-h: 2.75rem;
-  --control-h-sm: 2.25rem;
-  --chip-h: 1.5rem;
+  --control-h: 2.5rem;
+  --control-h-sm: 2rem;
   --card-pad: 1.25rem;
 
-  /* Radius (mixed) */
-  --r-square: 0;
-  --r-soft: 2px;
-  --r-pill: 999px;
+  /* Radius: shadcn's scale from 0.625rem */
+  --radius: 0.625rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-full: 999px;
 
-  /* One light source, top left */
-  --shadow-sheet: 0 1px 0 oklch(24% 0.03 262 / 0.05), 0 14px 32px -18px oklch(24% 0.03 262 / 0.28);
-  --shadow-lift: 0 1px 0 oklch(24% 0.03 262 / 0.06), 0 6px 14px -8px oklch(24% 0.03 262 / 0.3);
+  --shadow-pop: 0 10px 30px -10px rgb(0 0 0 / 0.6), 0 0 0 1px var(--border);
 
-  /* Motion */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-press: cubic-bezier(0.3, 0, 0.6, 1);
-  --ease-stamp: cubic-bezier(0.34, 1.4, 0.64, 1);
-  --dur-press: 80ms;
-  --dur-hover: 140ms;
-  --dur-enter: 420ms;
+  --dur-fast: 120ms;
+  --dur: 200ms;
 }
 
 @media (min-width: 45em) {
   :root {
-    --gutter: 2rem;
+    --gutter: 1.5rem;
     --card-pad: 1.5rem;
-    --bar-h: 4rem;
-  }
-}
-
-@media (min-width: 75em) {
-  :root {
-    --gutter: 3rem;
   }
 }

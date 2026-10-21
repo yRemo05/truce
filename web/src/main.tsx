@@ -1,9 +1,4 @@
-import '@fontsource/libre-caslon-display/400.css';
-import '@fontsource/libre-caslon-text/400.css';
-import '@fontsource/libre-caslon-text/400-italic.css';
-import '@fontsource-variable/schibsted-grotesk/wght.css';
-import '@fontsource/ibm-plex-mono/400.css';
-import '@fontsource/ibm-plex-mono/500.css';
+import '@fontsource-variable/inter/wght.css';
 import './styles/tokens.css';
 import './styles/base.css';
 import './ui/ui.css';

@@ -5,14 +5,15 @@
  *   primary   — the talks: each move (agent words + the Qloo evening), referee notes, thinking
  *   primary   — the plan, once settled (the peak: the seal presses in, the ledger leans)
  *   secondary — the pool (what's on offer, origin badges, what's on the table now)
- *   secondary — turn track and phase, in the sticky bar; reconnecting state; skip ahead
+ *   secondary — turn progress and phase, in the sticky bar; reconnecting state; skip ahead
  *   rare      — retry after an error, jump to the latest move when scrolled away
  *
  * Viewport budget: at 1440×900 the bar (with the turn track), the latest move and
  * the whole pool rail are visible at once. At 390×844 the bar holds the turn
  * track; the pool is a compact three-row tab block above the talks.
  *
- * Grid: 12 columns ≥1024px — talks and plan in 7, the pool as a sticky rail in 5.
+ * Grid ≥1024px: the chat and the plan in a wide column, the options as a sticky
+ * side panel (20–24rem).
  * Below that one column: scouting, pool, talks, plan. A truce opened after it
  * finished reads as a document: the plan first, the talks folded under it.
  *
@@ -21,7 +22,7 @@
  * wifi-off (reconnecting), fast-forward (skip ahead), arrow-down (jump), retry.
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Chip, ErrorNotice, Icon, Notice, Page, PairNames, Spinner } from '@/ui';
+import { Badge, Button, ErrorNotice, Icon, Notice, Page, PairNames, Spinner } from '@/ui';
 import { agentOf, monograms } from '@/lib/people';
 import { isTurnEntry, SLOTS, type FeedEntry, type TruceState } from '@/lib/truce';
 import { useTruce, type Link as LinkState } from '@/lib/useTruce';
@@ -39,37 +40,37 @@ import { NotFound } from './NotFound';
 const reveal = (el: Element | null, block: ScrollLogicalPosition) =>
   el?.scrollIntoView({ block, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 
-function PhaseChip({ state, link }: { state: TruceState; link: LinkState }) {
+function PhaseBadge({ state, link }: { state: TruceState; link: LinkState }) {
   if (link === 'reconnecting')
     return (
-      <Chip tone="warn" icon="wifi-off">
+      <Badge variant="warning" icon="wifi-off">
         Reconnecting
-      </Chip>
+      </Badge>
     );
   switch (state.phase) {
     case 'connecting':
     case 'scouting':
-      return <Chip icon="search">Scouting</Chip>;
+      return <Badge icon="search">Finding options</Badge>;
     case 'negotiating':
       return (
-        <Chip tone="ink" className="chip--live">
+        <Badge variant="default" className="badge--live">
           Live
-        </Chip>
+        </Badge>
       );
     case 'settled':
     case 'done':
       return state.ruled ? (
-        <Chip icon="gavel">Truce’s call</Chip>
+        <Badge icon="gavel">Truce’s call</Badge>
       ) : (
-        <Chip tone="ok" icon="check-circle">
-          Agreed
-        </Chip>
+        <Badge variant="success" icon="check-circle">
+          Deal
+        </Badge>
       );
     case 'failed':
       return (
-        <Chip tone="danger" icon="error">
+        <Badge variant="destructive" icon="error">
           Stopped
-        </Chip>
+        </Badge>
       );
   }
 }
@@ -213,16 +214,16 @@ export function TrucePage({ truceId }: { truceId: string }) {
         actions={
           <>
             {backlog > 1 && (
-              <Button size="sm" variant="quiet" icon="fast-forward" onClick={skipAhead}>
+              <Button size="sm" variant="ghost" icon="fast-forward" onClick={skipAhead}>
                 Skip ahead
               </Button>
             )}
             {!following && !done && feed.length > 0 && (
-              <Button size="sm" variant="quiet" icon="arrow-down" onClick={() => reveal(feedEnd, 'end')}>
+              <Button size="sm" variant="ghost" icon="arrow-down" onClick={() => reveal(feedEnd, 'end')}>
                 Latest
               </Button>
             )}
-            <PhaseChip state={state} link={link} />
+            <PhaseBadge state={state} link={link} />
           </>
         }
         below={state.start ? <TurnTrack state={state} /> : undefined}
@@ -254,10 +255,10 @@ export function TrucePage({ truceId }: { truceId: string }) {
                 <summary className="talks-fold__summary">
                   <Icon name="chevron-right" size={20} className="talks-fold__chevron" />
                   <span>
-                    <span className="talks-fold__title display-s">The talks</span>
+                    <span className="talks-fold__title">The talks</span>
                     <span className="small muted">
                       {' '}
-                      {turnsUsed} moves, {feed.filter((e) => e.kind === 'rejected').length} struck by the referee
+                      {turnsUsed} messages from the agents
                     </span>
                   </span>
                 </summary>

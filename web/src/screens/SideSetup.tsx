@@ -17,7 +17,7 @@ import type { Side, Slot } from '@contract';
 import { useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { api } from '@/api';
-import { Button, Chip, ErrorNotice, Monogram, Notice, Page, SectionHeader } from '@/ui';
+import { Avatar, Badge, Button, ErrorNotice, Notice, Page, SectionHeader } from '@/ui';
 import { isPassMode, withPass } from '@/lib/flow';
 import { monograms, possessive } from '@/lib/people';
 import { bySlot, SLOTS } from '@/lib/truce';
@@ -64,17 +64,17 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
       context={
         pair && (
           <span className="side__who">
-            <Monogram side={side} letters={monograms(pair.names)[side]} size="sm" />
-            <span className="side__who-name">{possessive(name)} side</span>
+            <Avatar side={side} letters={monograms(pair.names)[side]} size="sm" />
+            <span className="side__who-name">{possessive(name)} favourites</span>
             {pass && <span className="side__step small muted">{side === 'a' ? '1 of 2' : '2 of 2'}</span>}
           </span>
         )
       }
       actions={
         <>
-          <Chip tone={filled === 3 ? 'ok' : 'neutral'} icon={filled === 3 ? 'check' : 'pencil'} className="side__progress">
-            {filled} of 3 slots
-          </Chip>
+          <Badge variant={filled === 3 ? 'success' : 'secondary'} icon={filled === 3 ? 'check' : undefined} className="side__progress">
+            {filled} of 3 done
+          </Badge>
           <Button variant="primary" size="sm" icon="check" busy={saving.busy} onClick={save} disabled={!pair}>
             Save
           </Button>
@@ -83,10 +83,10 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
     >
       <div className="side__intro">
         <div>
-          <h1 className="display-l">{name ? `What does ${name} love?` : <span className="visually-hidden">Loading</span>}</h1>
-          <p className="lede">
-            One to three of each, from anywhere. Qloo reads the taste, not the postcode.
-            {pass && pair && side === 'b' && ` ${possessive(pair.names.a)} picks are hidden.`}
+          <h1 className="h2">{name ? `What does ${name} love?` : <span className="visually-hidden">Loading</span>}</h1>
+          <p className="muted">
+            Search and add one to three of each. They can be from anywhere.
+            {pass && pair && side === 'b' && ` ${possessive(pair.names.a)} favourites are hidden.`}
           </p>
         </div>
         {pass && <Steps current={3} className="side__steps" />}
@@ -94,8 +94,8 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
 
       {loadError && <ErrorNotice error={loadError} title="Couldn't load this pair" onRetry={reload} />}
       {pair?.ready[side] && (
-        <Notice tone="info" title={`${possessive(name)} side is already saved`}>
-          Picks stay private, so they don&rsquo;t show here. Saving again replaces them.
+        <Notice tone="info" title={`${possessive(name)} favourites are already saved`}>
+          They stay private, so they don&rsquo;t show here. Saving again replaces them.
         </Notice>
       )}
 
@@ -111,20 +111,19 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
         ))}
       </div>
 
-      <section className="side__weights" aria-labelledby="weights-title">
-        <SectionHeader icon="sliders" id="weights-title" title="What matters most tonight?" meta="The agents fight harder for the slots that matter more." />
+      <section className="card side__weights" aria-labelledby="weights-title">
+        <SectionHeader icon="sliders" id="weights-title" title="What matters most tonight?" meta="Your agent pushes harder for what matters more to you." />
         <Weights levels={levels} onChange={(slot, level) => setLevels((l) => ({ ...l, [slot]: level }))} />
       </section>
 
       <div className="side__footer">
         {tried && !any ? (
-          <Notice tone="warn" live title="Pick at least one thing first">
-            Search any slot above and tap a result to add it.
+          <Notice tone="warn" live title="Add at least one favourite first">
+            Search above and tap a result to add it.
           </Notice>
         ) : any && missing.length > 0 ? (
           <Notice tone="info">
-            Nothing for {missing.join(' or ')} yet. That&rsquo;s allowed: Qloo will guess from {possessive(name)} other picks, but one
-            of each makes a better evening.
+            No {missing.join(' or ')} yet. That&rsquo;s fine, but one of each gives a better evening.
           </Notice>
         ) : null}
         {saving.error && <ErrorNotice error={saving.error} title={`Couldn't save ${possessive(name)} side`} />}

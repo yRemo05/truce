@@ -1,27 +1,18 @@
-import { cx, Icon } from '@/ui';
+import { cx } from '@/ui';
 
-const STEPS = ['The two of you', 'How you\u2019ll play', 'Your picks'];
+const STEPS = ['The two of you', 'How you’ll play', 'Your favourites'];
 
-/** Setup progress: a list beside the form on wide screens, one line above it on a phone. */
+/** Setup progress: "Step 2 of 3", the step's name, and three short bars. */
 export function Steps({ current, className }: { current: 1 | 2 | 3; className?: string }) {
   return (
     <nav className={cx('steps-nav', className)} aria-label="Setup progress">
-      <p className="steps-nav__count eyebrow">
-        Step {current} of {STEPS.length}
+      <p className="small muted">
+        Step {current} of {STEPS.length} · {STEPS[current - 1]}
       </p>
-      <ol className="steps-nav__list">
-        {STEPS.map((label, i) => {
-          const n = i + 1;
-          const state = n < current ? 'done' : n === current ? 'now' : 'next';
-          return (
-            <li key={label} className={cx('steps-nav__item', `is-${state}`)} aria-current={state === 'now' ? 'step' : undefined}>
-              <span className="steps-nav__mark" aria-hidden="true">
-                {state === 'done' ? <Icon name="check" size={16} /> : n}
-              </span>
-              <span className="steps-nav__label">{label}</span>
-            </li>
-          );
-        })}
+      <ol className="steps-nav__bars" aria-hidden="true">
+        {STEPS.map((label, i) => (
+          <li key={label} className={cx('steps-nav__bar', i < current && 'is-on')} />
+        ))}
       </ol>
     </nav>
   );

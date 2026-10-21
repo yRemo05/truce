@@ -1,21 +1,20 @@
 import { ButtonLink, Page } from '@/ui';
 
 const COPY = {
-  page: { title: 'Nothing on the table here.', text: 'This page was never part of the negotiation.' },
-  truce: { title: 'No truce by that name.', text: 'The link may be mistyped, or the truce was never signed.' },
-  pair: { title: 'No pair by that link.', text: 'Ask whoever sent it for a fresh one, or start your own.' },
+  page: { title: 'Page not found', text: 'This page doesn’t exist.' },
+  truce: { title: 'Truce not found', text: 'The link may be mistyped, or this truce never started.' },
+  pair: { title: 'Link not found', text: 'Ask whoever sent it for a fresh link, or start your own.' },
 };
 
 export function NotFound({ what = 'page' }: { what?: keyof typeof COPY }) {
   const copy = COPY[what];
   return (
     <Page title="Not found" className="notfound">
-      <p className="eyebrow">Error 404</p>
-      <h1 className="display-l">{copy.title}</h1>
-      <p className="lede">{copy.text}</p>
-      <div className="notfound__actions">
-        <ButtonLink variant="primary" icon="arrow-left" href="/">
-          Back to Truce
+      <div className="card notfound__card">
+        <h1 className="h2">{copy.title}</h1>
+        <p className="muted">{copy.text}</p>
+        <ButtonLink variant="primary" icon="home" href="/">
+          Go to Truce
         </ButtonLink>
       </div>
     </Page>

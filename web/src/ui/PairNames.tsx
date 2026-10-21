@@ -1,12 +1,10 @@
 import type { Names } from '@/lib/people';
 
-/** "Maya & Deniz", with the Caslon italic ampersand. */
+/** "Maya & Deniz". */
 export function PairNames({ names }: { names: Names }) {
   return (
     <>
-      {names.a}
-      <span className="amp"> &amp; </span>
-      {names.b}
+      {names.a} &amp; {names.b}
     </>
   );
 }

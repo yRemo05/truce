@@ -5,17 +5,21 @@ import { cx } from './cx';
 function Wordmark() {
   return (
     <Link href="/" className="wordmark" aria-label="Truce, home">
+      <svg className="wordmark__mark" viewBox="0 0 24 24" aria-hidden="true">
+        <rect width="24" height="24" rx="6" fill="var(--primary)" />
+        <circle cx="9.5" cy="12" r="4.25" fill="none" stroke="var(--primary-foreground)" strokeWidth="1.75" />
+        <circle cx="14.5" cy="12" r="4.25" fill="none" stroke="var(--primary-foreground)" strokeWidth="1.75" />
+      </svg>
       <span aria-hidden="true">Truce</span>
-      <span className="wordmark__seal" aria-hidden="true" />
     </Link>
   );
 }
 
-/** The bar on every screen: wordmark, what you're looking at, and the screen's sticky actions. */
+/** The bar on every screen: wordmark, what you're looking at, and the screen's actions. */
 export function TopBar({ context, actions, sticky, below }: { context?: ReactNode; actions?: ReactNode; sticky?: boolean; below?: ReactNode }) {
   const ref = useRef<HTMLElement>(null);
 
-  // A sticky bar publishes its real height, so scroll targets and the pool rail clear it at any text size.
+  // A sticky bar publishes its real height, so scroll targets and side panels clear it at any text size.
   useEffect(() => {
     const el = ref.current;
     if (!sticky || !el) return;
@@ -35,7 +39,7 @@ export function TopBar({ context, actions, sticky, below }: { context?: ReactNod
         {context && <div className="topbar__context">{context}</div>}
         {actions && <div className="topbar__actions">{actions}</div>}
       </div>
-      {below && <div className="wrap topbar__below">{below}</div>}
+      {below && <div className="topbar__below">{below}</div>}
     </header>
   );
 }

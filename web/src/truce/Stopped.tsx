@@ -16,7 +16,7 @@ export function Stopped({ error, pairId, location }: { error: EventOf<'error'>; 
     navigate(`/t/${truceId}`);
   });
   const pairLink = (
-    <ButtonLink size="sm" variant="quiet" icon="arrow-left" href={`/p/${pairId}`}>
+    <ButtonLink size="sm" variant="ghost" icon="arrow-left" href={`/p/${pairId}`}>
       Pair page
     </ButtonLink>
   );

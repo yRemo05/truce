@@ -4,7 +4,7 @@ import { cx } from './cx';
 import { Icon, type IconName } from './Icon';
 import { Spinner } from './Spinner';
 
-type Variant = 'primary' | 'secondary' | 'quiet';
+type Variant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
 type Size = 'md' | 'sm';
 
 interface Look {

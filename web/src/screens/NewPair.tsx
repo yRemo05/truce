@@ -57,13 +57,16 @@ export function NewPair() {
 
   return (
     <Page title="Start a truce" className="setup">
-      <div className="grid setup__grid">
-        <form className="setup__form" onSubmit={submit} noValidate>
-          <h1 className="display-l">Start a truce</h1>
-          <p className="lede">Two people, one evening: a film, a table and the music.</p>
+      <div className="setup__inner">
+        <form className="card setup__card" onSubmit={submit} noValidate>
+          <Steps current={1} />
+          <header className="setup__head">
+            <h1 className="h2">Start a truce</h1>
+            <p className="muted">Tell us who it's for and where you'll eat. Next, each of you picks a few favourites.</p>
+          </header>
 
           <Segmented
-            legend="Who's it for?"
+            legend="Who is it for?"
             value={mode}
             onChange={setMode}
             options={[
@@ -97,7 +100,7 @@ export function NewPair() {
 
           <div className="setup__place">
             <TextField
-              label="Where to eat"
+              label="Where will you eat?"
               name="location"
               icon="pin"
               value={location}
@@ -106,14 +109,14 @@ export function NewPair() {
               onChange={(e) => setLocation(e.target.value)}
               onBlur={() => setTouched((t) => ({ ...t, location: true }))}
               error={show('location')}
-              hint="A city or neighbourhood. Qloo finds the restaurants there."
+              hint="A city or neighbourhood. Qloo looks for restaurants there."
             />
-            <div className="examples" role="group" aria-label="Examples">
+            <div className="examples" role="group" aria-label="Suggestions">
               {PLACES.map((p) => (
                 <button
                   key={p}
                   type="button"
-                  className={p === clean(location) ? 'example is-on' : 'example'}
+                  className={p === clean(location) ? 'btn btn--sm btn--secondary is-on' : 'btn btn--sm btn--outline'}
                   aria-pressed={p === clean(location)}
                   onClick={() => setLocation(p)}
                 >
@@ -131,10 +134,6 @@ export function NewPair() {
             </Button>
           </div>
         </form>
-
-        <aside className="setup__aside">
-          <Steps current={1} />
-        </aside>
       </div>
     </Page>
   );

@@ -19,14 +19,15 @@ import type { PairView, Side } from '@contract';
 import { useEffect, useState } from 'react';
 import { Link, useSearch } from 'wouter';
 import {
+  Avatar,
+  Badge,
   Button,
   ButtonLink,
-  Chip,
   CopyLink,
   ErrorNotice,
   Icon,
+  InfoTip,
   LedgerMeter,
-  Monogram,
   Page,
   PairNames,
   pullSentence,
@@ -34,6 +35,7 @@ import {
   Skeleton,
 } from '@/ui';
 import { isPassMode, withPass } from '@/lib/flow';
+import { EXPLAIN } from '@/lib/glossary';
 import { dayMonth } from '@/lib/format';
 import { modeLabel, monograms, possessive, SIDES } from '@/lib/people';
 import { absolute } from '@/lib/share';
@@ -48,24 +50,24 @@ function Person({ pair, side, pass }: { pair: PairView; side: Side; pass: boolea
   const href = withPass(`/p/${pair.id}/${side}`, pass);
   return (
     <li className="person">
-      <Monogram side={side} letters={monograms(pair.names)[side]} size="lg" />
+      <Avatar side={side} letters={monograms(pair.names)[side]} size="lg" />
       <div className="person__text">
         <p className="person__name">{name}</p>
         {ready ? (
-          <Chip tone="ok" icon="check-circle">
-            Picks in
-          </Chip>
+          <Badge variant="success" icon="check">
+            Ready
+          </Badge>
         ) : (
-          <Chip icon="pencil">Still picking</Chip>
+          <Badge variant="secondary">Still picking</Badge>
         )}
       </div>
       {ready ? (
-        <ButtonLink size="sm" variant="quiet" icon="pencil" href={href}>
-          Redo
+        <ButtonLink size="sm" variant="ghost" icon="pencil" href={href}>
+          Change
         </ButtonLink>
       ) : (
         <ButtonLink size="sm" iconEnd="arrow-right" href={href}>
-          Add picks
+          Add favourites
         </ButtonLink>
       )}
     </li>
@@ -79,7 +81,7 @@ function Tonight({ pair, running, pass }: { pair: PairView; running: string | nu
 
   return (
     <section className="card tonight" aria-labelledby="tonight-title">
-      <SectionHeader icon="calendar" id="tonight-title" title="Tonight" meta={both ? 'Both sides are in.' : 'Each of you picks what you love, privately.'} />
+      <SectionHeader icon="calendar" id="tonight-title" title="Tonight" meta={both ? 'You’re both ready.' : 'Each of you picks your favourites, privately.'} />
       <ul className="people">
         {SIDES.map((side) => (
           <Person key={side} pair={pair} side={side} pass={pass} />
@@ -104,9 +106,9 @@ function Tonight({ pair, running, pass }: { pair: PairView; running: string | nu
         {running ? (
           <>
             <ButtonLink variant="primary" icon="eye" href={`/t/${running}`}>
-              Watch the truce
+              Watch the talks
             </ButtonLink>
-            <p className="small muted">The agents are at it now.</p>
+            <p className="small muted">The agents are talking now.</p>
           </>
         ) : (
           <>
@@ -131,15 +133,24 @@ function Ledger({ pair }: { pair: PairView }) {
   const entries = [...pair.ledger.entries].reverse();
   return (
     <section className="card ledger-card" aria-labelledby="ledger-title">
-      <SectionHeader icon="scale" id="ledger-title" title="The ledger" meta="Who gave ground, and how that tilts the next truce." />
+      <SectionHeader
+        icon="scale"
+        id="ledger-title"
+        title="Fairness ledger"
+        info={
+          <InfoTip label="What the fairness ledger does">
+            {EXPLAIN.ledger}
+          </InfoTip>
+        }
+      />
       <LedgerMeter names={pair.names} letters={letters} alphaA={pair.ledger.alphaA} tilt={pair.ledger.tilt} owed={pair.ledger.owed} />
 
-      <h3 className="eyebrow history__title">
+      <h3 className="history__title">
         <Icon name="calendar" size={16} />
         Past evenings
       </h3>
       {entries.length === 0 ? (
-        <p className="history__empty small muted">No evenings yet. The first truce starts the ledger at even.</p>
+        <p className="history__empty small muted">No evenings yet. The ledger starts even.</p>
       ) : (
         <ol className="history">
           {entries.map((e) => {
@@ -152,7 +163,7 @@ function Ledger({ pair }: { pair: PairView }) {
                   <span className="history__who small muted">
                     {gave ? (
                       <>
-                        <Monogram side={gave} letters={letters[gave]} size="xs" />
+                        <Avatar side={gave} letters={letters[gave]} size="sm" />
                         {pair.names[gave]} gave ground
                       </>
                     ) : (
@@ -213,7 +224,7 @@ export function PairHome({ pairId }: { pairId: string }) {
       context={
         pair && (
           <span className="pair__bar">
-            <Chip icon={pair.mode === 'couple' ? 'heart' : 'users'}>{modeLabel(pair.mode)}</Chip>
+            <Badge variant="outline" icon={pair.mode === 'couple' ? 'heart' : 'users'}>{modeLabel(pair.mode)}</Badge>
             <span className="small muted pair__place">
               <Icon name="pin" size={16} />
               {pair.location}
@@ -222,7 +233,7 @@ export function PairHome({ pairId }: { pairId: string }) {
         )
       }
     >
-      <h1 className="display-l pair__title">
+      <h1 className="h2 pair__title">
         {pair ? (
           <PairNames names={pair.names} />
         ) : (

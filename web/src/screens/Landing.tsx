@@ -3,34 +3,27 @@
  *
  * Inventory, by priority:
  *   primary   — Try the demo: one tap to a live negotiation (POST /api/demo)
- *   secondary — Start a truce (→ /new)
- *   info      — what Truce is, in one breath; how to read a truce (agent / Qloo / referee);
- *               how it works in four steps; the Qloo credit
+ *   secondary — Start your own (→ /new)
+ *   info      — what Truce does, in plain words; a real message from a truce; three steps
  *
- * Viewport budget: at 1440×900 the headline, the breath, both doors and the
- * specimen move all sit above the fold; the four steps start just under it.
- * At 390×844 the headline, breath and both doors fit; the specimen follows.
- *
- * Grid: 12 columns — copy in 1–7, the specimen (a real MoveCard) in 8–12,
- * dropped 4rem so the headline owns the top-left. Steps run in four columns
- * under a hairline. Phone: one column, same order.
- *
- * Icons: play (demo), plus (start), arrow-down (how it works), quote / data /
- * gavel (the three voices), plus whatever the specimen card carries.
+ * Viewport budget: at 1440×900 the headline, the two buttons and the sample
+ * message sit above the fold; the steps follow. At 390×844 the headline and
+ * both buttons fit.
+ * Grid: 12 columns — copy in 1–6, the sample message in 7–12. Phone: one column.
+ * Icons: play (demo), plus (start), users / chat / check (the three steps).
  */
 import { useLocation } from 'wouter';
 import { api } from '@/api';
-import { Button, ButtonLink, ErrorNotice, Icon, Page } from '@/ui';
+import { Button, ButtonLink, ErrorNotice, Icon, Page, type IconName } from '@/ui';
 import { useAction } from '@/lib/useAction';
 import { TruceContext } from '@/truce/context';
 import { MoveCard } from '@/truce/Moves';
 import { specimenCtx, specimenMove } from '@/truce/specimen';
 
-const STEPS = [
-  { n: 'I', title: 'You each name what you love', text: 'One to three films, restaurants and artists. Search, tap, done.' },
-  { n: 'II', title: 'Qloo scouts a shared pool', text: 'About eight options a slot: some from your taste, some from theirs, and bridges found from both at once.' },
-  { n: 'III', title: 'Two agents haggle', text: 'Six turns and a last call. A referee in plain code checks every move and rules if they deadlock.' },
-  { n: 'IV', title: 'The ledger remembers', text: 'Whoever gave more ground tonight gets more pull next time. Nobody is always the one who gives in.' },
+const STEPS: { icon: IconName; title: string; text: string }[] = [
+  { icon: 'users', title: 'Each of you picks a few favourites', text: 'Films, restaurants and music you love. It takes a minute each.' },
+  { icon: 'exchange', title: 'Two AI agents negotiate', text: 'Each agent speaks for one of you, using Qloo’s taste data. A referee keeps it fair.' },
+  { icon: 'check-circle', title: 'You get one plan', text: 'A film, a restaurant and music you’ll both enjoy. Next time, whoever gave more ground gets more say.' },
 ];
 
 export function Landing() {
@@ -41,93 +34,50 @@ export function Landing() {
   });
 
   return (
-    <Page
-      title={null}
-      className="landing"
-      actions={
-        <a className="bar-link" href="#how">
-          How it works
-        </a>
-      }
-    >
+    <Page title={null} className="landing">
       <section className="landing__hero grid" aria-labelledby="hero-title">
         <div className="landing__copy">
-          <p className="eyebrow">For couples and best friends</p>
-          <h1 id="hero-title" className="display-xl landing__title">
-            Peace talks for <em>tonight.</em>
+          <h1 id="hero-title" className="h1">
+            Plan tonight together
           </h1>
           <p className="lede landing__lede">
-            You each name a few things you love. Two AI agents, grounded in Qloo&rsquo;s taste graph, haggle over a film, a
-            restaurant and the music until you both say yes, and a ledger remembers who gave ground last time.
+            Two AI agents find an evening you&rsquo;ll both enjoy: a film, a restaurant and music. Each agent speaks for one of
+            you and negotiates until you both say yes.
           </p>
-
-          <div className="landing__doors">
-            <div className="door">
-              <Button variant="primary" icon="play" busy={demo.busy} onClick={() => void demo.run()}>
-                Try the demo
-              </Button>
-              <p className="door__note small muted">Maya and Deniz, mid-argument. Starts at once.</p>
-            </div>
-            <div className="door">
-              <ButtonLink icon="plus" href="/new">
-                Start a truce
-              </ButtonLink>
-              <p className="door__note small muted">For the two of you. About two minutes.</p>
-            </div>
+          <div className="landing__actions">
+            <Button variant="primary" icon="play" busy={demo.busy} onClick={() => void demo.run()}>
+              Try the demo
+            </Button>
+            <ButtonLink variant="outline" icon="plus" href="/new">
+              Start your own
+            </ButtonLink>
           </div>
-
-          {demo.error && (
-            <div className="landing__error">
-              <ErrorNotice error={demo.error} title="The demo didn't start" />
-            </div>
-          )}
+          <p className="small muted">The demo plays out a truce between Maya and Deniz. It takes about half a minute.</p>
+          {demo.error && <ErrorNotice error={demo.error} title="The demo didn't start" />}
         </div>
 
-        <aside className="landing__specimen" aria-labelledby="specimen-title">
-          <p className="eyebrow" id="specimen-title">
-            How to read a truce
-          </p>
-          <div className="specimen">
-            <TruceContext.Provider value={specimenCtx}>
-              <MoveCard move={specimenMove} live={false} />
-            </TruceContext.Provider>
-          </div>
-          <ul className="legend">
-            <li>
-              <Icon name="quote" size={16} />
-              <span>
-                <span className="speech legend__sample">Italic serif</span> is an agent talking. Its words, not facts.
-              </span>
-            </li>
-            <li>
-              <Icon name="data" size={16} />
-              <span>
-                <span className="data legend__sample">Mono</span> is Qloo&rsquo;s data: scores, and the picks behind them.
-              </span>
-            </li>
-            <li>
-              <Icon name="gavel" size={16} />
-              <span>
-                <span className="legend__sample legend__sample--referee">Referee</span> notes are plain code keeping it honest.
-              </span>
-            </li>
-          </ul>
-        </aside>
+        <div className="landing__sample" aria-label="An example message from a truce">
+          <TruceContext.Provider value={specimenCtx}>
+            <MoveCard move={specimenMove} live={false} />
+          </TruceContext.Provider>
+        </div>
       </section>
 
-      <section className="landing__how" id="how" aria-labelledby="how-title">
-        <h2 id="how-title" className="eyebrow landing__how-title">
-          <Icon name="arrow-down" size={16} />
+      <section className="landing__how" aria-labelledby="how-title">
+        <h2 id="how-title" className="h3">
           How it works
         </h2>
         <ol className="steps">
-          {STEPS.map((s) => (
-            <li key={s.n} className="step">
-              <span className="step__n" aria-hidden="true">
-                {s.n}
+          {STEPS.map((s, i) => (
+            <li key={s.title} className="card step">
+              <span className="step__icon" aria-hidden="true">
+                <Icon name={s.icon} size={20} />
               </span>
-              <h3 className="step__title">{s.title}</h3>
-              <p className="step__text small muted">{s.text}</p>
+              <h3 className="step__title">
+                <span className="visually-hidden">Step {i + 1}: </span>
+                {s.title}
+              </h3>
+              <p className="small muted">{s.text}</p>
             </li>
           ))}
         </ol>

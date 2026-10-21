@@ -45,10 +45,13 @@ export function HowToPlay({ pairId }: { pairId: string }) {
 
   return (
     <Page title="How you'll play" className="setup">
-      <div className="grid setup__grid">
-        <div className="setup__form">
-          <h1 className="display-l">How you&rsquo;ll play</h1>
-          <p className="lede">Each of you tells Truce what you love. Nobody sees the other&rsquo;s picks.</p>
+      <div className="setup__inner">
+        <div className="card setup__card">
+          <Steps current={2} />
+          <header className="setup__head">
+            <h1 className="h2">How will you play?</h1>
+            <p className="muted">Each of you picks your favourites. Neither of you sees the other&rsquo;s.</p>
+          </header>
 
           {error && <ErrorNotice error={error} title="Couldn't load this pair" onRetry={reload} />}
 
@@ -58,7 +61,7 @@ export function HowToPlay({ pairId }: { pairId: string }) {
               <label key={o.value} className={cx('way', way === o.value && 'is-on')}>
                 <input type="radio" name="way" className="visually-hidden" checked={way === o.value} onChange={() => setWay(o.value)} />
                 <span className="way__icon">
-                  <Icon name={o.icon} size={24} />
+                  <Icon name={o.icon} size={20} />
                 </span>
                 <span className="way__title">{o.title}</span>
                 <span className="way__text small muted">{o.text || <Skeleton h="2.5rem" />}</span>
@@ -72,7 +75,7 @@ export function HowToPlay({ pairId }: { pairId: string }) {
           {way === 'link' && names && (
             <div className="setup__link">
               <p className="small">
-                <strong>Send {names.b} this link.</strong> Open it again yourself any time to see who&rsquo;s ready.
+                Send {names.b} this link. You can open it too, to see who&rsquo;s ready.
               </p>
               <CopyLink url={link} shareTitle="Our truce" shareText={`${names.a} started a truce for tonight. Add your picks:`} />
             </div>
@@ -85,14 +88,10 @@ export function HowToPlay({ pairId }: { pairId: string }) {
               disabled={!names}
               onClick={() => navigate(withPass(`/p/${pairId}/a`, way === 'pass'))}
             >
-              {names ? `Start ${possessive(names.a)} picks` : 'Start the picks'}
+              {names ? `Continue to ${possessive(names.a)} favourites` : 'Continue'}
             </Button>
           </div>
         </div>
-
-        <aside className="setup__aside">
-          <Steps current={2} />
-        </aside>
       </div>
     </Page>
   );

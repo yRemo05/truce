@@ -5,7 +5,7 @@ import { TopBar } from './TopBar';
 
 export function useTitle(title: string | null) {
   useEffect(() => {
-    document.title = title ? `${title} · Truce` : 'Truce · Peace talks for tonight';
+    document.title = title ? `${title} · Truce` : 'Truce · Plan tonight together';
   }, [title]);
 }
 
