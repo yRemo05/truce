@@ -26,7 +26,7 @@ import { QlooError, type QlooClient } from '../qloo/client';
 import { locate, searchEntities, type Locality } from '../qloo/queries';
 import { KIND_OF_SLOT, MAX_PEOPLE, MIN_PEOPLE, SIDES, SLOTS, perSide, type Side, type Slot } from '../truce/types';
 import { eveningIcs } from './calendar';
-import type { Store } from './db';
+import { INTERRUPTED, type Store } from './db';
 import { createDemos } from './demo';
 import { clientOf, createLimiter, type Action } from './limits';
 import { costOf, newId, pairLedger, UserFacingError, type Runner } from './runner';
@@ -263,6 +263,9 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     if (!truce) return fail(c, 404, 'not_found', 'This truce does not exist.');
     const pair = store.pair(truce.pairId)!;
     const said = store.checkinsOf(truce.id);
+    // A failed truce from before restarts closed their logs still ends, for the page, in the interruption.
+    const last = truce.events.at(-1)?.type;
+    const events = truce.status === 'failed' && last !== 'error' && last !== 'ledger' ? [...truce.events, INTERRUPTED] : truce.events;
     return c.json<TruceView>({
       id: truce.id,
       pairId: truce.pairId,
@@ -274,7 +277,7 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
       createdAt: truce.createdAt,
       endedAt: truce.finishedAt,
       checkedIn: perSide(pair.members, (s) => said.some((x) => x.side === s)),
-      events: truce.events,
+      events,
     });
   });
 
@@ -329,11 +332,12 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
         wake?.();
       });
       if (!following) {
-        // Finished (or cut off by a restart): replay what was stored and close.
-        for (const e of store.truce(id)!.events) await send(e);
-        if (truce.status === 'running') {
-          await send({ type: 'error', code: 'interrupted', message: 'This truce was interrupted. Please start a new one.', retryable: true });
-        }
+        // Finished (or cut off): replay what was stored and close. A log that
+        // doesn't end the way a truce ends gets the interruption, so no page waits on it.
+        const events = store.truce(id)!.events;
+        for (const e of events) await send(e);
+        const last = events.at(-1)?.type;
+        if (last !== 'ledger' && last !== 'error') await send(INTERRUPTED);
         return;
       }
       stream.onAbort(() => following.stop());

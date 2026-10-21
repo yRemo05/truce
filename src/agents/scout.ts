@@ -59,6 +59,8 @@ export interface ScoutSetup {
   hotspot: () => Promise<Hotspot | null>;
   /** Ids already added by any agent (the agents scout at the same time). */
   taken: Set<string>;
+  /** Places left per slot on the table, shared by every agent. */
+  room: Record<Slot, number>;
   emit: (e: ScoutEvent) => void;
   onUsage?: (u: UsageReport) => void;
 }
@@ -234,7 +236,9 @@ export async function scout(setup: ScoutSetup, side: Side): Promise<{ slot: Slot
     const hit = found.get(input.name.trim().toLowerCase());
     if (!hit || hit.slot !== input.slot) return `"${input.name}" isn't among your ${input.slot} finds. Use a name exactly as search_qloo listed it.`;
     if (setup.taken.has(hit.item.id)) return `${hit.item.name} is already on the table.`;
+    if (setup.room[hit.slot] <= 0) return `The table is full for ${hit.slot}. Add for another slot, or stop.`;
     setup.taken.add(hit.item.id);
+    setup.room[hit.slot]--;
     const why = clip(input.why, 160);
     const item: PoolItem = { ...hit.item, scoutedBy: side, scoutWhy: why };
     added.push({ slot: hit.slot, item });

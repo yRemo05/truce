@@ -16,6 +16,14 @@ import { membersOf, type PerSide, type Side, type Slot } from '../truce/types';
 
 const VERSION = 2;
 
+/** The last event of a truce cut off by a restart, so every reader sees it end. */
+export const INTERRUPTED: StreamEvent = {
+  type: 'error',
+  code: 'interrupted',
+  message: 'This truce was interrupted. Please start a new one.',
+  retryable: true,
+};
+
 const SCHEMA = `
 create table if not exists pairs (
   id text primary key,
@@ -170,7 +178,7 @@ export function openStore(dataDir: string) {
     fail: db.prepare(
       "update truces set status = 'failed', finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') where id = ?",
     ),
-    failRunning: db.prepare("update truces set status = 'failed' where status = 'running'"),
+    running: db.prepare("select id, events from truces where status = 'running'"),
     trucesSince: db.prepare("select count(*) as n from truces where brain = 'claude' and created_at >= ?"),
     upsertCheckin: db.prepare(
       `insert into checkins (truce_id, side, went, ratings) values (?, ?, ?, ?)
@@ -220,8 +228,12 @@ export function openStore(dataDir: string) {
   });
   const emptyLearned = (): Learned => ({ loved: { film: [], restaurant: [], music: [] }, avoided: [] });
 
-  // A truce still "running" when the process starts was cut off by a restart.
-  q.failRunning.run();
+  // A truce still "running" when the process starts was cut off by a restart:
+  // it fails, and its log ends with the interruption so pages stop waiting.
+  for (const r of q.running.all() as { id: string; events: string }[]) {
+    q.setEvents.run(JSON.stringify([...JSON.parse(r.events), INTERRUPTED]), r.id);
+    q.fail.run(r.id);
+  }
 
   return {
     close: () => db.close(),

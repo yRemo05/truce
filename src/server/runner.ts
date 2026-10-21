@@ -243,15 +243,20 @@ export function createRunner(deps: RunnerDeps) {
       const vetoed = constraints.excludeEntities.length > 0 || constraints.maxPrice !== null || SLOTS.some((s) => constraints.excludeTags[s].length > 0);
       const empty = SLOTS.filter((s) => candidates[s].length === 0);
       if (empty.length) {
-        throw empty.includes('restaurant')
+        // With vetoes in play the fix is loosening one (no_options), not another place (no_restaurants).
+        throw empty.includes('restaurant') && !vetoed
           ? new UserFacingError(
-              vetoed
-                ? `Qloo found no restaurants open tonight in "${pair.location}" that fit everyone's vetoes. Loosen a veto or try a nearby neighbourhood.`
-                : `Qloo found no restaurants open tonight for "${pair.location}". Try a city or neighbourhood name like "Manhattan" or "Istanbul".`,
+              `Qloo found no restaurants open tonight for "${pair.location}". Try a city or neighbourhood name like "Manhattan" or "Istanbul".`,
               422,
               'no_restaurants',
             )
-          : new UserFacingError(
+          : empty.includes('restaurant')
+            ? new UserFacingError(
+                `Qloo found no restaurants open tonight in "${pair.location}" that fit everyone's vetoes. Loosen a veto in someone's note, or try a nearby neighbourhood.`,
+                422,
+                'no_options',
+              )
+            : new UserFacingError(
               `Qloo found no ${empty.join(' or ')} options for these tastes${vetoed ? ' and vetoes' : ''}. Try adding another favourite${vetoed ? ' or loosening a veto' : ''}.`,
               422,
               'no_options',
@@ -262,6 +267,8 @@ export function createRunner(deps: RunnerDeps) {
         push({ type: 'status', phase: 'scouting', brain });
         let hotspot: Promise<Hotspot | null> | null = null;
         const taken = new Set<string>();
+        // Shared by the agents: an add only goes through while its slot has room, so every find announced reaches the table.
+        const room = Object.fromEntries(SLOTS.map((s) => [s, MAX_PER_SLOT - candidates[s].length])) as Record<Slot, number>;
         const finds = await Promise.all(
           members.map((side) =>
             scout(
@@ -281,6 +288,7 @@ export function createRunner(deps: RunnerDeps) {
                 hotspot: () =>
                   (hotspot ??= findHotspot(qloo, [...new Set(members.flatMap((s) => signalOf(at(people, s))))], options.place).catch(() => null)),
                 taken,
+                room,
                 emit: push,
                 onUsage: (u) => usage.push(u),
               },
@@ -289,7 +297,7 @@ export function createRunner(deps: RunnerDeps) {
           ),
         );
         for (const { slot, item } of finds.flat()) {
-          if (candidates[slot].length < MAX_PER_SLOT && !candidates[slot].some((i) => i.id === item.id)) candidates[slot].push(item);
+          if (!candidates[slot].some((i) => i.id === item.id)) candidates[slot].push(item);
         }
       }
 
