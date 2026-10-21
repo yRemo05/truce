@@ -23,6 +23,7 @@ import { useLocation, useSearch } from 'wouter';
 import { api } from '@/api';
 import { Avatar, Badge, Button, ErrorNotice, Notice, Page, SectionHeader } from '@/ui';
 import { isPassMode, nextUp, withPass } from '@/lib/flow';
+import { rememberSide } from '@/lib/mine';
 import { monograms, nameOf, possessive } from '@/lib/people';
 import { bySlot, SLOTS } from '@/lib/truce';
 import { useAction } from '@/lib/useAction';
@@ -67,6 +68,7 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
       ...(foods.length ? { foods } : {}),
       ...(note ? { brief: note } : {}),
     });
+    rememberSide(pairId, side);
     if (note) setUnderstood({ ready: saved.ready, brief: saved.brief });
     else moveOn(saved.ready);
   });

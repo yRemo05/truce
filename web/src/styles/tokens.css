@@ -28,6 +28,12 @@
   --ring: #6ea8a3;
   --track: #273836;
 
+  /* The talks as a chat: the pane, others' bubbles, and your own agent's. */
+  --chat-bg: #111817;
+  --bubble-in: #1b2423;
+  --bubble-own: #1c3431;
+  --pill: #19211f;
+
   /* Each person's mark */
   --person-a: #6ea8a3;
   --person-b: #d3dcdb;

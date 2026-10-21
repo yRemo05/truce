@@ -63,7 +63,7 @@ export function Landing() {
           {demo.error && <ErrorNotice error={demo.error} title="The demo didn't start" />}
         </div>
 
-        <div className="landing__sample" aria-label="An example message from a truce">
+        <div className="landing__sample chat" aria-label="An example message from a truce">
           <TruceContext.Provider value={specimenCtx}>
             <MoveCard move={specimenMove} live={false} />
           </TruceContext.Provider>

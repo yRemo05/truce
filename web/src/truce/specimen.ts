@@ -33,6 +33,7 @@ const items = [
 
 export const specimenCtx: TruceCtx = {
   members: ['a', 'b', 'c'],
+  mine: null,
   names: { a: 'Ada', b: 'Kerem', c: 'Lina' },
   letters: { a: 'A', b: 'K', c: 'L' },
   location: 'Istanbul',

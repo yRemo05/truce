@@ -5,6 +5,8 @@ import type { Names } from '@/lib/people';
 export interface TruceCtx {
   /** Everyone taking part, in seat order. */
   members: Side[];
+  /** The person this browser filled in, whose agent's messages sit on the right; null for a guest. */
+  mine: Side | null;
   names: Names;
   letters: Names;
   location: string;

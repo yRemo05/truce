@@ -31,10 +31,12 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { Badge, Button, ErrorNotice, Icon, InfoTip, Notice, Page, PairNames, Spinner } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
+import { mySide } from '@/lib/mine';
 import { agentOf, groupNames, monograms, nameOf } from '@/lib/people';
 import {
   errorTab,
   isPhaseTab,
+  isTurnEntry,
   liveTab,
   PHASE_LABEL,
   PHASE_TABS,
@@ -95,14 +97,18 @@ function PhaseBadge({ state, link }: { state: TruceState; link: LinkState }) {
   }
 }
 
+/** The agent behind a line of the talks; null for the referee's notes. */
+const speaker = (entry: FeedEntry | undefined) => (entry && isTurnEntry(entry) ? entry.event.side : null);
+
 /** One line of the talks. Memoised: the reducer only appends, so earlier entries never re-render. */
-const FeedItem = memo(function FeedItem({ entry }: { entry: FeedEntry }) {
+const FeedItem = memo(function FeedItem({ entry, first }: { entry: FeedEntry; first: boolean }) {
+  const turn = isTurnEntry(entry);
   return (
-    <li className="feed__item">
+    <li className={turn ? (first ? 'feed__item feed__item--first' : 'feed__item') : 'feed__item feed__item--sys'}>
       {entry.kind === 'move' ? (
-        <MoveCard move={entry.event} live={entry.live} />
+        <MoveCard move={entry.event} first={first} live={entry.live} />
       ) : entry.kind === 'declined' ? (
-        <DeclinedCard event={entry.event} live={entry.live} />
+        <DeclinedCard event={entry.event} first={first} live={entry.live} />
       ) : (
         <RefereeNote entry={entry} />
       )}
@@ -127,6 +133,8 @@ function announcement(entry: FeedEntry | undefined, ctx: TruceCtx): string {
       return `The referee struck a move by ${agent(entry.event.side)}.`;
     case 'lastcall':
       return 'Last call.';
+    case 'finalround':
+      return 'Final round.';
     case 'agreement':
       return 'Agreed.';
     case 'ruling':
@@ -191,6 +199,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
     () =>
       meta && {
         members: meta.members,
+        mine: mySide(meta.pairId),
         names: meta.names,
         letters: monograms(meta.names, meta.members),
         location: meta.location,
@@ -266,6 +275,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
         stickyBar
         skipLabel="Skip to the truce"
         className="truce"
+        wide
         context={
           <div className="truce-bar">
             <p className="truce-bar__names">
@@ -340,17 +350,19 @@ export function TrucePage({ truceId }: { truceId: string }) {
           {tab === 'discussion' && (
             <div className="phase phase--discussion">
               {feed.length > 0 ? (
-                <ol className="feed" aria-label="The talks">
-                  {feed.map((entry) => (
-                    <FeedItem key={entry.key} entry={entry} />
-                  ))}
-                  {state.thinking && (
-                    <li className="feed__item">
-                      <ThinkingCard side={state.thinking.side} struck={state.thinking.struck} />
-                    </li>
-                  )}
-                  <li ref={setFeedEnd} className="feed__end" aria-hidden="true" />
-                </ol>
+                <div className="chat">
+                  <ol className="feed" aria-label="The talks">
+                    {feed.map((entry, i) => (
+                      <FeedItem key={entry.key} entry={entry} first={speaker(entry) !== speaker(feed[i - 1])} />
+                    ))}
+                    {state.thinking && (
+                      <li className="feed__item">
+                        <ThinkingCard side={state.thinking.side} struck={state.thinking.struck} first={speaker(feed[feed.length - 1]) !== state.thinking.side} />
+                      </li>
+                    )}
+                    <li ref={setFeedEnd} className="feed__end" aria-hidden="true" />
+                  </ol>
+                </div>
               ) : (
                 !state.error && (
                   <Notice tone="info" title="The talks haven’t started">

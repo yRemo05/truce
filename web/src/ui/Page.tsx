@@ -16,16 +16,18 @@ interface PageProps {
   /** A second row in the bar, e.g. the turn track. */
   below?: ReactNode;
   stickyBar?: boolean;
+  /** Span the window with a modest gutter instead of the centred column (the truce page). */
+  wide?: boolean;
   skipLabel?: string;
   className?: string;
   children: ReactNode;
 }
 
 /** The shell every screen shares: bar, main landmark, footer credit. */
-export function Page({ title, context, actions, below, stickyBar, skipLabel = 'Skip to content', className, children }: PageProps) {
+export function Page({ title, context, actions, below, stickyBar, wide, skipLabel = 'Skip to content', className, children }: PageProps) {
   useTitle(title);
   return (
-    <div className="page">
+    <div className={cx('page', wide && 'page--wide')}>
       <a className="skip-link" href="#main">
         {skipLabel}
       </a>

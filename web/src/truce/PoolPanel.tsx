@@ -6,7 +6,6 @@ import { agentOf, nameOf, possessive } from '@/lib/people';
 import { isBridge, SLOT_ICON, SLOT_LABEL, SLOTS, type Bundle } from '@/lib/truce';
 import { Because } from './Because';
 import { useTruceCtx } from './context';
-import { subLine } from './Evening';
 import { Hours } from './Hours';
 import { Serves } from './Serves';
 
@@ -22,6 +21,10 @@ const FACT_LABEL: Record<string, string> = {
   rating: 'Rated',
   cuisine: 'About',
 };
+
+/** A row's second line: where a restaurant is (the neighbourhood, else the address), or a film's or artist's hint. */
+const subLine = (item: CardItem): string | null =>
+  item.slot === 'restaurant' ? (item.facts.neighborhood ?? item.disambiguation ?? null) : (item.disambiguation ?? item.facts.genres ?? null);
 
 type Mark = 'table' | 'plan' | null;
 

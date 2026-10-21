@@ -27,6 +27,8 @@ export type FeedEntry = { key: string; live: boolean } & (
   | { kind: 'rejected'; event: EventOf<'rejected'> }
   /** The referee opens the last calls: the first thinking event after the last turn. */
   | { kind: 'lastcall'; event: EventOf<'thinking'>; offer: MoveEvent | null }
+  /** Each agent's last turn begins: the referee now shows the mover a shortlist. */
+  | { kind: 'finalround'; event: EventOf<'thinking'> }
   | { kind: 'declined'; event: EventOf<'declined'> }
   | { kind: 'agreement'; event: EventOf<'agreement'> }
   | { kind: 'ruling'; event: EventOf<'ruling'> }
@@ -110,7 +112,10 @@ export function applyEvent(state: TruceState, { event, live }: Arrival): TruceSt
     case 'thinking': {
       const thinking = { side: event.side, turn: event.turn, struck: false };
       const opensLastCall = isLastCall(event.turn, s.turns) && !s.feed.some((e) => e.kind === 'lastcall');
-      return opensLastCall ? { ...add({ kind: 'lastcall', key, live, event, offer: s.onTable }), thinking } : { ...s, thinking };
+      if (opensLastCall) return { ...add({ kind: 'lastcall', key, live, event, offer: s.onTable }), thinking };
+      const seats = s.start?.order.length ?? 0;
+      const opensFinal = seats > 0 && event.turn === s.turns - seats + 1 && !s.feed.some((e) => e.kind === 'finalround');
+      return opensFinal ? { ...add({ kind: 'finalround', key, live, event }), thinking } : { ...s, thinking };
     }
     case 'rejected':
       return {
@@ -144,7 +149,7 @@ export const isLastCall = (turn: number, turns: number) => turn > turns;
 export const turnLabel = (turn: number, turns: number) => (isLastCall(turn, turns) ? 'Last call' : `Turn ${turn}`);
 
 type TurnEntry = Extract<FeedEntry, { kind: 'move' | 'declined' }>;
-const isTurnEntry = (e: FeedEntry): e is TurnEntry => e.kind === 'move' || e.kind === 'declined';
+export const isTurnEntry = (e: FeedEntry): e is TurnEntry => e.kind === 'move' || e.kind === 'declined';
 
 /** One move per turn, in order, for the turn track. */
 export const turnsOf = (feed: readonly FeedEntry[]) =>
