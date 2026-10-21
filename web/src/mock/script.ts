@@ -340,32 +340,43 @@ export function buildTimeline(input: TimelineInput): { timeline: Timed[]; result
       : members.map((s) => ({ side: s, plan: SCOUTS[city][seat(s)]! })).filter(({ plan }) => !vetoed({ slot: plan.slot, name: plan.item }, briefs, members));
 
   if (plans.length) push(300, { type: 'status', phase: 'scouting', brain });
-  for (const { side } of plans) push(250, { type: 'scout', side, step: 'start' });
   const find = (slot: Slot, nm: string): ScoutFind => {
     const e = byName(slot, nm);
     return { id: e.id, name: e.name, imageUrl: e.imageUrl, disambiguation: e.disambiguation };
   };
-  for (const { side, plan } of plans) {
-    const own = seeds[side]?.[plan.slot] ?? [];
-    push(1100, {
-      type: 'scout',
-      side,
-      step: 'search',
-      slot: plan.slot,
-      like: own.length ? own.slice(0, 2) : (seeds[side]?.film.slice(0, 1) ?? []),
-      words: plan.words,
-      matched: plan.matched,
-      area: plan.area,
-      found: [plan.item, ...plan.found].slice(0, 5).map((nm) => find(plan.slot, nm)),
-    });
-  }
+  // The agents scout at the same time, as on the server: each one's steps on its own clock, merged in time order.
+  const agenda: Timed[] = [];
   const scouted: Row[] = [];
-  for (const { side, plan } of plans) {
+  plans.forEach(({ side, plan }, i) => {
+    const t = (ms: number) => at + ms;
+    const films = seeds[side]?.film ?? [];
+    const own = seeds[side]?.[plan.slot] ?? [];
     const why = plan.why(who(side));
-    push(900, { type: 'scout', side, step: 'add', slot: plan.slot, item: find(plan.slot, plan.item), why });
+    agenda.push({ at: t(10 * i), event: { type: 'scout', side, step: 'start' } });
+    if (films.length && plan.slot !== 'film') {
+      const found = FILMS.slice(i * 2, i * 2 + 4).map(([nm]) => find('film', nm));
+      agenda.push({ at: t(700 + 450 * i), event: { type: 'scout', side, step: 'search', slot: 'film', like: films.slice(0, 2), words: [], matched: [], area: null, found } });
+    }
+    const searchAt = 1500 + 700 * i;
+    agenda.push({
+      at: t(searchAt),
+      event: {
+        type: 'scout',
+        side,
+        step: 'search',
+        slot: plan.slot,
+        like: own.length ? own.slice(0, 2) : films.slice(0, 1),
+        words: plan.words,
+        matched: plan.matched,
+        area: plan.area,
+        found: [plan.item, ...plan.found].slice(0, 5).map((nm) => find(plan.slot, nm)),
+      },
+    });
+    agenda.push({ at: t(searchAt + 1600), event: { type: 'scout', side, step: 'add', slot: plan.slot, item: find(plan.slot, plan.item), why } });
+    agenda.push({ at: t(searchAt + 2800), event: { type: 'scout', side, step: 'done', message: plan.done(who(side)) } });
     scouted.push({ slot: plan.slot, name: plan.item, scores: plan.scores, scout: { side, why } });
-  }
-  for (const { side, plan } of plans) push(500, { type: 'scout', side, step: 'done', message: plan.done(who(side)) });
+  });
+  for (const step of agenda.sort((x, y) => x.at - y.at)) push(step.at - at, step.event);
 
   // The pool, scored for everyone and frozen before the talks.
   // No picks in a slot means no preference there; for restaurants a food counts as a pick.

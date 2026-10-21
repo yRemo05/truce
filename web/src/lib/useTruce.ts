@@ -14,7 +14,7 @@ export type Link = 'loading' | 'live' | 'reconnecting' | 'offline' | 'ended';
 /** Least time after the previous release before an event of this type shows, in ms. */
 const GAP: Partial<Record<StreamEvent['type'], number>> = {
   tastes: 900,
-  scout: 650,
+  scout: 200,
   pool: 1200,
   start: 1100,
   thinking: 450,

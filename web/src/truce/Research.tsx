@@ -1,6 +1,6 @@
 import type { Side, Slot } from '@contract';
-import { useEffect, useState } from 'react';
-import { Avatar, Badge, Icon, InfoTip, SectionHeader, Spinner, Thumb, Voice } from '@/ui';
+import { useEffect, useId, useState } from 'react';
+import { Avatar, Badge, cx, Icon, InfoTip, SectionHeader, Spinner, Thumb, Voice } from '@/ui';
 import { eveningLabel } from '@/lib/format';
 import { EXPLAIN } from '@/lib/glossary';
 import { agentOf, listNames, nameOf, possessive } from '@/lib/people';
@@ -48,30 +48,66 @@ function AddLine({ step }: { step: Extract<ScoutStep, { step: 'add' }> }) {
   );
 }
 
-/** One agent's scouting round: its searches, its finds and why, and its one line to the group. */
-function AgentScout({ side, steps }: { side: Side; steps: ScoutStep[] }) {
+/** One line for what an agent is doing right now, from its latest step. */
+function summaryOf(steps: readonly ScoutStep[]): string {
+  const last = steps[steps.length - 1];
+  if (!last || last.step === 'start') return 'Getting ready to search Qloo…';
+  if (last.step === 'search') {
+    const like = last.like.length ? ` like ${listNames(last.like.slice(0, 2))}` : '';
+    const words = !like && last.words.length ? `${last.words.join(', ')} ` : '';
+    return `Searching Qloo for ${words}${NOUN[last.slot]}${like}…`;
+  }
+  if (last.step === 'add') return `Added ${last.item.name}`;
+  const added = steps.flatMap((s) => (s.step === 'add' ? [s.item.name] : []));
+  return `Done · added ${added.length ? listNames(added) : 'nothing'}`;
+}
+
+/**
+ * One agent's scouting round as an accordion row: the header says what it's
+ * doing now, live; opening it shows every search, each find with its reason,
+ * and the agent's closing line. A row that arrives live slides in, from the
+ * left for the first seat, the right for the second, and so on.
+ */
+function AgentScout({ side, steps, seat, slide }: { side: Side; steps: ScoutStep[]; seat: number; slide: boolean }) {
   const { names, letters } = useTruceCtx();
+  const [open, setOpen] = useState(false);
+  const bodyId = useId();
   const done = steps.find((s): s is Extract<ScoutStep, { step: 'done' }> => s.step === 'done');
+  const agent = agentOf(nameOf(names, side));
   return (
-    <li className="scout">
-      <p className="scout__head">
+    <li className={cx('scout', `p-${side}`, slide && (seat % 2 === 0 ? 'scout--from-left' : 'scout--from-right'), open && 'is-open')}>
+      <button type="button" className="scout__head" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((o) => !o)}>
         <Avatar side={side} letters={nameOf(letters, side)} size="sm" />
-        <span className="scout__who">{agentOf(nameOf(names, side))}</span>
-        <Voice kind="agent" />
+        <span className="scout__title">
+          <span className="scout__who">
+            {agent}
+            <Voice kind="agent" />
+          </span>
+          <span className="scout__now" aria-live="polite">
+            {summaryOf(steps)}
+          </span>
+        </span>
         {done ? (
-          <Badge variant="success" icon="check">
+          <Badge variant="success" icon="check" className="scout__status">
             Done
           </Badge>
         ) : (
-          <Badge icon="search">Scouting</Badge>
+          <Badge icon="search" className="scout__status">
+            Scouting
+          </Badge>
         )}
-      </p>
-      <ul className="scout__steps">
-        {steps.map((step, i) =>
-          step.step === 'search' ? <SearchLine key={i} step={step} /> : step.step === 'add' ? <AddLine key={i} step={step} /> : null,
-        )}
-      </ul>
-      {done?.message && <p className="scout__done small">{done.message}</p>}
+        <Icon name="chevron-down" size={16} className="scout__chevron" />
+      </button>
+      <div id={bodyId} className="scout__body" inert={!open}>
+        <div className="scout__inner">
+          <ul className="scout__steps">
+            {steps.map((step, i) =>
+              step.step === 'search' ? <SearchLine key={i} step={step} /> : step.step === 'add' ? <AddLine key={i} step={step} /> : null,
+            )}
+          </ul>
+          {done?.message && <p className="scout__done small">{done.message}</p>}
+        </div>
+      </div>
     </li>
   );
 }
@@ -165,10 +201,12 @@ function Tastes({ state }: { state: TruceState }) {
   );
 }
 
-/** Each agent's scouting: what it searched for, what it added and why. */
+/** Each agent's scouting, one accordion row per agent: what it's doing now, and on opening, what it searched for and added. */
 function Scouts({ state }: { state: TruceState }) {
   const { members } = useTruceCtx();
   const scouting = members.filter((s) => (state.scouts[s] ?? []).length > 0);
+  // Rows already here when the tab opened sit in place; only rows that arrive while someone watches slide in.
+  const [present] = useState(() => new Set(scouting));
   if (!scouting.length && state.phase !== 'scouting') return null;
   const finds = findsOf(state);
   return (
@@ -181,9 +219,9 @@ function Scouts({ state }: { state: TruceState }) {
         meta={state.phase === 'scouting' ? undefined : `${finds} ${finds === 1 ? 'pick' : 'picks'} added to the options.`}
         actions={state.phase === 'scouting' ? <Spinner size={20} label="Scouting" /> : undefined}
       />
-      <ul className="scouts__list" aria-live="polite">
+      <ul className="scouts__list">
         {scouting.map((s) => (
-          <AgentScout key={s} side={s} steps={state.scouts[s] ?? []} />
+          <AgentScout key={s} side={s} steps={state.scouts[s] ?? []} seat={members.indexOf(s)} slide={!present.has(s)} />
         ))}
       </ul>
     </section>
