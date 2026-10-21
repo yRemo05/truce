@@ -15,7 +15,8 @@
     "test:ledger": "tsx scripts/test-ledger.ts",
     "probe": "node --env-file=.env scripts/probe.mjs",
     "test:negotiate": "tsx scripts/test-negotiate.ts",
-    "smoke": "node --env-file=.env --import tsx scripts/smoke-truce.ts"
+    "smoke": "node --env-file=.env --import tsx scripts/smoke-truce.ts",
+    "live": "node --env-file=.env --import tsx scripts/live-truce.ts"
   },
   "engines": {
     "node": ">=22.12"
