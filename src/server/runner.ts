@@ -122,6 +122,7 @@ export function cardsOf(pool: Pool, seedNames: Record<string, string>, tonight: 
           origins: item.origins,
           because: perSide(pool.members, (s) => of(s).because),
           scout: item.scoutedBy ? { side: item.scoutedBy, why: item.scoutWhy ?? '' } : null,
+          serves: slot === 'restaurant' ? perSide(pool.members, (s) => pool.serves[s]?.[item.id] ?? []) : {},
           links: linksOf(item, slot),
           hours: slot === 'restaurant' ? hoursTonight(item.hours, tonight.weekday) : null,
           address: item.address,
@@ -210,7 +211,9 @@ export function createRunner(deps: RunnerDeps) {
       for (const s of members) for (const slot of SLOTS) for (const seed of at(favourites, s)[slot]) seedNames[seed.id] = seed.name;
       const people: PerSide<PersonSeeds> = perSide(members, (s) => ({
         seeds: Object.fromEntries(SLOTS.map((slot) => [slot, at(favourites, s)[slot].map((x) => x.id)])) as Record<Slot, string[]>,
+        foods: at(sides, s).input.foods ?? [],
       }));
+      const foods = perSide(members, (s) => (at(people, s).foods ?? []).map((f) => f.name));
       const constraints = constraintsOf(
         members,
         briefs,
@@ -281,6 +284,7 @@ export function createRunner(deps: RunnerDeps) {
                 location: pair.location,
                 options,
                 seeds: favourites,
+                foods,
                 portraits,
                 briefs: perSide(members, (s) => agentBriefOf(at(briefs, s))),
                 weights: perSide(members, (s) => normalizeWeights(at(sides, s).input.weights)),
@@ -316,6 +320,7 @@ export function createRunner(deps: RunnerDeps) {
           weights: perSide(members, (s) => normalizeWeights(at(sides, s).input.weights)),
           seedNames,
           seeds: perSide(members, (s) => at(people, s).seeds),
+          foods,
           portraits,
           briefs: perSide(members, (s) => agentBriefOf(at(briefs, s))),
           alpha,

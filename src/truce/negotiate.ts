@@ -57,6 +57,8 @@ export interface TruceSetup {
   seedNames: Record<string, string>;
   /** The seed ids each person named, per slot. */
   seeds: PerSide<Record<Slot, string[]>>;
+  /** The foods each person named ("Lasagna"). */
+  foods?: PerSide<string[]>;
   /** Qloo's words for each person's taste. */
   portraits?: PerSide<string[]>;
   /** What each person told their own agent. */
@@ -139,6 +141,7 @@ export function menuFor(pool: Pool, side: Side, seedNames: Record<string, string
         .map((d) => `${seedNames[d.seedId]} (${Math.round(d.share * 100)}%)`),
       bridge: item.origins.includes('joint'),
       scoutedBy: item.scoutedBy,
+      serves: slot === 'restaurant' ? perSide(pool.members, (s) => pool.serves[s]?.[item.id] ?? []) : {},
       blurb: item.blurb,
       facts: item.facts,
     })),
@@ -275,12 +278,19 @@ export async function negotiate(
       nickname: at(setup.names, side),
       others: order
         .filter((s) => s !== side)
-        .map((s) => ({ side: s, nickname: at(setup.names, s), seedNames: seedNames(s), portrait: setup.portraits?.[s] ?? [] })),
+        .map((s) => ({
+          side: s,
+          nickname: at(setup.names, s),
+          seedNames: seedNames(s),
+          foods: setup.foods?.[s] ?? [],
+          portrait: setup.portraits?.[s] ?? [],
+        })),
       mode: setup.mode,
       turn,
       turns,
       weights: at(setup.weights, side),
       seedNames: seedNames(side),
+      foods: setup.foods?.[side] ?? [],
       portrait: setup.portraits?.[side] ?? [],
       brief: setup.briefs?.[side] ?? null,
       menu: at(menus, side),

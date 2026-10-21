@@ -1,7 +1,7 @@
 /**
  * The plan you can act on, and the rules around it: opening hours and
  * "tonight" in the city's own time, links built safely from Qloo ids, the
- * calendar file, and the vetoes that keep things off the table. Synthetic
+ * calendar file, the vetoes that keep things off the table, and foods. Synthetic
  * fixtures only (no Qloo data in the repo); no network.
  * Run with `npm run test:plan`.
  */
@@ -10,7 +10,7 @@ import { fromInsights, fromSearch, insightsEntitySchema, searchEntitySchema } fr
 import { eveningIcs, zonedHourToUtc } from '../src/server/calendar';
 import { constraintsOf, vetoLabels } from '../src/server/runner';
 import { linksOf } from '../src/truce/links';
-import { NO_CONSTRAINTS, admissible } from '../src/truce/pool';
+import { FOOD_WEIGHT, NO_CONSTRAINTS, admissible, servedFoods, toPoolItem, withFoods } from '../src/truce/pool';
 import { hoursTonight, tonightAt } from '../src/truce/tonight';
 
 let failures = 0;
@@ -102,7 +102,7 @@ check('calendar: 19:00 in New York (EDT) is 23:00 UTC', zonedHourToUtc('2026-10-
 check('calendar: across a DST change (New York, EST)', zonedHourToUtc('2026-11-20', 19, 'America/New_York').toISOString() === '2026-11-21T00:00:00.000Z');
 const card = (name: string, slot: CardItem['slot'], extra: Partial<CardItem> = {}): CardItem => ({
   id: name, slot, name, disambiguation: null, imageUrl: null, blurb: null, facts: {}, scores: {}, origins: [], because: {},
-  scout: null, links: [], hours: null, address: null, ...extra,
+  scout: null, serves: {}, links: [], hours: null, address: null, ...extra,
 });
 const ics = eveningIcs({
   truceId: 'T1',
@@ -144,6 +144,30 @@ check('group vetoes: tags are merged without repeats', combined.excludeTags.film
 check('group vetoes: titles and past "not for me"s both stay off', combined.excludeEntities.includes('e1') && combined.excludeEntities.includes('e2'));
 check('group vetoes: the lowest price cap wins', combined.maxPrice === 2);
 check('group vetoes: labels read plainly and once', vetoLabels(['a', 'b', 'c'], briefs).join(' · ') === 'No Horror · Up to $$$ · Not Dune (2021)');
+
+// --- Foods: a place serving a food someone named scores higher for them --------------------
+{
+  const lasagna = { name: 'Lasagna', tags: ['urn:tag:menu_highlight:qloo:lasagna', 'urn:tag:specialty_dish:place:lasagna'] };
+  const vegetarian = { name: 'vegetarian', tags: ['urn:tag:cuisine:qloo:vegetarian'] };
+  const bistro = toPoolItem(place, 'a');
+  const found = { ...toPoolItem(place, 'a'), id: 'found', tags: [], serves: ['lasagna'] };
+  const plain = { ...toPoolItem(place, 'a'), id: 'plain', tags: [] };
+  check('foods: served when Qloo found the place for that food', servedFoods(found, [lasagna]).join() === 'Lasagna');
+  check('foods: served when a food tag of any family has the same name', servedFoods(bistro, [vegetarian]).join() === 'vegetarian');
+  check('foods: not served otherwise', servedFoods(plain, [lasagna, vegetarian]).length === 0);
+
+  const ids = ['found', 'plain'];
+  const qloo = { utilities: { found: 0, plain: 1 }, indifferent: false };
+  const serves = { found: ['Lasagna'] };
+  const mixed = withFoods(qloo, ids, { seeds: { film: [], restaurant: [], music: [] }, foods: [lasagna] }, serves);
+  check(
+    'foods: the food counts FOOD_WEIGHT of the scale',
+    Math.abs(mixed.utilities.found! - FOOD_WEIGHT) < 1e-9 && Math.abs(mixed.utilities.plain! - (1 - FOOD_WEIGHT)) < 1e-9,
+  );
+  check('foods: no foods named, Qloo alone decides', withFoods(qloo, ids, { seeds: { film: [], restaurant: [], music: [] } }, serves) === qloo);
+  const flat = withFoods({ utilities: { found: 0.5, plain: 0.5 }, indifferent: true }, ids, { seeds: { film: [], restaurant: [], music: [] }, foods: [lasagna] }, serves);
+  check('foods: someone Qloo finds indifferent still prefers their food', !flat.indifferent && flat.utilities.found! > flat.utilities.plain!);
+}
 
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');
 process.exit(failures ? 1 : 0);

@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { BRIEF_MAX, groundBrief, readBrief, type InterpretedBrief } from '../agents/brief';
 import { usageOf } from '../agents/claude-brain';
+import { foodsFor } from '../agents/food';
 import type {
   ApiError,
   CardItem,
@@ -23,7 +24,7 @@ import type {
   TruceView,
 } from '../contract';
 import { QlooError, type QlooClient } from '../qloo/client';
-import { locate, searchEntities, type Locality } from '../qloo/queries';
+import { FOOD_FAMILIES, locate, searchEntities, type Locality } from '../qloo/queries';
 import { KIND_OF_SLOT, MAX_PEOPLE, MIN_PEOPLE, SIDES, SLOTS, perSide, type Side, type Slot } from '../truce/types';
 import { eveningIcs } from './calendar';
 import { INTERRUPTED, type Store } from './db';
@@ -49,13 +50,27 @@ const seed = z.object({
   id: z.string().regex(/^[0-9A-Fa-f-]{36}$/, 'not a Qloo entity id'),
   name: z.string().trim().min(1).max(120),
 });
+// A food's tags go into Qloo queries as filters, so only food tags pass.
+const foodTag = z
+  .string()
+  .max(120)
+  .regex(/^urn:tag:[a-z0-9_:.-]+$/, 'not a Qloo tag')
+  .refine((id) => FOOD_FAMILIES.some((f) => id.startsWith(f)), 'not a food tag');
+const food = z.object({
+  name: z.string().trim().min(1).max(60),
+  tags: z.array(foodTag).min(1).max(6),
+  kind: z.enum(['cuisine', 'dish']),
+});
 const sideInput = z
   .object({
     seeds: z.object({ film: z.array(seed).max(3), restaurant: z.array(seed).max(3), music: z.array(seed).max(3) }),
     weights: z.object({ film: z.number().min(0).max(100), restaurant: z.number().min(0).max(100), music: z.number().min(0).max(100) }),
+    foods: z.array(food).max(3).optional(),
     brief: z.string().trim().max(BRIEF_MAX).optional(),
   })
-  .refine((v) => SLOTS.some((s) => v.seeds[s].length > 0), 'Pick at least one thing you love.');
+  // Qloo needs a film, artist or place to read someone's taste from; a food alone isn't one.
+  .refine((v) => SLOTS.some((s) => v.seeds[s].length > 0), 'Pick at least one film, artist or restaurant you love.')
+  .refine((v) => v.seeds.restaurant.length + (v.foods?.length ?? 0) <= 3, 'Up to three restaurants and foods together.');
 
 const rating = z.enum(['loved', 'fine', 'not_for_me']);
 const checkinInput = z.object({
@@ -141,11 +156,21 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     const area = s === 'restaurant' && near ? await localityOf(near) : null;
     // Qloo ranks by name match only; near-unknown titles ("Moonlight Soul",
     // popularity 0) would crowd out the one people mean, so they go last.
-    const found = await searchEntities(qloo, q, KIND_OF_SLOT[s], 8, area ?? undefined);
+    // A restaurant search also looks for foods: "Lazanya" is a dish, not a place.
+    const [found, foods] = await Promise.all([
+      searchEntities(qloo, q, KIND_OF_SLOT[s], 8, area ?? undefined),
+      s === 'restaurant'
+        ? foodsFor(qloo, anthropic, q, (u) => console.log(`food name read, ≈$${costOf([usageOf(u)]).toFixed(5)}`)).catch((err) => {
+            console.warn(`foods for "${q}" failed: ${(err as Error).message}`);
+            return [];
+          })
+        : [],
+    ]);
     const known = (e: (typeof found)[number]) => (e.popularity ?? 0) >= OBSCURE;
     const hits = [...found.filter(known), ...found.filter((e) => !known(e))].slice(0, 6);
     return c.json<SearchResult>({
       near: area?.name ?? null,
+      foods,
       hits: hits.map(
         (e): SearchHit => ({
           id: e.id,

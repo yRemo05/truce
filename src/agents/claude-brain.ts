@@ -13,7 +13,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
-import { SLOTS, type Bundle, type Side, type Slot } from '../truce/types';
+import { SLOTS, type Bundle, type PerSide, type Side, type Slot } from '../truce/types';
 import {
   codeOf,
   othersPhrase,
@@ -87,8 +87,18 @@ export function voiceRules(nickname: string, others: readonly string[]): string 
 - Say a person loves something only if it is in their list of loves. For any other item, say why it suits them.`;
 }
 
-export function lovesOf(seeds: Record<Slot, string[]>): string {
-  return SLOTS.map((s) => `- ${s}: ${seeds[s].join(', ') || '(nothing named)'}`).join('\n');
+export function lovesOf(seeds: Record<Slot, string[]>, foods: readonly string[] = []): string {
+  const lines = SLOTS.map((s) => `- ${s}: ${seeds[s].join(', ') || '(nothing named)'}`);
+  if (foods.length) lines.push(`- food: ${foods.join(', ')}`);
+  return lines.join('\n');
+}
+
+/** "Lasagna for Maya, Sushi for Deniz": the foods people named that a restaurant serves. */
+export function servesLine(serves: PerSide<string[]>, nameOf: (side: Side) => string): string {
+  return Object.entries(serves)
+    .filter(([, foods]) => foods?.length)
+    .map(([side, foods]) => `${foods!.join(', ')} for ${nameOf(side as Side)}`)
+    .join(', ');
 }
 
 export function briefLines(nickname: string, brief: AgentBrief | null): string {
@@ -112,7 +122,8 @@ function itemLine(view: AgentView, m: MenuItem): string {
         : [m.facts.genres, m.facts.sound];
   const detail = facts.filter(Boolean).join(' | ');
   const because = m.because.length ? ` | Qloo links it to: ${m.because.join(', ')}` : '';
-  const marks = `${m.bridge ? ' · BRIDGE' : ''}${m.scoutedBy ? ` · SCOUTED by ${nameOf(view, m.scoutedBy)}'s agent` : ''}`;
+  const serves = servesLine(m.serves, (s) => nameOf(view, s));
+  const marks = `${m.bridge ? ' · BRIDGE' : ''}${m.scoutedBy ? ` · SCOUTED by ${nameOf(view, m.scoutedBy)}'s agent` : ''}${serves ? ` · SERVES ${serves}` : ''}`;
   return `${m.code} · ${m.name}${marks} · score ${m.score}${because}${detail ? ` | ${detail}` : ''}`;
 }
 
@@ -128,7 +139,7 @@ export function systemPrompt(view: AgentView): string {
   const theirs = view.others
     .map(
       (o) =>
-        `${o.nickname} told the group they love\n${lovesOf(o.seedNames)}${o.portrait.length ? `\nQloo's words for ${o.nickname}'s taste: ${o.portrait.join(', ')}` : ''}`,
+        `${o.nickname} told the group they love\n${lovesOf(o.seedNames, o.foods)}${o.portrait.length ? `\nQloo's words for ${o.nickname}'s taste: ${o.portrait.join(', ')}` : ''}`,
     )
     .join('\n\n');
   const brief = briefLines(view.nickname, view.brief);
@@ -142,6 +153,7 @@ How it works
 - Counter with up to three evenings, best first. The referee plays the first one that is valid. Give each counter its own message, about that evening: it is what the others read if that counter is played. The separate "message" is for an accept or a last-call decline.
 - Your goal is an evening ${view.nickname} likes that ${others} will also accept. You don't see their scores. Read them from their offers (items they keep offering matter to them) and from what they told the group they love.
 - Items marked BRIDGE were found by Qloo from everyone's tastes together: they are the likeliest middle ground. Items marked SCOUTED were brought to the table by an agent before the negotiation, usually as middle ground too. When you're stuck on a slot, move that slot to a bridge.
+- Restaurants marked SERVES serve a food someone named, and that person's score already counts it. Serving a food someone loves is a strong reason to offer a place.
 - Trade, don't just repeat: give ground on the slot ${view.nickname} cares least about, and ask for the one ${view.nickname} cares most about. Offering the same evening twice wastes a turn.
 - An evening the agents agree on beats the referee's call. If nobody agrees, the referee picks the evening itself.
 - Accepting a good offer early is better than holding out for a perfect one.
@@ -154,7 +166,7 @@ ${voiceRules(view.nickname, view.others.map((o) => o.nickname))}
 - Never mention scores, minimums, weights or item codes, and never invent facts about anyone's taste.
 
 ${view.nickname} loves
-${lovesOf(view.seedNames)}${view.portrait.length ? `\nQloo's words for ${view.nickname}'s taste: ${view.portrait.join(', ')}` : ''}
+${lovesOf(view.seedNames, view.foods)}${view.portrait.length ? `\nQloo's words for ${view.nickname}'s taste: ${view.portrait.join(', ')}` : ''}
 ${brief ? `\n${brief}\n` : ''}
 ${theirs}
 

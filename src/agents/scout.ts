@@ -50,6 +50,8 @@ export interface ScoutSetup {
   location: string;
   options: PoolOptions;
   seeds: PerSide<Record<Slot, Seed[]>>;
+  /** The foods each person named ("Lasagna"). */
+  foods: PerSide<string[]>;
   portraits: PerSide<string[]>;
   briefs: PerSide<AgentBrief | null>;
   weights: PerSide<Weights>;
@@ -140,7 +142,7 @@ function systemPrompt(setup: ScoutSetup, side: Side): string {
   const weights = SLOTS.map((s) => `${s} ${Math.round(at(setup.weights, side)[s] * 100)}%`).join(', ');
   const table = SLOTS.map(
     (slot) =>
-      `${slot.toUpperCase()}: ${setup.candidates[slot].map((i) => `${i.name}${i.origins.includes('joint') ? ' (bridge)' : ''}`).join('; ') || '(nothing yet)'}`,
+      `${slot.toUpperCase()}: ${setup.candidates[slot].map((i) => `${i.name}${i.origins.includes('joint') ? ' (bridge)' : ''}${i.serves.length ? ` (serves ${i.serves.join(', ')})` : ''}`).join('; ') || '(nothing yet)'}`,
   ).join('\n');
   const brief = briefLines(name, setup.briefs[side] ?? null);
 
@@ -161,9 +163,9 @@ ${voiceRules(name, otherNames)}
 - Never mention scores, codes or this process.
 
 ${name} loves
-${lovesOf(seedNames(side))}${portrait(side)}
+${lovesOf(seedNames(side), setup.foods[side])}${portrait(side)}
 ${brief ? `\n${brief}\n` : ''}
-${others.map((s) => `${at(setup.names, s)} told the group they love\n${lovesOf(seedNames(s))}${portrait(s)}`).join('\n\n')}
+${others.map((s) => `${at(setup.names, s)} told the group they love\n${lovesOf(seedNames(s), setup.foods[s])}${portrait(s)}`).join('\n\n')}
 
 Already on the table
 ${table}`;

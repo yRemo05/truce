@@ -7,7 +7,8 @@
  * given; per-person values are `PerSide` maps over `members`.
  *
  *   GET  /api/search?slot=film&q=moonlight     → SearchResult
- *        [&near=Istanbul]                        (restaurants only: keep to places near there)
+ *        [&near=Istanbul]                        (restaurants only: keep to places near there;
+ *                                                 restaurant searches also return foods)
  *   POST /api/pairs            body PairInput   → { id }
  *   GET  /api/pairs/:id                         → PairView
  *   PATCH /api/pairs/:id       { location }     → PairView   (fix the place after "no restaurants found")
@@ -45,8 +46,19 @@ export interface SearchHit {
   popularity: number | null;
 }
 
+/** A food or cuisine someone loves, as Qloo's tags name it. */
+export interface Food {
+  /** As Qloo names it, in English when it has the English name: "Lasagna", "Italian". */
+  name: string;
+  /** Every Qloo food tag with that name (cuisine, dish, menu highlight): opaque to the web app. */
+  tags: string[];
+  kind: 'cuisine' | 'dish';
+}
+
 export interface SearchResult {
   hits: SearchHit[];
+  /** Restaurant searches only: foods and cuisines the words name ("Lazanya" → Lasagna). Empty otherwise. */
+  foods: Food[];
   /**
    * The place the hits were kept near, as Qloo names it ("Istanbul"). Null
    * when the search ran worldwide: no `near`, not a restaurant, or a place
@@ -72,6 +84,11 @@ export interface Seed {
 export interface SideInput {
   /** 1–3 confirmed Qloo entities per slot (at least one slot must have one). */
   seeds: Record<Slot, Seed[]>;
+  /**
+   * Foods they love, from a restaurant search. They count toward the
+   * restaurant's three: restaurant seeds plus foods are at most 3.
+   */
+  foods?: Food[];
   /** How much each slot matters tonight; any positive numbers, normalised by the server. */
   weights: Record<Slot, number>;
   /** Anything the person wants their agent to know about tonight, in their own words (≤ 280 characters). */
@@ -173,6 +190,8 @@ export interface CardItem {
   because: PerSide<string[]>;
   /** The agent who brought it to the table while scouting, and why. */
   scout: { side: Side; why: string } | null;
+  /** Restaurants only: the foods each person named that it serves ({ a: ["Lasagna"] }). Empty otherwise. */
+  serves: PerSide<string[]>;
   links: Link[];
   /** Restaurants only: today's opening hours where they are ("17:00–01:00"), and whether they cover the evening. */
   hours: { today: string | null; openTonight: boolean | null } | null;

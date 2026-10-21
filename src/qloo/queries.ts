@@ -5,8 +5,9 @@
  *      can stay near the pair's city;
  *   3. recommend: candidates for one slot from one set of seeds, optionally
  *      held to taste tags (a mood) and kept off others (a veto);
- *   4. findTags / tasteWords / tasteHotspot: the tags a plain word stands for,
- *      the words for someone's taste, and where in a city a taste concentrates;
+ *   4. findTags / findFoods / tasteWords / tasteHotspot: the tags a plain word
+ *      stands for, the foods a word names, the words for someone's taste, and
+ *      where in a city a taste concentrates;
  *   5. scoreShortlist: one fixed pool scored against one person's seeds, with
  *      the seeds' contributions (explainability). Scoring the same pool once
  *      per person is what makes the two people's utilities comparable within
@@ -162,19 +163,26 @@ export async function recommend(
     place?: PlaceFilter;
     /** Tags every result must carry (a mood: "Cozy", a genre: "Comedy"). */
     tags?: readonly string[];
+    /**
+     * Instead of `tags`: tags of which every result carries at least one (a
+     * food, as its dish, menu and cuisine tags). Places serving a food are
+     * not always tagged restaurants (a pasta bar, a café), so this replaces
+     * the restaurant tag too.
+     */
+    anyTags?: readonly string[];
     /** Tags no result may carry (a veto: "Horror"). */
     excludeTags?: readonly string[];
   },
 ): Promise<ScoredEntity[]> {
-  const { kind, seeds, exclude = [], take, place, tags = [], excludeTags = [] } = args;
+  const { kind, seeds, exclude = [], take, place, tags = [], anyTags = [], excludeTags = [] } = args;
   if (!seeds.length) return [];
-  const required = kind === 'place' && place ? [RESTAURANT_TAG, ...tags] : [...tags];
+  const required = anyTags.length ? [] : kind === 'place' && place ? [RESTAURANT_TAG, ...tags] : [...tags];
   const body = await qloo.get('/v2/insights', {
     'filter.type': URN_BY_KIND[kind],
     'signal.interests.entities': seeds.join(','),
     'filter.exclude.entities': exclude.length ? exclude.join(',') : undefined,
-    'filter.tags': required.length ? required.join(',') : undefined,
-    'operator.filter.tags': required.length > 1 ? 'intersection' : undefined,
+    'filter.tags': anyTags.length ? anyTags.join(',') : required.length ? required.join(',') : undefined,
+    'operator.filter.tags': anyTags.length > 1 ? 'union' : required.length > 1 ? 'intersection' : undefined,
     'filter.exclude.tags': excludeTags.length ? excludeTags.join(',') : undefined,
     ...(kind === 'place' && place
       ? {
@@ -199,6 +207,74 @@ export async function findTags(qloo: QlooClient, query: string, take = 12): Prom
     const id = t.id ?? t.tag_id;
     return id && t.name ? [{ id, name: t.name.trim(), type: t.type ?? t.subtype ?? '' }] : [];
   });
+}
+
+/**
+ * The tag families that name a food, as id prefixes: cuisines first, then
+ * dishes and menu highlights. Menu highlights reach the most places (in
+ * Istanbul, lasagna is a highlight at ten places and a specialty dish at one).
+ */
+export const FOOD_FAMILIES = [
+  'urn:tag:genre:place:restaurant:',
+  'urn:tag:cuisine:qloo:',
+  'urn:tag:menu_highlight:qloo:',
+  'urn:tag:specialty_dish:place:',
+];
+const CUISINE_FAMILIES = FOOD_FAMILIES.slice(0, 2);
+/** Most tags one food carries into a query. */
+const FOOD_TAGS_MAX = 6;
+
+/** A food's name as tags spell it, for comparing: "Lasagna", "lasagna" and "lasagna_al_forno"'s words alike. */
+export const foodKey = (name: string) => name.toLocaleLowerCase('en').replace(/[_\s]+/g, ' ').trim();
+
+export interface FoodTags {
+  /** As Qloo names it: "Lasagna", "Italian". */
+  name: string;
+  /** Every food tag with that name: the cuisine, the dish, the menu highlight. */
+  tags: string[];
+  kind: 'cuisine' | 'dish';
+}
+
+/**
+ * The foods some words name, best first: tags from every food family that
+ * share a name become one food, so a pick reaches every place tagged with it.
+ * The first word is the one the person typed; any others are other names for
+ * it (its English name), whose foods are merged into the first's.
+ */
+export async function findFoods(qloo: QlooClient, words: readonly string[], take = 3): Promise<FoodTags[]> {
+  const unique = [...new Set(words.map(foodKey).filter(Boolean))];
+  const found = (await Promise.all(unique.map((w) => findTags(qloo, w, 20)))).flat();
+  const rank = (id: string) => FOOD_FAMILIES.findIndex((f) => id.startsWith(f));
+  const groups = new Map<string, { name: string; tags: Set<string>; best: number }>();
+  for (const t of found) {
+    const r = rank(t.id);
+    if (r < 0) continue;
+    // Every name the person meant (as typed, in English) is one food, named in English.
+    const key = unique.includes(foodKey(t.name)) ? unique.at(-1)! : foodKey(t.name);
+    const g = groups.get(key) ?? { name: t.name, tags: new Set<string>(), best: r };
+    if (foodKey(t.name) === key && (r < g.best || foodKey(g.name) !== key)) g.name = t.name;
+    g.best = Math.min(g.best, r);
+    g.tags.add(t.id);
+    groups.set(key, g);
+  }
+  const meant = (key: string) => (unique.includes(key) ? 0 : 1);
+  // Kinds of the food, by its last (English) name: "lasagna bolognese", "noodles";
+  // not other words that start alike ("mantis shrimp" for "manti").
+  const name = unique.at(-1)!;
+  const kindOf = (key: string) => key.startsWith(`${name} `) || key === `${name}s` || key === `${name}es`;
+  const all = [...groups.entries()];
+  const related = all.filter(([key]) => meant(key) === 0 || kindOf(key));
+  return (related.length ? related : all)
+    .sort(([a, x], [b, y]) => meant(a) - meant(b) || x.best - y.best || y.tags.size - x.tags.size)
+    .slice(0, take)
+    .map(([, g]) => {
+      const tags = [...g.tags].sort((x, y) => rank(x) - rank(y)).slice(0, FOOD_TAGS_MAX);
+      return {
+        name: g.name[0]!.toUpperCase() + g.name.slice(1),
+        tags,
+        kind: tags.some((id) => CUISINE_FAMILIES.some((f) => id.startsWith(f))) ? 'cuisine' : 'dish',
+      };
+    });
 }
 
 /** Tag families that read as taste, best first; media keywords ("madrid spain") and audiences (people, not taste) are left out. */

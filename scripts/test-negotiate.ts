@@ -35,14 +35,14 @@ function item(id: string, slot: Slot): PoolItem {
     disambiguation: null, popularity: null, imageUrl: null, year: null, blurb: null, tags: [],
     facts: {}, location: null, address: null, priceLevel: null, hours: null, isClosed: false,
     external: {}, googlePlaceId: null, website: null, menuUrl: null, phone: null,
-    origins: ['joint'], scoutedBy: null, scoutWhy: null,
+    origins: ['joint'], serves: [], scoutedBy: null, scoutWhy: null,
   };
 }
 
 /** A random pool: `n` items per slot, utilities spread 0–1 per person and slot. */
 function randomWorld(seed: number, members: Side[], n = 4) {
   const r = rng(seed);
-  const pool: Pool = { members, items: {} as Pool['items'], affinity: {}, drivers: {}, utilities: {}, indifferent: {} };
+  const pool: Pool = { members, items: {} as Pool['items'], affinity: {}, drivers: {}, utilities: {}, indifferent: {}, serves: {} };
   for (const side of members) {
     pool.affinity[side] = {} as Record<Slot, Record<string, number>>;
     pool.drivers[side] = {} as Record<Slot, Record<string, { seedId: string; share: number }[]>>;

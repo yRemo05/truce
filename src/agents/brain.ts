@@ -10,7 +10,7 @@
  * Items are named by short codes (F1, R3, M2) rather than Qloo ids so a model
  * can't garble a UUID; the referee maps codes back.
  */
-import { SLOTS, type Bundle, type Side, type Slot, type Weights } from '../truce/types';
+import { SLOTS, type Bundle, type PerSide, type Side, type Slot, type Weights } from '../truce/types';
 
 export type Mode = 'couple' | 'bff';
 
@@ -27,6 +27,8 @@ export interface MenuItem {
   bridge: boolean;
   /** The agent who added it while scouting, if one did. */
   scoutedBy: Side | null;
+  /** Restaurants: the foods each person named that it serves. */
+  serves: PerSide<string[]>;
   blurb: string | null;
   facts: Record<string, string>;
 }
@@ -54,6 +56,8 @@ export interface OtherPerson {
   nickname: string;
   /** What they said they love: shared with the group, unlike their scores. */
   seedNames: Record<Slot, string[]>;
+  /** Foods they said they love ("Lasagna"), also shared. */
+  foods: string[];
   /** Qloo's words for their taste, also shared. */
   portrait: string[];
 }
@@ -68,6 +72,7 @@ export interface AgentView {
   turns: number;
   weights: Weights;
   seedNames: Record<Slot, string[]>;
+  foods: string[];
   portrait: string[];
   brief: AgentBrief | null;
   menu: MenuItem[];

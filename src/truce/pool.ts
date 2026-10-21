@@ -6,16 +6,19 @@
  * from everyone's together (the joint seeds find bridge candidates no single
  * list holds) are merged round-robin. Every seed a person named counts as
  * their signal in every slot, which is what lets a film and an artist inform
- * a restaurant. The group's vetoes hold throughout: Qloo is asked to leave
+ * a restaurant. A food someone named ("Lasagna") brings in places that serve
+ * it, ranked by that person's taste. The group's vetoes hold throughout: Qloo is asked to leave
  * vetoed tags, titles and prices out, and every candidate is checked again
  * here, along with restaurants that are closed for good or closed tonight.
  *
  * Scouting (agents/scout.ts) may then add items. Scoring comes last, once
  * per person over exactly the same items, so each person's numbers compare
- * with each other. See docs/DESIGN.md.
+ * with each other. A place serving a food someone named scores higher for
+ * them: Qloo can't score a place against a food, so that part is ours.
+ * See docs/DESIGN.md.
  */
 import type { QlooClient } from '../qloo/client';
-import { recommend, scoreShortlist, type PlaceFilter } from '../qloo/queries';
+import { FOOD_FAMILIES, foodKey, recommend, scoreShortlist, type PlaceFilter } from '../qloo/queries';
 import type { Entity, ScoredEntity } from '../qloo/schemas';
 import { hoursTonight } from './tonight';
 import { KIND_OF_SLOT, SLOTS, at, perSide, type PerSide, type Side, type Slot, type Utilities } from './types';
@@ -24,7 +27,23 @@ import { scaleSlot } from './utility';
 export interface PersonSeeds {
   /** Confirmed Qloo entity ids the person loves, per slot. */
   seeds: Record<Slot, string[]>;
+  /** Foods they love, each with the Qloo tags that name it. */
+  foods?: FoodPick[];
 }
+
+export interface FoodPick {
+  name: string;
+  tags: string[];
+}
+
+/**
+ * How much a food someone named counts in their restaurant scores, against
+ * Qloo's affinity. Over half: for them, a place serving it always outranks
+ * one that doesn't, and Qloo orders the places within each group.
+ */
+export const FOOD_WEIGHT = 0.6;
+/** Places kept per food named. */
+const PER_FOOD = 3;
 
 /** What the group's briefs and check-ins rule out tonight. */
 export interface Constraints {
@@ -58,6 +77,8 @@ export type Origin = Side | 'joint' | 'scout';
 
 export interface PoolItem extends Entity {
   origins: Origin[];
+  /** Foods (as `foodKey`s) Qloo found this place for: it serves them even when its tags don't say. */
+  serves: string[];
   /** The agent that added it while scouting, and the reason it gave. */
   scoutedBy: Side | null;
   scoutWhy: string | null;
@@ -74,9 +95,24 @@ export interface Pool {
   drivers: PerSide<Record<Slot, Record<string, { seedId: string; share: number }[]>>>;
   utilities: PerSide<Utilities>;
   indifferent: PerSide<Record<Slot, boolean>>;
+  /** Per person, the foods they named that each restaurant serves, by item id. */
+  serves: PerSide<Record<string, string[]>>;
 }
 
 export const signalOf = (p: PersonSeeds) => [...new Set(SLOTS.flatMap((s) => p.seeds[s]))];
+
+/** Which of these foods a place serves: Qloo found it for the food, or it carries a food tag by that name. */
+export function servedFoods(item: PoolItem, foods: readonly FoodPick[]): string[] {
+  return foods
+    .filter((f) => {
+      const key = foodKey(f.name);
+      return (
+        item.serves.includes(key) ||
+        item.tags.some((t) => f.tags.includes(t.id) || (FOOD_FAMILIES.some((p) => t.id.startsWith(p)) && foodKey(t.name) === key))
+      );
+    })
+    .map((f) => f.name);
+}
 
 /** Whether an entity may be offered tonight under the group's vetoes and opening hours. */
 export function admissible(e: Entity, slot: Slot, c: Constraints, weekday?: string): boolean {
@@ -93,7 +129,7 @@ export function admissible(e: Entity, slot: Slot, c: Constraints, weekday?: stri
 
 export function toPoolItem(e: Entity | ScoredEntity, origin: Origin): PoolItem {
   const { affinity: _a, drivers: _d, ...entity } = e as ScoredEntity;
-  return { ...entity, origins: [origin], scoutedBy: null, scoutWhy: null };
+  return { ...entity, origins: [origin], serves: [], scoutedBy: null, scoutWhy: null };
 }
 
 /** Round-robin merge so every person's list and the bridge list are all represented. */
@@ -148,16 +184,41 @@ export async function gatherCandidates(
   if (members.some((s) => !at(signal, s).length)) throw new Error('gatherCandidates: everyone needs at least one seed');
   const joint = [...new Set(members.flatMap((s) => at(signal, s)))];
 
+  // Each food someone named, asked for once per person who named it.
+  const foods = members.flatMap((s) => (at(people, s).foods ?? []).map((food) => ({ side: s, food })));
+
   const slotCandidates = async (slot: Slot) => {
     const query = slotQuery(slot, opts, joint);
     // Ask for a few more than needed: vetoes and closing times may drop some.
-    const ask = async (seeds: string[]) =>
-      (await recommend(qloo, { ...query, seeds, take: perQuery + 4 }))
+    const ask = async (seeds: string[], take = perQuery, anyTags?: string[]) =>
+      (
+        await recommend(qloo, {
+          ...query,
+          // Few places serve any one dish (two lasagnas at $$ in Istanbul), so for a food the dish counts, not fame.
+          place: anyTags && query.place ? { ...query.place, popularityMin: undefined } : query.place,
+          seeds,
+          anyTags,
+          take: take + 4,
+        })
+      )
         .filter((e) => admissible(e, slot, c, opts.weekday))
-        .slice(0, perQuery);
-    const lists = await Promise.all([...members.map((s) => ask(at(signal, s))), ask(joint)]);
-    const origins: Origin[] = [...members, 'joint'];
-    return [slot, mergeLists(origins.map((o, i) => [o, lists[i]!] as const), perSlot)] as const;
+        .slice(0, take);
+    const forFood = slot === 'restaurant' ? foods : [];
+    const [foodLists, lists] = await Promise.all([
+      Promise.all(forFood.map(({ side, food }) => ask(at(signal, side), PER_FOOD, food.tags))),
+      Promise.all([...members.map((s) => ask(at(signal, s))), ask(joint)]),
+    ]);
+    // A food is something the person asked for by name, so its places go first in the merge.
+    const origins: Origin[] = [...forFood.map((f) => f.side), ...members, 'joint'];
+    const all = [...foodLists, ...lists];
+    const merged = mergeLists(origins.map((o, i) => [o, all[i]!] as const), perSlot + Math.min(forFood.length, 3));
+    forFood.forEach(({ food }, i) => {
+      for (const e of foodLists[i]!) {
+        const item = merged.find((m) => m.id === e.id);
+        if (item && !item.serves.includes(foodKey(food.name))) item.serves.push(foodKey(food.name));
+      }
+    });
+    return [slot, merged] as const;
   };
   return Object.fromEntries(await Promise.all(SLOTS.map(slotCandidates))) as Candidates;
 }
@@ -169,8 +230,15 @@ export async function scorePool(
   people: PerSide<PersonSeeds>,
   items: Candidates,
 ): Promise<Pool> {
-  const pool: Pool = { members: [...members], items, affinity: {}, drivers: {}, utilities: {}, indifferent: {} };
+  const pool: Pool = { members: [...members], items, affinity: {}, drivers: {}, utilities: {}, indifferent: {}, serves: {} };
   for (const s of members) {
+    const foods = at(people, s).foods ?? [];
+    pool.serves[s] = Object.fromEntries(
+      items.restaurant.flatMap((i) => {
+        const served = servedFoods(i, foods);
+        return served.length ? [[i.id, served] as const] : [];
+      }),
+    );
     pool.affinity[s] = {} as Record<Slot, Record<string, number>>;
     pool.drivers[s] = {} as Record<Slot, Record<string, { seedId: string; share: number }[]>>;
     pool.utilities[s] = {} as Utilities;
@@ -187,7 +255,8 @@ export async function scorePool(
           affinity[e.id] = e.affinity;
           drivers[e.id] = e.drivers;
         }
-        const scale = scaleSlot(ids, affinity);
+        const qlooScale = scaleSlot(ids, affinity);
+        const scale = slot === 'restaurant' ? withFoods(qlooScale, ids, at(people, side), at(pool.serves, side)) : qlooScale;
         at(pool.affinity, side)[slot] = affinity;
         at(pool.drivers, side)[slot] = drivers;
         at(pool.utilities, side)[slot] = scale.utilities;
@@ -196,6 +265,25 @@ export async function scorePool(
     }),
   );
   return pool;
+}
+
+/**
+ * A person's restaurant utilities once the foods they named count: a place
+ * serving one gains FOOD_WEIGHT of the scale. Someone Qloo finds indifferent
+ * still prefers the places with their food.
+ */
+export function withFoods(
+  scale: { utilities: Record<string, number>; indifferent: boolean },
+  ids: readonly string[],
+  person: PersonSeeds,
+  serves: Record<string, string[]>,
+): { utilities: Record<string, number>; indifferent: boolean } {
+  if (!person.foods?.length) return scale;
+  const hit = (id: string) => ((serves[id]?.length ?? 0) > 0 ? 1 : 0);
+  const utilities = Object.fromEntries(
+    ids.map((id) => [id, (1 - FOOD_WEIGHT) * (scale.utilities[id] ?? 0) + FOOD_WEIGHT * hit(id)]),
+  );
+  return { utilities, indifferent: scale.indifferent && ids.every((id) => hit(id) === hit(ids[0]!)) };
 }
 
 /** Gathers and scores in one go, with no scouting (scripts and tests). */
