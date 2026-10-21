@@ -1,6 +1,6 @@
 import type { CardItem, PerSide, Side, Slot } from '@contract';
-import { memo, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Badge, cx, Icon, InfoTip, Notice, ScoreMeter, SectionHeader, Skeleton, Thumb, Voice } from '@/ui';
+import { memo, useId, useMemo, useState } from 'react';
+import { Badge, cx, Icon, InfoTip, Notice, ScoreMeter, SectionHeader, Skeleton, Tabs, Thumb, Voice } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
 import { agentOf, nameOf, possessive } from '@/lib/people';
 import { isBridge, SLOT_ICON, SLOT_LABEL, SLOTS, type Bundle } from '@/lib/truce';
@@ -8,6 +8,7 @@ import { Because } from './Because';
 import { useTruceCtx } from './context';
 import { subLine } from './Evening';
 import { Hours } from './Hours';
+import { Serves } from './Serves';
 
 /** The facts worth showing, in this order. */
 const FACT_LABEL: Record<string, string> = {
@@ -80,6 +81,7 @@ const Row = memo(function Row({ item, mark }: { item: CardItem; mark: Mark }) {
               </Badge>
             )}
           </div>
+          <Serves item={item} />
         </div>
         <button
           type="button"
@@ -156,13 +158,9 @@ interface PoolPanelProps {
   final: Bundle | null;
 }
 
-const STEP: Record<string, number> = { ArrowRight: 1, ArrowLeft: -1 };
-
 export function PoolPanel({ pool, indifferent, table, final }: PoolPanelProps) {
   const { names, members } = useTruceCtx();
   const [slot, setSlot] = useState<Slot>('film');
-  const [expanded, setExpanded] = useState(false);
-  const tabs = useRef<Partial<Record<Slot, HTMLButtonElement | null>>>({});
 
   const items = useMemo(() => {
     const sum = (i: CardItem) => members.reduce((t, s) => t + (i.scores[s] ?? 0), 0);
@@ -176,18 +174,8 @@ export function PoolPanel({ pool, indifferent, table, final }: PoolPanelProps) {
     return table?.[item.slot] === item.id ? 'table' : null;
   };
 
-  const onKey = (e: KeyboardEvent<HTMLButtonElement>) => {
-    const i = SLOTS.indexOf(slot);
-    const step = STEP[e.key];
-    const next = step ? SLOTS[(i + step + SLOTS.length) % SLOTS.length] : e.key === 'Home' ? SLOTS[0] : e.key === 'End' ? SLOTS[SLOTS.length - 1] : undefined;
-    if (!next) return;
-    e.preventDefault();
-    setSlot(next);
-    tabs.current[next]?.focus();
-  };
-
   return (
-    <section className={cx('card pool', !expanded && 'pool--collapsed')} aria-labelledby="pool-title">
+    <section className="card pool" aria-labelledby="pool-title">
       <SectionHeader
         id="pool-title"
         title="Options from Qloo"
@@ -199,28 +187,14 @@ export function PoolPanel({ pool, indifferent, table, final }: PoolPanelProps) {
         meta={`${total} options the agents can choose from.`}
         actions={<Voice kind="qloo" />}
       />
-      <div className="pool__tabs" role="tablist" aria-label="Kind of option">
-        {SLOTS.map((s) => (
-          <button
-            key={s}
-            ref={(el) => {
-              tabs.current[s] = el;
-            }}
-            type="button"
-            role="tab"
-            id={`pool-tab-${s}`}
-            aria-selected={s === slot}
-            aria-controls="pool-panel"
-            tabIndex={s === slot ? 0 : -1}
-            className={cx('pool__tab', s === slot && 'is-on')}
-            onClick={() => setSlot(s)}
-            onKeyDown={onKey}
-          >
-            <Icon name={SLOT_ICON[s]} size={16} />
-            {SLOT_LABEL[s]}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        label="Kind of option"
+        idBase="pool-tab"
+        panelId="pool-panel"
+        value={slot}
+        onChange={setSlot}
+        items={SLOTS.map((s) => ({ value: s, label: SLOT_LABEL[s], icon: SLOT_ICON[s], meta: pool[s].length }))}
+      />
       <div className="pool__panel" role="tabpanel" id="pool-panel" aria-labelledby={`pool-tab-${slot}`}>
         {flat.map((side) => (
           <Notice key={side} tone="info" className="pool__flat">
@@ -232,12 +206,6 @@ export function PoolPanel({ pool, indifferent, table, final }: PoolPanelProps) {
             <Row key={item.id} item={item} mark={markOf(item)} />
           ))}
         </ul>
-        {items.length > 3 && (
-          <button type="button" className="btn btn--ghost btn--sm pool__more" onClick={() => setExpanded((x) => !x)} aria-expanded={expanded}>
-            <Icon name="chevron-down" size={16} className={cx('pool__more-icon', expanded && 'is-open')} />
-            {expanded ? 'Show fewer' : `Show all ${items.length}`}
-          </button>
-        )}
       </div>
     </section>
   );

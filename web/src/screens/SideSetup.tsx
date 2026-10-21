@@ -2,7 +2,8 @@
  * One person's side (/p/:pairId/:side) — step 3 of 3.
  *
  * Inventory, by priority:
- *   primary   — three pickers (film, restaurant, music): search Qloo, confirm, 1–3 each
+ *   primary   — three pickers (film, restaurant, music): search Qloo, confirm, 1–3 each;
+ *               restaurants take a place or a food (a dish or a cuisine)
  *   primary   — Save, in the sticky bar with the "n of 3 slots" progress
  *   secondary — what matters most tonight (three-level weight per slot, and the split)
  *   secondary — a private note for their agent (≤ 280 characters, examples to tap)
@@ -56,9 +57,16 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
   };
 
   const saving = useAction(async () => {
-    const seeds = bySlot((s) => picks[s].map(({ id, name: n }) => ({ id, name: n })));
+    // Foods travel apart from the Qloo entities, exactly as the search returned them.
+    const seeds = bySlot((s) => picks[s].filter((p) => !p.food).map(({ id, name: n }) => ({ id, name: n })));
+    const foods = picks.restaurant.flatMap((p) => (p.food ? [p.food] : []));
     const note = brief.trim();
-    const saved = await api.saveSide(pairId, side, { seeds, weights: weightsOf(levels), ...(note ? { brief: note } : {}) });
+    const saved = await api.saveSide(pairId, side, {
+      seeds,
+      weights: weightsOf(levels),
+      ...(foods.length ? { foods } : {}),
+      ...(note ? { brief: note } : {}),
+    });
     if (note) setUnderstood({ ready: saved.ready, brief: saved.brief });
     else moveOn(saved.ready);
   });
@@ -70,7 +78,9 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
   const seat = pair ? pair.members.indexOf(side) : 0;
   const missing = SLOTS.filter((s) => picks[s].length === 0);
   const filled = SLOTS.length - missing.length;
-  const any = filled > 0;
+  // Foods guide the restaurant, but the agents need at least one film, artist or place to start from.
+  const any = SLOTS.some((s) => picks[s].some((p) => !p.food));
+  const onlyFoods = !any && filled > 0;
 
   const save = () => {
     setTried(true);
@@ -182,7 +192,11 @@ export function SideSetup({ pairId, side }: { pairId: string; side: Side }) {
       <BriefField value={brief} onChange={setBrief} />
 
       <div className="side__footer">
-        {tried && !any ? (
+        {tried && onlyFoods ? (
+          <Notice tone="warn" live title="Add a film, an artist or a place too">
+            Foods guide the restaurant, but your agent needs at least one film, artist or place to start from.
+          </Notice>
+        ) : tried && !any ? (
           <Notice tone="warn" live title="Add at least one favourite first">
             Search above and tap a result to add it.
           </Notice>

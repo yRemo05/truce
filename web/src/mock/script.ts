@@ -16,7 +16,7 @@ import type { BriefView, CardItem, Link, Mode, PerSide, ScoutFind, Side, SideInp
 import { agentOf, listNames, perSide, possessive, type Names } from '@/lib/people';
 import { bySlot, SLOTS, type Bundle } from '@/lib/truce';
 import { vetoLabel } from './brief';
-import { byName, hashOf } from './catalog';
+import { byName, hashOf, SERVES } from './catalog';
 
 type Arch = [number, number, number, number];
 
@@ -368,10 +368,18 @@ export function buildTimeline(input: TimelineInput): { timeline: Timed[]; result
   for (const { side, plan } of plans) push(500, { type: 'scout', side, step: 'done', message: plan.done(who(side)) });
 
   // The pool, scored for everyone and frozen before the talks.
-  const indifferent = perSide(members, (s) => bySlot((slot) => get(sides, s).seeds[slot].length === 0));
+  // No picks in a slot means no preference there; for restaurants a food counts as a pick.
+  const picked = (s: Side, slot: Slot) => get(sides, s).seeds[slot].length + (slot === 'restaurant' ? (get(sides, s).foods?.length ?? 0) : 0);
+  const indifferent = perSide(members, (s) => bySlot((slot) => picked(s, slot) === 0));
+  // A restaurant that serves a food someone named says so, and fits them a little better for it.
+  const servesOf = (row: Row) =>
+    perSide(members, (s) => (row.slot === 'restaurant' ? (get(sides, s).foods ?? []).map((f) => f.name).filter((f) => SERVES[row.name]?.includes(f)) : []));
   const card = (row: Row): CardItem => {
     const e = byName(row.slot, row.name);
-    const scores = perSide(members, (s) => (get(indifferent, s)[row.slot] ? 50 : row.scores[seat(s)]!));
+    const serves = servesOf(row);
+    const scores = perSide(members, (s) =>
+      get(indifferent, s)[row.slot] ? 50 : Math.min(100, row.scores[seat(s)]! + (get(serves, s).length ? 8 : 0)),
+    );
     const values = members.map((s) => get(scores, s));
     const fans = members.filter((s) => get(scores, s) >= 88);
     const origins: CardItem['origins'] = row.scout ? ['scout'] : Math.min(...values) >= 62 || !fans.length ? ['joint', ...fans] : fans;
@@ -392,6 +400,7 @@ export function buildTimeline(input: TimelineInput): { timeline: Timed[]; result
       links: linksFor(row.slot, e.name, address, city === 'manhattan'),
       hours: restaurant ? hoursFor(e.name) : null,
       address,
+      serves: row.slot === 'restaurant' ? serves : {},
     };
   };
   const rows = [...base, ...scouted];
@@ -444,6 +453,8 @@ export function buildTimeline(input: TimelineInput): { timeline: Timed[]; result
     const wishes = (briefs[s]?.wishes ?? []).map((w) => w.matched);
     const restaurant = byId.get(b.restaurant)!;
     const film = byId.get(b.film)!;
+    const food = get(restaurant.serves, s)?.[0];
+    if (changed.includes('restaurant') && food) return ` And it serves ${food}, a favourite of ${name(s)}.`;
     if (changed.includes('restaurant') && wishes.includes('Vegetarian friendly') && /vegetarian|vegetable|mezze/i.test(`${restaurant.facts.cuisineType} ${restaurant.blurb}`))
       return ` Good vegetarian food, as ${name(s)} asked.`;
     if (changed.includes('restaurant') && wishes.includes('Cozy') && /cosy/i.test(restaurant.facts.ambience ?? '')) return ` Cosy, as ${name(s)} asked.`;

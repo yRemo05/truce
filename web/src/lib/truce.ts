@@ -144,7 +144,7 @@ export const isLastCall = (turn: number, turns: number) => turn > turns;
 export const turnLabel = (turn: number, turns: number) => (isLastCall(turn, turns) ? 'Last call' : `Turn ${turn}`);
 
 type TurnEntry = Extract<FeedEntry, { kind: 'move' | 'declined' }>;
-export const isTurnEntry = (e: FeedEntry): e is TurnEntry => e.kind === 'move' || e.kind === 'declined';
+const isTurnEntry = (e: FeedEntry): e is TurnEntry => e.kind === 'move' || e.kind === 'declined';
 
 /** One move per turn, in order, for the turn track. */
 export const turnsOf = (feed: readonly FeedEntry[]) =>
@@ -178,4 +178,64 @@ const STRIKE: Record<StrikeCode, (agent: string, name: string) => string> = {
 export function strikeReason(event: Pick<EventOf<'rejected'>, 'code' | 'reason'>, mover: string): string {
   const say = STRIKE[event.code];
   return say ? say(agentOf(mover), mover) : event.reason.charAt(0).toUpperCase() + event.reason.slice(1) + '.';
+}
+
+/** The truce page's three tabs, one per phase. */
+export type PhaseTab = 'research' | 'discussion' | 'decision';
+export const PHASE_TABS: readonly PhaseTab[] = ['research', 'discussion', 'decision'];
+export const PHASE_LABEL: Record<PhaseTab, string> = { research: 'Research', discussion: 'Discussion', decision: 'Decision' };
+export const isPhaseTab = (s: string | null): s is PhaseTab => s !== null && (PHASE_TABS as readonly string[]).includes(s);
+
+const settledIn = (feed: readonly FeedEntry[]) => feed.some((e) => e.kind === 'agreement' || e.kind === 'ruling');
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** How many picks the agents added while scouting. */
+export const findsOf = (state: TruceState) =>
+  Object.values(state.scouts).reduce((t, steps) => t + (steps?.filter((s) => s.step === 'add').length ?? 0), 0);
+
+/** Where an error belongs: the phase it stopped, or Decision once the evening was settled. */
+export function errorTab(state: TruceState): PhaseTab {
+  return state.result || settledIn(state.feed) ? 'decision' : state.start ? 'discussion' : 'research';
+}
+
+/** The tab a reader following along should see now. */
+export function liveTab(state: TruceState): PhaseTab {
+  if (state.error) return errorTab(state);
+  if (state.phase === 'settled' || state.phase === 'done') return 'decision';
+  return state.start ? 'discussion' : 'research';
+}
+
+/** The short count beside each tab: "6 finds", "Turn 5 of 9", "Deal". */
+export function tabMeta(state: TruceState, tab: PhaseTab): string {
+  if (state.error && errorTab(state) === tab) return 'Stopped';
+  switch (tab) {
+    case 'research': {
+      const finds = findsOf(state);
+      if (finds) return plural(finds, 'find', 'finds');
+      if (state.pool) return plural(SLOTS.reduce((t, s) => t + state.pool![s].length, 0), 'option', 'options');
+      return state.error ? '' : 'Gathering';
+    }
+    case 'discussion': {
+      if (!state.start) return 'Not yet';
+      const turns = turnsOf(state.feed).length;
+      if (settledIn(state.feed) || state.error) return plural(turns, 'turn', 'turns');
+      const now = state.thinking?.turn ?? Math.max(turns, 1);
+      return isLastCall(now, state.turns) ? 'Last call' : `Turn ${now} of ${state.turns}`;
+    }
+    case 'decision':
+      return state.ruled ? 'Ruling' : settledIn(state.feed) ? 'Deal' : state.error ? 'None' : 'Waiting';
+  }
+}
+
+/** Grows whenever a tab gets something new to read; the page compares it with what the reader has seen. */
+export function tabVersion(state: TruceState, tab: PhaseTab): number {
+  const stopped = state.error && errorTab(state) === tab ? 1 : 0;
+  switch (tab) {
+    case 'research':
+      return stopped + (state.tastes ? 1 : 0) + Object.values(state.scouts).reduce((t, s) => t + (s?.length ?? 0), 0) + (state.pool ? 1 : 0);
+    case 'discussion':
+      return stopped + state.feed.length;
+    case 'decision':
+      return stopped + (state.result ? 1 : 0) + (state.ledger ? 1 : 0);
+  }
 }

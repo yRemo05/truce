@@ -69,6 +69,19 @@
 .combo__list:empty {
   display: none;
 }
+/* Foods and Places, when a restaurant search finds both. */
+.combo__group + .combo__group {
+  margin-top: var(--s-1);
+  padding-top: var(--s-1);
+  border-top: 1px solid var(--border);
+}
+.combo__group-label {
+  display: block;
+  padding: var(--s-2) var(--s-2) var(--s-1);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
 .combo__option {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

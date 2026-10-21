@@ -16,7 +16,7 @@
  * Icons: check / pencil (status), arrow-right, copy (link), play (start), eye
  * (watch), heart (check-in), scale (ledger), calendar (history), pin.
  */
-import type { PairView, PerSide } from '@contract';
+import type { PairView } from '@contract';
 import { useEffect, useState } from 'react';
 import { Link, useSearch } from 'wouter';
 import {
@@ -44,6 +44,7 @@ import { absolute } from '@/lib/share';
 import { gaveGround, SLOTS } from '@/lib/truce';
 import { useStartTruce } from '@/lib/useAction';
 import { usePair } from '@/lib/usePair';
+import { CheckinCard } from '@/truce/CheckinCard';
 import { NotFound } from './NotFound';
 
 function Tonight({ pair, letters, running, pass }: { pair: PairView; letters: Names; running: string | null; pass: boolean }) {
@@ -120,54 +121,6 @@ function Tonight({ pair, letters, running, pass }: { pair: PairView; letters: Na
         )}
       </div>
       {start.error && <ErrorNotice error={start.error} title="The truce didn't start" />}
-    </section>
-  );
-}
-
-/** "How was the evening?": each person's way to tell the ledger how it really went. */
-function CheckinCard({ pair, letters, truceId, checkedIn }: { pair: PairView; letters: Names; truceId: string; checkedIn: PerSide<boolean> }) {
-  return (
-    <section className="card tonight checkin-card" aria-labelledby="checkin-title">
-      <SectionHeader
-        icon="heart"
-        id="checkin-title"
-        title="How was the evening?"
-        info={<InfoTip label="What a check-in does">{EXPLAIN.checkin}</InfoTip>}
-        meta="Each of you says how it really went."
-      />
-      <ul className="people">
-        {pair.members.map((side) => {
-          const name = nameOf(pair.names, side);
-          const done = Boolean(checkedIn[side]);
-          return (
-            <PersonRow
-              key={side}
-              side={side}
-              letters={nameOf(letters, side)}
-              name={name}
-              status={
-                done ? (
-                  <Badge variant="success" icon="check">
-                    Answered
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary">Not yet</Badge>
-                )
-              }
-              actions={
-                !done && (
-                  <ButtonLink size="sm" iconEnd="arrow-right" href={`/truces/${truceId}/checkin/${side}`} aria-label={`Check in as ${name}`}>
-                    Check in
-                  </ButtonLink>
-                )
-              }
-            />
-          );
-        })}
-      </ul>
-      <ButtonLink size="sm" variant="ghost" iconEnd="arrow-right" href={`/t/${truceId}`} className="checkin-card__plan">
-        See the plan
-      </ButtonLink>
     </section>
   );
 }
@@ -302,7 +255,22 @@ export function PairHome({ pairId }: { pairId: string }) {
       {pair ? (
         <div className="grid pair__grid">
           <div className="pair__main">
-            {checkinDue && last && <CheckinCard pair={pair} letters={letters} truceId={last.id} checkedIn={last.checkedIn} />}
+            {checkinDue && last && (
+              <CheckinCard
+                members={pair.members}
+                names={pair.names}
+                letters={letters}
+                truceId={last.id}
+                checkedIn={last.checkedIn}
+                title="How was the evening?"
+                meta="Each of you says how it really went."
+                footer={
+                  <ButtonLink size="sm" variant="ghost" iconEnd="arrow-right" href={`/t/${last.id}`} className="checkin-card__plan">
+                    See the plan
+                  </ButtonLink>
+                }
+              />
+            )}
             <Tonight pair={pair} letters={letters} running={running} pass={pass} />
           </div>
           <Ledger pair={pair} letters={letters} />

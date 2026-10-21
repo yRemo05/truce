@@ -5,7 +5,8 @@
  * left off, as the server does. Add `?drop` to a truce URL to have the stream
  * drop once, seven seconds in; a group whose place is "Atlantis" fails while
  * gathering, as the server does when Qloo finds no restaurants. Add `?rules`
- * when starting a truce or saving a side to play a server with no model.
+ * when starting a truce or saving a side to play a server with no model, and
+ * `?interrupt` when starting one to have it stop mid-talks.
  */
 import type {
   BriefView,
@@ -28,7 +29,7 @@ import { ApiError, type Api } from '../api/api';
 import { membersOf, perSide, type Names } from '@/lib/people';
 import { bySlot, SLOTS } from '@/lib/truce';
 import { understand } from './brief';
-import { byName, CATALOG } from './catalog';
+import { byName, CATALOG, findFoods, foodByName } from './catalog';
 import { alphaOf, balanceOf, experienced, owedOf, realised, tiltOf } from './ledger';
 import { buildTimeline, tonightIn, type Timed } from './script';
 
@@ -78,6 +79,16 @@ const KEY = 'truce:mock:v2';
 
 /** `?rules` on the page plays the server without a model: rule-based agents, no scouting, notes unread. */
 const rulesToday = () => new URLSearchParams(location.search).has('rules');
+/** `?interrupt` when starting: the truce stops after turn 4, as the server does when it restarts mid-truce. */
+const interruptToday = () => new URLSearchParams(location.search).has('interrupt');
+
+/** Cuts the talks after turn 4 and ends them with the error a restarted server sends. */
+function interrupted(timeline: Timed[]): Timed[] {
+  const cut = timeline.findIndex((t) => t.event.type === 'move' && t.event.turn === 4);
+  const kept = timeline.slice(0, cut + 1);
+  const message = 'The truce was interrupted. Start it again; everyone’s favourites are still saved.';
+  return [...kept, { at: kept[kept.length - 1]!.at + 1500, event: { type: 'error', code: 'interrupted', message, retryable: true } }];
+}
 
 /** Parsed once per page load; every write goes back to localStorage. */
 let cached: Db | null = null;
@@ -235,13 +246,15 @@ function start(db: Db, pairId: string): string {
   });
   const pick = (slot: Slot) => items[slot].find((i) => i.id === result.bundle[slot]);
   const id = newId();
+  const cut = interruptToday();
   db.truces[id] = {
     id,
     pairId,
     members,
     createdAt: Date.now(),
-    timeline,
-    result,
+    timeline: cut ? interrupted(timeline) : timeline,
+    result: cut ? null : result,
+    failed: cut,
     evening: bySlot((s) => pick(s)?.name ?? ''),
     picks: bySlot((s) => ({ id: result.bundle[s], name: pick(s)?.name ?? '' })),
     checkins: {},
@@ -279,6 +292,8 @@ const seed = (slot: Slot, name: string): Seed => {
 
 interface DemoPerson {
   loves: Record<Slot, string[]>;
+  /** Foods they love, by the mock's food names. */
+  foods?: string[];
   weights: Record<Slot, number>;
   brief: string;
 }
@@ -297,6 +312,7 @@ const DEMOS: Record<DemoInput['kind'], DemoGroup> = {
     people: [
       {
         loves: { film: ['In the Mood for Love', 'Lost in Translation'], restaurant: ['Trattoria Sole'], music: ['Radiohead'] },
+        foods: ['Ramen'],
         weights: { film: 50, restaurant: 25, music: 25 },
         brief: "Something cosy tonight. I've already seen Past Lives.",
       },
@@ -327,6 +343,7 @@ const DEMOS: Record<DemoInput['kind'], DemoGroup> = {
       },
       {
         loves: { film: ['Spirited Away', 'Everything Everywhere All at Once'], restaurant: ['Karaköy Lokanta Evi'], music: ['Tame Impala'] },
+        foods: ['Meze'],
         weights: { film: 50, restaurant: 25, music: 25 },
         brief: 'No horror, I want to laugh.',
       },
@@ -347,7 +364,11 @@ function demoPair(kind: DemoInput['kind']): MockPair {
     location: group.pair.location,
     sides: perSide(members, (s) => {
       const p = group.people[members.indexOf(s)]!;
-      return { input: { seeds: bySlot((slot) => p.loves[slot].map((n) => seed(slot, n))), weights: p.weights, brief: p.brief }, brief: understand(p.brief) };
+      const foods = (p.foods ?? []).map(foodByName);
+      return {
+        input: { seeds: bySlot((slot) => p.loves[slot].map((n) => seed(slot, n))), ...(foods.length ? { foods } : {}), weights: p.weights, brief: p.brief },
+        brief: understand(p.brief),
+      };
     }),
     earlier: group.earlier.map((e) => ({
       id: newId(),
@@ -392,7 +413,8 @@ export const mockApi: Api = {
     const query = fold(q.trim());
     // The catalogue has no places to filter by; it only echoes the area.
     const area = slot === 'restaurant' ? near : null;
-    if (!query) return { hits: [], near: area };
+    if (!query) return { hits: [], foods: [], near: area };
+    const foods = slot === 'restaurant' ? findFoods(query) : [];
     const hits = CATALOG[slot]
       .filter((e) => fold(e.name).includes(query))
       .slice(0, 6)
@@ -407,7 +429,7 @@ export const mockApi: Api = {
           popularity: e.popularity,
         }),
       );
-    return { hits, near: area };
+    return { hits, foods, near: area };
   },
 
   async createPair(input) {
@@ -440,7 +462,8 @@ export const mockApi: Api = {
     const db = read();
     const pair = pairOr404(db, pairId);
     if (!pair.members.includes(side)) throw new ApiError(404, 'not_found', 'There is no such person in this truce.');
-    if (!SLOTS.some((s) => input.seeds[s].length > 0)) throw new ApiError(400, 'invalid', 'Pick at least one thing you love.');
+    if (!SLOTS.some((s) => input.seeds[s].length > 0)) throw new ApiError(400, 'invalid', 'Pick at least one film, artist or restaurant you love.');
+    if (input.seeds.restaurant.length + (input.foods?.length ?? 0) > 3) throw new ApiError(400, 'invalid', 'Up to three restaurants and foods together.');
     const text = input.brief?.trim() ?? '';
     if (text.length > 280) throw new ApiError(400, 'invalid', 'Keep the note to 280 characters.');
     const brief = text && !rulesToday() ? understand(text) : null;

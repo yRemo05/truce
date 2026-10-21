@@ -4,6 +4,7 @@ import { EXPLAIN } from '@/lib/glossary';
 import { nameOf } from '@/lib/people';
 import { SLOT_LABEL, SLOTS, type Bundle } from '@/lib/truce';
 import { useTruceCtx } from './context';
+import { Serves } from './Serves';
 
 /** Where a restaurant is, from Qloo's facts: the neighbourhood, else the address. */
 function placeLine(item: CardItem): string | null {
@@ -16,7 +17,7 @@ export function subLine(item: CardItem): string | null {
   return item.disambiguation ?? item.facts.genres ?? null;
 }
 
-/** Three picks, one per slot: thumbnail, kind, name. */
+/** Three picks, one per slot: thumbnail, kind, name, and any food someone named that the restaurant serves. */
 export function Evening({ bundle }: { bundle: Bundle }) {
   const { items } = useTruceCtx();
   return (
@@ -29,6 +30,7 @@ export function Evening({ bundle }: { bundle: Bundle }) {
             <span className="evening__text">
               <span className="evening__name">{item?.name ?? 'Unknown pick'}</span>
               <span className="evening__slot">{SLOT_LABEL[slot]}</span>
+              {item && <Serves item={item} compact />}
             </span>
           </li>
         );

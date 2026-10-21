@@ -36,7 +36,7 @@ function Message({ side, brain, meta, live, children, className }: { side: Side;
 }
 
 /** Who has said yes to an offer so far: "Ömer ✓ Ecrin ✓ · waiting for Deniz". */
-function Accepts({ acceptedBy }: { acceptedBy: readonly Side[] }) {
+export function Accepts({ acceptedBy }: { acceptedBy: readonly Side[] }) {
   const { members, names } = useTruceCtx();
   const waiting = members.filter((s) => !acceptedBy.includes(s));
   return (

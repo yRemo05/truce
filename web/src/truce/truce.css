@@ -1,64 +1,103 @@
-/* ---------- Truce page layout ---------- */
+/* ---------- Truce page layout: tabs, then one panel ---------- */
 .truce {
   flex: 1 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--s-6);
-  align-items: start;
-  padding-block: var(--s-6) var(--s-10);
+  gap: var(--s-5);
+  align-content: start;
+  padding-block: var(--s-5) var(--s-10);
 }
-.truce__lead,
-.truce__rail,
-.truce__talks,
-.truce__plan {
+.truce__panel {
+  display: grid;
+  gap: var(--s-5);
   min-width: 0;
 }
-.truce--archive .truce__plan {
-  order: -1;
+.phase {
+  display: grid;
+  gap: var(--s-5);
+  align-items: start;
+  min-width: 0;
 }
-.truce__lead,
-.truce__talks {
+.phase > * {
+  min-width: 0;
+}
+.phase__where {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-4);
+}
+.phase__where > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+}
+.research__main,
+.decision__side {
   display: grid;
   gap: var(--s-5);
 }
-/* Room above the plan when it scrolls into view. */
-.truce__plan {
-  scroll-margin-top: var(--s-4);
+.research__card,
+.decision__card,
+.decision__empty {
+  display: grid;
+  gap: var(--s-4);
+}
+.decision__empty {
+  justify-items: start;
+  max-width: 40rem;
+}
+.decision__block {
+  display: grid;
+  gap: var(--s-2);
+}
+.decision__block + .decision__block {
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--border);
+}
+.phase--discussion {
+  max-width: 46rem;
+}
+@media (min-width: 64em) {
+  .phase--research,
+  .phase--decision {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+    column-gap: var(--s-6);
+  }
+  .phase__where {
+    grid-column: 1 / -1;
+  }
 }
 
-@media (min-width: 64em) {
-  .truce {
-    grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
-    grid-template-rows: auto auto auto minmax(0, 1fr);
-    column-gap: var(--s-7);
+/* The tabs, in the sticky header under the bar: full width on a phone, a compact strip on wider screens. */
+.phasebar__row {
+  padding-block: var(--s-2);
+}
+.phasebar__tabs .tabs__tab {
+  flex-direction: column;
+  gap: 0;
+  min-height: 2.75rem;
+  padding-block: 0.25rem;
+  line-height: 1.25;
+}
+.phasebar__tabs .tabs__meta {
+  font-size: var(--text-xs);
+}
+.phasebar__tabs .tabs__dot {
+  position: absolute;
+  top: 0.375rem;
+  right: 0.5rem;
+}
+@media (min-width: 48em) {
+  .phasebar__tabs {
+    max-width: 36rem;
   }
-  .truce__lead {
-    grid-column: 1;
-    grid-row: 1;
+  .phasebar__tabs .tabs__tab {
+    flex-direction: row;
+    gap: var(--s-2);
+    min-height: 2.25rem;
   }
-  .truce__talks {
-    grid-column: 1;
-    grid-row: 2;
-  }
-  .truce__plan {
-    grid-column: 1;
-    grid-row: 3;
-  }
-  .truce--archive .truce__plan {
-    grid-row: 1;
-  }
-  .truce--archive .truce__talks {
-    grid-row: 2;
-  }
-  .truce__rail {
-    grid-column: 2;
-    grid-row: 1 / span 4;
-    position: sticky;
-    top: calc(var(--header-h, var(--bar-h)) + var(--s-4));
-    max-height: calc(100dvh - var(--header-h, var(--bar-h)) - var(--s-7));
-    overflow: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
+  .phasebar__tabs .tabs__dot {
+    position: static;
   }
 }
 
@@ -105,17 +144,6 @@
 }
 
 /* ---------- Turn progress, under the header ---------- */
-.turnbar__row {
-  display: flex;
-  align-items: center;
-  min-height: 2rem;
-}
-.turnbar__status {
-  color: var(--muted-foreground);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .turnbar__track {
   height: 2px;
   background: var(--border);
@@ -130,25 +158,6 @@
 }
 
 /* ---------- Finding options ---------- */
-.scouting {
-  display: grid;
-  gap: var(--s-4);
-}
-.scouting--folded {
-  padding-bottom: var(--card-pad);
-}
-.tastes,
-.scouts {
-  display: grid;
-  gap: var(--s-3);
-}
-.tastes__title {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
 .tastes__people,
 .scouts__list {
   list-style: none;
@@ -240,15 +249,6 @@
     grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
     align-items: start;
   }
-}
-.scouting__title {
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  font-size: var(--text-lg);
-}
-.scouting__title .spinner {
-  color: var(--primary);
 }
 .scouting__steps {
   list-style: none;
@@ -413,6 +413,20 @@
   gap: 0.25rem;
   font-size: var(--text-xs);
   color: var(--muted-foreground);
+}
+/* "Serves Ramen for Maya": one quiet line on a restaurant, wherever it shows. */
+.serves {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  color: var(--muted-foreground);
+}
+.serves__icon {
+  flex: none;
+  margin-top: 1px;
+}
+.serves--compact {
+  font-size: var(--text-xs);
 }
 .evening__slot .icon {
   width: 12px;
@@ -588,46 +602,9 @@
   display: grid;
   gap: var(--s-4);
 }
-.pool__tabs,
 .pool__tabs-skeleton {
   display: flex;
   gap: 3px;
-  padding: 3px;
-  border-radius: var(--radius-lg);
-  background: var(--muted);
-}
-.pool__tabs-skeleton {
-  padding: 0;
-  background: none;
-}
-.pool__tab {
-  flex: 1 1 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  min-height: 2rem;
-  padding: 0 var(--s-2);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-  font-weight: 550;
-  color: var(--muted-foreground);
-  white-space: nowrap;
-  transition:
-    background-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
-}
-.pool__tab:hover {
-  color: var(--foreground);
-}
-.pool__tab.is-on {
-  background: var(--secondary);
-  border-color: var(--border);
-  color: var(--foreground);
-}
-.pool__tab:focus-visible {
-  outline-offset: -2px;
 }
 .pool__list {
   list-style: none;
@@ -746,64 +723,12 @@
 .pool__flat {
   margin-bottom: var(--s-3);
 }
-.pool__more {
-  justify-self: start;
-}
-.pool__more-icon {
-  transition: transform var(--dur) var(--ease-out);
-}
-.pool__more-icon.is-open {
-  transform: rotate(180deg);
-}
-@media (max-width: 63.99em) {
-  .pool--collapsed .pool-row:nth-child(n + 4) {
-    display: none;
-  }
-}
-@media (min-width: 64em) {
-  .pool__more {
-    display: none;
-  }
-}
-
-/* ---------- The talks, folded (a truce opened after it ended) ---------- */
-.talks-fold {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: var(--card);
-  padding: 0 var(--card-pad);
-}
-.talks-fold__summary {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  min-height: 3.25rem;
-  cursor: pointer;
-  list-style: none;
-}
-.talks-fold__summary::-webkit-details-marker {
-  display: none;
-}
-.talks-fold__title {
-  font-weight: 600;
-}
-.talks-fold__chevron {
-  color: var(--muted-foreground);
-  transition: transform var(--dur) var(--ease-out);
-}
-.talks-fold[open] .talks-fold__chevron {
-  transform: rotate(90deg);
-}
-.talks-fold .feed {
-  padding-bottom: var(--card-pad);
-}
-
 /* ---------- Tonight's plan ---------- */
 .plan__card {
   display: grid;
-  gap: var(--s-6);
+  gap: var(--s-5);
 }
-.plan--live .plan__card {
+.plan__card.plan--live {
   --rise: 12px;
   animation: rise 360ms var(--ease-out) both;
 }
@@ -827,7 +752,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--s-4);
   align-items: start;
-  padding-block: var(--s-4);
+  padding-block: var(--s-3);
   border-top: 1px solid var(--border);
 }
 .pick-row__text {
@@ -861,33 +786,26 @@
   gap: var(--s-2);
   margin-top: var(--s-2);
 }
-.plan__grid {
-  display: grid;
-  gap: var(--s-6);
-  padding-top: var(--s-5);
-  border-top: 1px solid var(--border);
-}
-@media (min-width: 45em) {
-  .plan__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
 .plan__label {
   display: flex;
   align-items: center;
   gap: 0.125rem;
-  margin-bottom: var(--s-3);
   font-size: var(--text-sm);
 }
 .plan__close {
   display: grid;
   gap: var(--s-2);
-  margin-bottom: var(--s-2);
 }
 .plan__actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
+}
+
+/* ---------- Check-in (group page and Decision) ---------- */
+.checkin-card {
+  display: grid;
+  gap: var(--s-4);
 }
 
 /* ---------- A truce that stopped early ---------- */

@@ -1,48 +1,63 @@
 /*
- * The live truce (/t/:truceId).
+ * The live truce (/t/:truceId), in three tabs: Research · Discussion · Decision.
  *
  * Inventory, by priority:
- *   primary   — before the talks: how Qloo reads each person, each agent scouting
- *   primary   — the talks: each move (agent words + the Qloo evening, who said yes), referee notes, thinking
- *   primary   — the plan, once settled: links to act on, add to calendar, the ledger leaning
- *   secondary — the pool (what's on offer, origin badges, what's on the table now)
- *   secondary — turn progress and phase, in the sticky bar; reconnecting state; skip ahead
- *   rare      — retry after an error, jump to the latest move when scrolled away
+ *   primary   — Discussion: the talks (agent words + the Qloo evening, who said yes), referee notes, thinking
+ *   primary   — Decision: the evening to act on (links, hours, calendar), how it was reached, scores,
+ *               the ledger for next time, the check-in for afterwards
+ *   secondary — Research: where and when, how Qloo reads each person, each agent's scouting,
+ *               every option with where it came from
+ *   secondary — the tabs with a short count each, a dot for unseen news; turn progress line;
+ *               reconnecting state; skip ahead; jump to the latest move
+ *   rare      — a stopped truce: the full notice on its tab, a banner on the others
  *
- * Viewport budget: at 1440×900 the bar (with the turn track), the latest move and
- * the whole pool rail are visible at once. At 390×844 the bar holds the turn
- * track; the pool is a compact three-row tab block above the talks.
+ * Behaviour: while a truce runs, the tab follows the live phase. Tapping a tab
+ * (or opening a link with ?tab=) is the reader's choice and stops the follow;
+ * the tab lives in the URL, so back/forward and shared links work. A finished
+ * truce opens on Decision.
  *
- * Grid ≥1024px: the chat and the plan in a wide column, the options as a sticky
- * side panel (20–24rem).
- * Below that one column: scouting, pool, talks, plan. Once the talks start,
- * the scouting folds into "Before the talks" above them. A truce opened after
- * it finished reads as a document: the plan first, the talks folded under it.
+ * Viewport budget at 1440×900: the bar and tabs, then per tab — Research: the
+ * tastes and scouting left (7 columns), the options right (5); Discussion: the
+ * chat in one 46rem column; Decision: the evening left (7), how / ledger /
+ * check-in right (5). At 390×844 everything is one column under full-width tabs.
  *
- * Icons: gavel (referee), exchange/check/x (move kinds), data (Qloo), quote
- * (agent), bridge (origin), film/restaurant/music (slots), pin (place),
- * wifi-off (reconnecting), fast-forward (skip ahead), arrow-down (jump), retry.
+ * Icons: gavel (referee), check/x (says yes/no), data (Qloo), quote (agent),
+ * sliders (rule-based), bridge/search (origin), film/restaurant/music (slots),
+ * pin/calendar (where and when), wifi-off (reconnecting), fast-forward (skip
+ * ahead), arrow-down (latest), hourglass (no decision yet), heart (check-in).
  */
 import type { Side } from '@contract';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useSearch } from 'wouter';
 import { Badge, Button, ErrorNotice, Icon, InfoTip, Notice, Page, PairNames, Spinner } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
 import { agentOf, groupNames, monograms, nameOf } from '@/lib/people';
-import { isTurnEntry, SLOTS, type FeedEntry, type TruceState } from '@/lib/truce';
+import {
+  errorTab,
+  isPhaseTab,
+  liveTab,
+  PHASE_LABEL,
+  PHASE_TABS,
+  SLOTS,
+  tabVersion,
+  type FeedEntry,
+  type PhaseTab,
+  type TruceState,
+} from '@/lib/truce';
 import { useTruce, type Link as LinkState } from '@/lib/useTruce';
 import { TruceContext, type TruceCtx } from '@/truce/context';
+import { Decision } from '@/truce/Decision';
 import { DeclinedCard, MoveCard, ThinkingCard } from '@/truce/Moves';
-import { Plan } from '@/truce/Plan';
-import { PoolPanel, PoolSkeleton } from '@/truce/PoolPanel';
+import { PhaseBar } from '@/truce/PhaseBar';
 import { RefereeNote } from '@/truce/RefereeNote';
-import { Scouting } from '@/truce/Scouting';
+import { Research } from '@/truce/Research';
 import { Stopped } from '@/truce/Stopped';
-import { TurnTrack } from '@/truce/TurnTrack';
 import { NotFound } from './NotFound';
 
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 /** Scroll an element into view, smoothly unless the person asked for less motion. */
-const reveal = (el: Element | null, block: ScrollLogicalPosition) =>
-  el?.scrollIntoView({ block, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+const reveal = (el: Element | null, block: ScrollLogicalPosition) => el?.scrollIntoView({ block, behavior: reducedMotion() ? 'auto' : 'smooth' });
 
 function PhaseBadge({ state, link }: { state: TruceState; link: LinkState }) {
   if (link === 'reconnecting')
@@ -123,11 +138,54 @@ function announcement(entry: FeedEntry | undefined, ctx: TruceCtx): string {
   }
 }
 
+/**
+ * The open tab: the reader's choice from `?tab=`, else wherever the truce is.
+ * Choosing pushes a history entry; following clears the choice.
+ */
+function usePhaseTab(state: TruceState) {
+  const search = useSearch();
+  const [path, navigate] = useLocation();
+  const chosen = new URLSearchParams(search).get('tab');
+  const choice = isPhaseTab(chosen) ? chosen : null;
+  const go = useCallback(
+    (tab: PhaseTab | null) => {
+      const params = new URLSearchParams(search);
+      if (tab) params.set('tab', tab);
+      else params.delete('tab');
+      const query = params.toString();
+      navigate(query ? `${path}?${query}` : path);
+    },
+    [search, path, navigate],
+  );
+  return { tab: choice ?? liveTab(state), following: choice === null, choose: (tab: PhaseTab) => go(tab), follow: () => go(null) };
+}
+
+/** Tabs with something new since the reader last looked; only once they've taken over from the live follow. */
+function useUnseen(state: TruceState, tab: PhaseTab, following: boolean, ready: boolean) {
+  const versions = Object.fromEntries(PHASE_TABS.map((t) => [t, tabVersion(state, t)])) as Record<PhaseTab, number>;
+  const [seen, setSeen] = useState<Record<PhaseTab, number> | null>(null);
+  const key = PHASE_TABS.map((t) => versions[t]).join();
+
+  // What was there when the page loaded, or when the reader took over, counts as seen; later versions don't reset it.
+  useEffect(() => {
+    if (ready) setSeen({ ...versions });
+  }, [ready, following]);
+  // The open tab is always read; `key` stands in for the versions.
+  useEffect(() => {
+    setSeen((s) => (s && s[tab] !== versions[tab] ? { ...s, [tab]: versions[tab] } : s));
+  }, [tab, key]);
+
+  return new Set(following || !seen ? [] : PHASE_TABS.filter((t) => t !== tab && versions[t] > seen[t]));
+}
+
 export function TrucePage({ truceId }: { truceId: string }) {
   const { state, meta, loadError, link, arrivedLive, backlog, skipAhead, reload } = useTruce(truceId);
-  const [following, setFollowing] = useState(true);
+  const { tab, following, choose, follow } = usePhaseTab(state);
+  const unseen = useUnseen(state, tab, following, meta !== null);
+  const [atEnd, setAtEnd] = useState(true);
   const [feedEnd, setFeedEnd] = useState<HTMLLIElement | null>(null);
-  const planRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const stoppedRef = useRef<HTMLDivElement | null>(null);
 
   const ctx = useMemo<TruceCtx | null>(
     () =>
@@ -147,25 +205,34 @@ export function TrucePage({ truceId }: { truceId: string }) {
   const done = state.phase === 'done' && state.result !== null;
   const archive = done && !arrivedLive;
   const lastLive = feed.findLast((e) => e.live);
-  const turnsUsed = feed.filter(isTurnEntry).length;
-  // Follow the talks once the first move is in; before that, let the pool reveal be read.
-  const moved = feed.some((e) => e.kind === 'move');
+  const talking = tab === 'discussion';
 
-  // "Following" means the end of the talks is on screen, give or take a card.
+  // "At the end" means the latest message is on screen, give or take a card.
   useEffect(() => {
     if (!feedEnd) return;
-    const observer = new IntersectionObserver(([e]) => setFollowing(Boolean(e?.isIntersecting)), { rootMargin: '0px 0px 320px 0px' });
+    const observer = new IntersectionObserver(([e]) => setAtEnd(Boolean(e?.isIntersecting)), { rootMargin: '0px 0px 320px 0px' });
     observer.observe(feedEnd);
     return () => observer.disconnect();
   }, [feedEnd]);
 
+  // Keep up with the talks while the reader is at the end of them.
   useEffect(() => {
-    if (lastLive && moved && following && !done) reveal(feedEnd, 'end');
-  }, [lastLive, state.thinking, moved, following, done, feedEnd]);
+    if (talking && lastLive && atEnd && !done) reveal(feedEnd, 'end');
+  }, [talking, lastLive, state.thinking, atEnd, done, feedEnd]);
 
+  // A new tab starts at its top.
+  const shown = useRef(tab);
   useEffect(() => {
-    if (done && !archive) reveal(planRef.current, 'start');
-  }, [done, archive]);
+    if (shown.current === tab) return;
+    shown.current = tab;
+    const top = panelRef.current?.getBoundingClientRect().top ?? 0;
+    if (top < 0) window.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
+  }, [tab]);
+
+  // A truce that stops while someone watches: bring the notice into view on its tab.
+  useEffect(() => {
+    if (state.error && state.sawLive) reveal(stoppedRef.current, 'center');
+  }, [state.error, state.sawLive]);
 
   if (loadError?.status === 404) return <NotFound what="truce" />;
 
@@ -184,28 +251,12 @@ export function TrucePage({ truceId }: { truceId: string }) {
   }
 
   const { names, members } = ctx;
-  const scouting = state.phase === 'connecting' || state.phase === 'gathering' || state.phase === 'scouting';
-  const scouted = state.tastes !== null || Object.keys(state.scouts).length > 0;
-  // No model today: say so once, above whatever leads the page (the gathering, then the talks).
-  const rulesNote = state.brain === 'rules' && (
-    <Notice tone="info">
-      Rule-based agents today: no AI, same referee, same fairness.{' '}
-      <InfoTip label="Why rule-based agents">{EXPLAIN.rulesMode}</InfoTip>
-    </Notice>
-  );
-
-  const talks = (
-    <ol className="feed" aria-label="The talks">
-      {feed.map((entry) => (
-        <FeedItem key={entry.key} entry={entry} />
-      ))}
-      {state.thinking && (
-        <li className="feed__item">
-          <ThinkingCard side={state.thinking.side} struck={state.thinking.struck} />
-        </li>
-      )}
-      <li ref={setFeedEnd} className="feed__end" aria-hidden="true" />
-    </ol>
+  const stoppedIn = state.error ? errorTab(state) : null;
+  // On its own tab the full notice, with the way forward: under the talks it interrupted, else on top.
+  const stopped = state.error && stoppedIn === tab && (
+    <div ref={stoppedRef}>
+      <Stopped error={state.error} pairId={meta.pairId} location={meta.location} />
+    </div>
   );
 
   return (
@@ -213,8 +264,8 @@ export function TrucePage({ truceId }: { truceId: string }) {
       <Page
         title={groupNames(names, members)}
         stickyBar
-        skipLabel="Skip to the talks"
-        className={archive ? 'truce truce--archive' : 'truce'}
+        skipLabel="Skip to the truce"
+        className="truce"
         context={
           <div className="truce-bar">
             <p className="truce-bar__names">
@@ -233,7 +284,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
                 Skip ahead
               </Button>
             )}
-            {!following && !done && feed.length > 0 && (
+            {talking && !atEnd && !done && feed.length > 0 && (
               <Button size="sm" variant="ghost" icon="arrow-down" onClick={() => reveal(feedEnd, 'end')}>
                 Latest
               </Button>
@@ -241,81 +292,80 @@ export function TrucePage({ truceId }: { truceId: string }) {
             <PhaseBadge state={state} link={link} />
           </>
         }
-        below={state.start ? <TurnTrack state={state} /> : undefined}
+        below={<PhaseBar state={state} tab={tab} onTab={choose} unseen={unseen} />}
       >
         <p className="visually-hidden" aria-live="polite">
           {announcement(lastLive, ctx)}
         </p>
 
-        {scouting && !state.error && (
-          <div className="truce__lead">
-            {rulesNote}
-            <Scouting state={state} />
-          </div>
-        )}
-
-        {(state.pool || !state.error) && (
-          <div className="truce__rail">
-            {state.pool ? (
-              <PoolPanel pool={state.pool} indifferent={state.indifferent} table={state.onTable?.bundle ?? null} final={state.result?.bundle ?? null} />
-            ) : (
-              <PoolSkeleton />
-            )}
-          </div>
-        )}
-
-        {feed.length > 0 && (
-          <div className="truce__talks">
-            {rulesNote}
-            {scouted && <Scouting state={state} folded />}
-            {archive ? (
-              <details className="talks-fold">
-                <summary className="talks-fold__summary">
-                  <Icon name="chevron-right" size={20} className="talks-fold__chevron" />
-                  <span>
-                    <span className="talks-fold__title">The talks</span>
-                    <span className="small muted">
-                      {' '}
-                      {turnsUsed} messages from the agents
-                    </span>
-                  </span>
-                </summary>
-                {talks}
-              </details>
-            ) : (
-              talks
-            )}
-          </div>
-        )}
-
-        {state.error && (
-          <div className="truce__lead">
-            <Stopped error={state.error} pairId={meta.pairId} location={meta.location} />
-          </div>
+        {stoppedIn && stoppedIn !== tab && (
+          <Notice
+            tone="error"
+            title="This truce stopped early"
+            action={
+              <Button size="sm" iconEnd="arrow-right" onClick={() => choose(stoppedIn)}>
+                {`See ${PHASE_LABEL[stoppedIn]}`}
+              </Button>
+            }
+          />
         )}
 
         {link === 'offline' && !state.error && (
-          <div className="truce__lead">
-            <Notice
-              tone="warn"
-              live
-              title="Lost the connection"
-              action={
-                <Button size="sm" icon="retry" onClick={reload}>
-                  Reconnect
-                </Button>
-              }
-            >
-              The truce carries on without you. Reconnect to catch up from the start.
-            </Notice>
-          </div>
+          <Notice
+            tone="warn"
+            live
+            title="Lost the connection"
+            action={
+              <Button size="sm" icon="retry" onClick={reload}>
+                Reconnect
+              </Button>
+            }
+          >
+            The truce carries on without you. Reconnect to catch up.
+          </Notice>
         )}
 
-        {done && (
-          <div className="truce__plan" ref={planRef}>
-            <Plan state={state} truceId={truceId} pairId={meta.pairId} stamp={!archive && state.sawLive} />
-          </div>
+        {state.brain === 'rules' && (
+          <Notice tone="info">
+            Rule-based agents today: no AI, same referee, same fairness.{' '}
+            <InfoTip label="Why rule-based agents">{EXPLAIN.rulesMode}</InfoTip>
+          </Notice>
         )}
+
+        <div ref={panelRef} id="phase-panel" role="tabpanel" aria-labelledby={`phase-tab-${tab}`} className="truce__panel">
+          {tab !== 'discussion' && stopped}
+
+          {tab === 'research' && <Research state={state} />}
+
+          {tab === 'discussion' && (
+            <div className="phase phase--discussion">
+              {feed.length > 0 ? (
+                <ol className="feed" aria-label="The talks">
+                  {feed.map((entry) => (
+                    <FeedItem key={entry.key} entry={entry} />
+                  ))}
+                  {state.thinking && (
+                    <li className="feed__item">
+                      <ThinkingCard side={state.thinking.side} struck={state.thinking.struck} />
+                    </li>
+                  )}
+                  <li ref={setFeedEnd} className="feed__end" aria-hidden="true" />
+                </ol>
+              ) : (
+                !state.error && (
+                  <Notice tone="info" title="The talks haven’t started">
+                    They start once Qloo has the options ready. Research shows what&rsquo;s happening now.
+                  </Notice>
+                )
+              )}
+              {stopped}
+            </div>
+          )}
+
+          {tab === 'decision' && (
+            <Decision state={state} truceId={truceId} pairId={meta.pairId} checkedIn={meta.checkedIn} stamp={!archive && state.sawLive} onFollow={follow} />
+          )}
+        </div>
       </Page>
     </TruceContext.Provider>
   );

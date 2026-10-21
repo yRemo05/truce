@@ -19,6 +19,7 @@ export { SectionHeader } from './SectionHeader';
 export { Segmented } from './Segmented';
 export { Skeleton } from './Skeleton';
 export { Spinner } from './Spinner';
+export { Tabs, type TabItem } from './Tabs';
 export { TextArea } from './TextArea';
 export { TextField } from './TextField';
 export { Thumb } from './Thumb';

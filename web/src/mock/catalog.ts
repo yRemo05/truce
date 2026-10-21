@@ -3,7 +3,7 @@
  * artist names are public titles; restaurants, addresses and every score in
  * the mock are invented. Nothing here comes from a Qloo response.
  */
-import type { Slot } from '@contract';
+import type { Food, Slot } from '@contract';
 
 interface MockEntity {
   id: string;
@@ -180,3 +180,55 @@ const ARTISTS = build('music', [
 export const CATALOG: Record<Slot, MockEntity[]> = { film: FILMS, restaurant: RESTAURANTS, music: ARTISTS };
 
 export const byName = (slot: Slot, name: string) => CATALOG[slot].find((e) => e.name === name)!;
+
+/** Invented food tags, with the words that find them: "Lazanya" finds Lasagna, as the server's translation does. */
+const FOODS: (Food & { words: string[] })[] = [
+  { name: 'Lasagna', kind: 'dish', tags: ['mock:dish:lasagna'], words: ['lasagna', 'lasagne', 'lazanya'] },
+  { name: 'Lasagna Bolognese', kind: 'dish', tags: ['mock:dish:lasagna-bolognese'], words: ['lasagna', 'lazanya', 'bolognese'] },
+  { name: 'Italian', kind: 'cuisine', tags: ['mock:cuisine:italian'], words: ['italian', 'pasta', 'lasagna', 'lazanya', 'trattoria'] },
+  { name: 'Sushi', kind: 'cuisine', tags: ['mock:cuisine:sushi', 'mock:dish:sushi'], words: ['sushi'] },
+  { name: 'Japanese', kind: 'cuisine', tags: ['mock:cuisine:japanese'], words: ['japanese', 'sushi', 'ramen', 'izakaya'] },
+  { name: 'Ramen', kind: 'dish', tags: ['mock:dish:ramen'], words: ['ramen', 'noodle'] },
+  { name: 'Manti', kind: 'dish', tags: ['mock:dish:manti'], words: ['manti', 'mantı'] },
+  { name: 'Meze', kind: 'dish', tags: ['mock:dish:meze'], words: ['meze', 'mezze'] },
+  { name: 'Turkish', kind: 'cuisine', tags: ['mock:cuisine:turkish'], words: ['turkish', 'kebab', 'meze'] },
+  { name: 'Vegetarian', kind: 'cuisine', tags: ['mock:cuisine:vegetarian'], words: ['vegetarian', 'vegan'] },
+  { name: 'Pizza', kind: 'dish', tags: ['mock:dish:pizza'], words: ['pizza'] },
+  { name: 'Burgers', kind: 'dish', tags: ['mock:dish:burgers'], words: ['burger', 'burgers'] },
+];
+
+/** Up to three foods a restaurant search names; `fold` is the caller's accent-free lower case. */
+export function findFoods(query: string): Food[] {
+  if (query.length < 3) return [];
+  return FOODS.filter((f) => f.words.some((w) => w.startsWith(query) || query.startsWith(w)))
+    .slice(0, 3)
+    .map(({ name, kind, tags }) => ({ name, kind, tags }));
+}
+
+/** What each mock restaurant serves, by food name: invented, like the places. */
+export const SERVES: Record<string, string[]> = {
+  'Osteria Lume': ['Lasagna', 'Lasagna Bolognese', 'Italian'],
+  'Lantern & Lark': ['Lasagna', 'Italian', 'Burgers'],
+  'Trattoria Sole': ['Lasagna', 'Italian', 'Pizza'],
+  'Kisa Izakaya': ['Ramen', 'Japanese', 'Sushi'],
+  'Brass Lantern Noodle Bar': ['Ramen'],
+  'Sushi Kaze': ['Sushi', 'Japanese'],
+  'Ostra & Pine': ['Sushi'],
+  'Golden Hour Diner': ['Burgers'],
+  'Smokehouse 41': ['Burgers'],
+  'Patty Wagon': ['Burgers'],
+  'Yeşil Masa': ['Meze', 'Vegetarian'],
+  'Moda İskele Meyhanesi': ['Meze', 'Turkish'],
+  'Cihangir Sofrası': ['Meze', 'Turkish', 'Vegetarian'],
+  'Galata Mantı Evi': ['Manti', 'Turkish'],
+  'Bostan Sofrası': ['Turkish', 'Vegetarian'],
+  'Mangal House': ['Turkish'],
+  'Ocakbaşı Kömür': ['Turkish'],
+  'Tünel Pide Salonu': ['Turkish', 'Pizza'],
+  'Balat Kahvaltı Evi': ['Turkish'],
+};
+
+export const foodByName = (name: string): Food => {
+  const { kind, tags } = FOODS.find((f) => f.name === name)!;
+  return { name, kind, tags };
+};

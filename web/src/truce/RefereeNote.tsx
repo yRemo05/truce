@@ -34,22 +34,29 @@ function System({ icon, title, explain, strong, live, children }: SystemProps) {
   );
 }
 
+/** What the referee's polish swapped: old pick struck through, the new one after an arrow. */
+export function Swaps({ event }: { event: EventOf<'polish'> }) {
+  const { items } = useTruceCtx();
+  return (
+    <ul className="sys__swaps">
+      {SLOTS.filter((s) => event.from[s] !== event.to[s]).map((slot) => (
+        <li key={slot}>
+          <Icon name={SLOT_ICON[slot]} size={16} />
+          <span className="visually-hidden">{SLOT_LABEL[slot]}: </span>
+          <s>{items[event.from[slot]]?.name}</s>
+          <Icon name="arrow-right" size={16} />
+          <strong>{items[event.to[slot]]?.name}</strong>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function PolishNote({ event, live }: { event: EventOf<'polish'>; live: boolean }) {
-  const { names, items, members } = useTruceCtx();
-  const swaps = SLOTS.filter((s) => event.from[s] !== event.to[s]);
+  const { names, members } = useTruceCtx();
   return (
     <System icon="check-circle" title="Small improvement" explain={EXPLAIN.polish} live={live}>
-      <ul className="sys__swaps">
-        {swaps.map((slot) => (
-          <li key={slot}>
-            <Icon name={SLOT_ICON[slot]} size={16} />
-            <span className="visually-hidden">{SLOT_LABEL[slot]}: </span>
-            <s>{items[event.from[slot]]?.name}</s>
-            <Icon name="arrow-right" size={16} />
-            <strong>{items[event.to[slot]]?.name}</strong>
-          </li>
-        ))}
-      </ul>
+      <Swaps event={event} />
       {event.scores && (
         <p className="small num">
           {members.map((s) => `${nameOf(names, s)} ${event.scores.from[s] ?? 0} → ${event.scores.to[s] ?? 0}`).join(' · ')}

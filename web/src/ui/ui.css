@@ -787,3 +787,54 @@
 .chip.is-on .icon {
   color: var(--primary);
 }
+
+/* ---------- Tabs ---------- */
+.tabs {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+}
+.tabs__tab {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0 var(--s-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 550;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.tabs__tab:hover {
+  color: var(--foreground);
+}
+.tabs__tab.is-on {
+  background: var(--secondary);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+.tabs__tab:focus-visible {
+  outline-offset: -2px;
+}
+.tabs__meta {
+  font-weight: 450;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+.tabs__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+}

@@ -1,4 +1,4 @@
-import type { SearchHit, SearchResult, Seed, Slot } from '@contract';
+import type { Food, SearchHit, SearchResult, Seed, Slot } from '@contract';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { api, ApiError } from '@/api';
 import { cx, Icon, Skeleton, Spinner, TextField, Thumb } from '@/ui';
@@ -7,35 +7,49 @@ import { useDebounced } from '@/lib/useDebounced';
 
 const MAX_PICKS = 3;
 
+/** One pick: a Qloo entity (a film, an artist, a place), or, for restaurants, a food. */
 export interface Picked extends Seed {
   imageUrl: string | null;
   disambiguation: string | null;
+  /** Set when the pick is a dish or a cuisine rather than a place. */
+  food?: Food;
 }
+
+const FOOD_KIND: Record<Food['kind'], string> = { dish: 'Dish', cuisine: 'Cuisine' };
+
+/** A food's pick id: its name, so the same dish can't be added twice. */
+const foodId = (food: Food) => `food:${food.name.toLocaleLowerCase()}`;
 
 const cache = new Map<string, SearchResult>();
 
 type Search =
   | { state: 'idle' }
   | { state: 'loading' }
-  | { state: 'done'; hits: SearchHit[]; near: string | null }
+  | { state: 'done'; hits: SearchHit[]; foods: Food[]; near: string | null }
   | { state: 'error'; message: string };
 
-const COPY: Record<Slot, { title: string; noun: string; hint: string; examples: string[] }> = {
+/** What the list offers, foods first: one index runs over both groups, for the arrow keys. */
+type Option = { id: string; food: Food; hit?: undefined } | { id: string; hit: SearchHit; food?: undefined };
+
+const COPY: Record<Slot, { title: string; noun: string; prompt: string; hint: string; examples: string[] }> = {
   film: {
     title: 'Films',
     noun: 'a film',
+    prompt: 'Search for a film',
     hint: 'Films you’d happily watch again.',
     examples: ['Past Lives', 'Heat', 'Paddington 2'],
   },
   restaurant: {
     title: 'Restaurants',
-    noun: 'a restaurant',
-    hint: 'A restaurant you love counts most for tonight’s table.',
-    examples: ['Trattoria', 'Noodle', 'Sushi'],
+    noun: 'a place or a food',
+    prompt: 'A place or food',
+    hint: 'A place or a food you love. A place counts most for tonight’s table.',
+    examples: ['Trattoria', 'Lasagna', 'Sushi'],
   },
   music: {
     title: 'Music',
     noun: 'an artist',
+    prompt: 'Search for an artist',
     hint: 'Artists or bands you love.',
     examples: ['Nina Simone', 'Daft Punk', 'Mitski'],
   },
@@ -50,7 +64,7 @@ interface SeedPickerProps {
   near?: string | null;
 }
 
-/** Search Qloo for one slot, confirm a match, keep it as a pick. A combobox with a listbox of real entities. */
+/** Search Qloo for one slot, confirm a match, keep it as a pick. A combobox with a listbox of real entities (and, for restaurants, foods). */
 export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPickerProps) {
   const copy = COPY[slot];
   const uid = useId();
@@ -99,36 +113,79 @@ export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPi
 
   const typing = query.trim().length >= 2 && query.trim() !== settled;
   const hits = search.state === 'done' ? search.hits : [];
+  const foods = search.state === 'done' ? (search.foods ?? []) : [];
+  const options: Option[] = [...foods.map((food) => ({ id: foodId(food), food })), ...hits.map((hit) => ({ id: hit.id, hit }))];
   const showList = open && query.trim().length >= 2;
   const pickedIds = new Set(picks.map((p) => p.id));
 
-  const choose = (hit: SearchHit) => {
-    if (pickedIds.has(hit.id) || full) return;
-    onAdd({ id: hit.id, name: hit.name, imageUrl: hit.imageUrl, disambiguation: hit.disambiguation });
-    setSaid(`Added ${hit.name}.`);
+  const choose = (option: Option) => {
+    if (pickedIds.has(option.id) || full) return;
+    if (option.food) onAdd({ id: option.id, name: option.food.name, imageUrl: null, disambiguation: FOOD_KIND[option.food.kind], food: option.food });
+    else onAdd({ id: option.hit.id, name: option.hit.name, imageUrl: option.hit.imageUrl, disambiguation: option.hit.disambiguation });
+    setSaid(`Added ${option.food?.name ?? option.hit?.name}.`);
     setQuery('');
     setOpen(false);
     inputRef.current?.focus();
   };
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown' && hits.length) {
+    if (e.key === 'ArrowDown' && options.length) {
       e.preventDefault();
       setOpen(true);
-      setActive((i) => (i + 1) % hits.length);
-    } else if (e.key === 'ArrowUp' && hits.length) {
+      setActive((i) => (i + 1) % options.length);
+    } else if (e.key === 'ArrowUp' && options.length) {
       e.preventDefault();
-      setActive((i) => (i - 1 + hits.length) % hits.length);
+      setActive((i) => (i - 1 + options.length) % options.length);
     } else if (e.key === 'Enter') {
-      if (showList && hits[active]) {
+      if (showList && options[active]) {
         e.preventDefault();
-        choose(hits[active]);
+        choose(options[active]);
       }
     } else if (e.key === 'Escape') {
       if (open) setOpen(false);
       else setQuery('');
     }
   };
+
+  const renderOption = (option: Option, i: number) => {
+    const picked = pickedIds.has(option.id);
+    return (
+      <li
+        key={option.id}
+        id={`${listId}-${i}`}
+        role="option"
+        aria-selected={i === active}
+        aria-disabled={picked || undefined}
+        className={cx('combo__option', i === active && 'is-active', picked && 'is-picked')}
+        onMouseDown={(e) => e.preventDefault()}
+        onMouseEnter={() => setActive(i)}
+        onClick={() => choose(option)}
+      >
+        {option.food ? (
+          <>
+            <Thumb name={option.food.name} imageUrl={null} slot={slot} glyph="food" />
+            <span className="combo__text">
+              <span className="combo__name">{option.food.name}</span>
+              <span className="combo__dis small muted">{FOOD_KIND[option.food.kind]}</span>
+            </span>
+          </>
+        ) : (
+          <>
+            <Thumb name={option.hit.name} imageUrl={option.hit.imageUrl} slot={slot} />
+            <span className="combo__text">
+              <span className="combo__name">{option.hit.name}</span>
+              {option.hit.disambiguation && <span className="combo__dis small muted">{option.hit.disambiguation}</span>}
+            </span>
+          </>
+        )}
+        {picked ? <Icon name="check" size={16} label="Already picked" /> : <Icon name="plus" size={16} className="combo__add" />}
+      </li>
+    );
+  };
+
+  // Foods and places are grouped only when there are foods; otherwise the list reads as before.
+  const grouped = foods.length > 0;
+  const groupId = (name: string) => `${listId}-${name}`;
 
   return (
     <section className="card picker" aria-labelledby={headingId}>
@@ -154,8 +211,8 @@ export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPi
           aria-expanded={showList}
           aria-controls={listId}
           aria-autocomplete="list"
-          aria-activedescendant={showList && hits[active] ? `${listId}-${active}` : undefined}
-          placeholder={full ? 'That’s three, the most you can add' : `Search for ${copy.noun}${near ? ` in ${near}` : ''}`}
+          aria-activedescendant={showList && options[active] ? `${listId}-${active}` : undefined}
+          placeholder={full ? 'That’s three, the most you can add' : `${copy.prompt}${near ? ` in ${near}` : ''}`}
           disabled={full}
           value={query}
           autoComplete="off"
@@ -192,31 +249,32 @@ export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPi
 
         <div className={cx('combo__pop', showList && 'is-open')} hidden={!showList}>
           <ul id={listId} role="listbox" aria-label={`${copy.title} from Qloo`} className="combo__list">
-            {hits.map((hit, i) => {
-              const picked = pickedIds.has(hit.id);
-              return (
-                <li
-                  key={hit.id}
-                  id={`${listId}-${i}`}
-                  role="option"
-                  aria-selected={i === active}
-                  aria-disabled={picked || undefined}
-                  className={cx('combo__option', i === active && 'is-active', picked && 'is-picked')}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => choose(hit)}
-                >
-                  <Thumb name={hit.name} imageUrl={hit.imageUrl} slot={slot} />
-                  <span className="combo__text">
-                    <span className="combo__name">{hit.name}</span>
-                    {hit.disambiguation && <span className="combo__dis small muted">{hit.disambiguation}</span>}
+            {grouped ? (
+              <>
+                <li role="group" aria-labelledby={groupId('foods')} className="combo__group">
+                  <span id={groupId('foods')} className="combo__group-label">
+                    Foods
                   </span>
-                  {picked ? <Icon name="check" size={16} label="Already picked" /> : <Icon name="plus" size={16} className="combo__add" />}
+                  <ul role="none" className="combo__list">
+                    {options.slice(0, foods.length).map((o, i) => renderOption(o, i))}
+                  </ul>
                 </li>
-              );
-            })}
+                {hits.length > 0 && (
+                  <li role="group" aria-labelledby={groupId('places')} className="combo__group">
+                    <span id={groupId('places')} className="combo__group-label">
+                      Places
+                    </span>
+                    <ul role="none" className="combo__list">
+                      {options.slice(foods.length).map((o, i) => renderOption(o, foods.length + i))}
+                    </ul>
+                  </li>
+                )}
+              </>
+            ) : (
+              options.map(renderOption)
+            )}
           </ul>
-          {search.state === 'loading' && hits.length === 0 && (
+          {search.state === 'loading' && options.length === 0 && (
             <div className="combo__status" aria-hidden="true">
               {[0, 1, 2].map((i) => (
                 <span key={i} className="combo__skel">
@@ -226,7 +284,7 @@ export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPi
               ))}
             </div>
           )}
-          {search.state === 'done' && hits.length === 0 && !typing && (
+          {search.state === 'done' && options.length === 0 && !typing && (
             <p className="combo__empty small">
               <Icon name="info" size={16} />
               {search.near
@@ -240,11 +298,11 @@ export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPi
               {search.message}
             </p>
           )}
-          {search.state === 'done' && hits.length > 0 && (
+          {search.state === 'done' && options.length > 0 && (
             <p className="combo__credit">
-              {search.near
+              {search.near && hits.length > 0
                 ? `Near ${search.near}, from Qloo`
-                : near
+                : near && hits.length > 0
                   ? `Qloo doesn’t know “${near}”, so these are from anywhere`
                   : 'Results from Qloo'}
             </p>
@@ -256,7 +314,7 @@ export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPi
         <ul className="picks" aria-label={`Your ${copy.title.toLowerCase()}`}>
           {picks.map((p) => (
             <li key={p.id} className="pick enter">
-              <Thumb name={p.name} imageUrl={p.imageUrl} slot={slot} />
+              <Thumb name={p.name} imageUrl={p.imageUrl} slot={slot} glyph={p.food ? 'food' : undefined} />
               <span className="pick__text">
                 <span className="pick__name">{p.name}</span>
                 {p.disambiguation && <span className="pick__dis small muted">{p.disambiguation}</span>}
