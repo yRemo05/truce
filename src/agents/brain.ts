@@ -23,6 +23,8 @@ export interface MenuItem {
   score: number;
   /** Their seeds that drive the score, strongest first, e.g. "In the Mood for Love (56%)". */
   because: string[];
+  /** Qloo found it from both people's tastes together: the likeliest middle ground. */
+  bridge: boolean;
   blurb: string | null;
   facts: Record<string, string>;
 }
@@ -44,6 +46,8 @@ export interface AgentView {
   turns: number;
   weights: Weights;
   seedNames: Record<Slot, string[]>;
+  /** What the other person said they love: shared between the two, unlike their scores. */
+  otherSeedNames: Record<Slot, string[]>;
   menu: MenuItem[];
   /** Their best possible evening, 0–100. */
   best: number;

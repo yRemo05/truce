@@ -98,8 +98,14 @@ export function reservation(args: { turn: number; turns: number; best: number; f
   return best - (best - floor) * progress ** (1 / e);
 }
 
-/** A side's floor: its utility in the fair bundle, minus a small margin so a deal near it can close. */
-export const FLOOR_MARGIN = 0.03;
+/**
+ * A side's floor: its utility in the fair bundle, minus a margin. The margin
+ * is the room for a real deal: with no margin the only evening both may
+ * accept is the referee's own ruling, and nobody has a reason to agree (seen
+ * in live runs at 0.03). Deals inside the margin favour one side a little;
+ * the ledger evens that out over the next truces.
+ */
+export const FLOOR_MARGIN = 0.1;
 export function floorOf(fairUtility: number): number {
   return Math.max(0, fairUtility - FLOOR_MARGIN);
 }

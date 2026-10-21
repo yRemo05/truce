@@ -140,7 +140,7 @@ function middleWorld(mid: number) {
     favoured.slice(1, T).every((r, i) => r > even[i + 1]! && even[i + 1]! > owing[i + 1]!),
   );
   check('reservation: every side reaches its floor on the last turn', close(favoured[T]!, floor) && close(owing[T]!, floor));
-  check('floor: a margin below the fair share', close(floor, 0.57) && floorOf(0.01) === 0);
+  check('floor: a margin below the fair share', close(floor, 0.5) && floorOf(0.05) === 0);
   check('reservation: scales to a best below 1', close(reservation({ turn: 0, turns: T, best: 0.8, floor: 0.4, eagerness: 1 }), 0.8));
 }
 

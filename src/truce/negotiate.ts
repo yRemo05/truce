@@ -110,6 +110,7 @@ export function menuFor(pool: Pool, side: Side, seedNames: Record<string, string
         .sort((x, y) => y.share - x.share)
         .slice(0, 2)
         .map((d) => `${seedNames[d.seedId]} (${Math.round(d.share * 100)}%)`),
+      bridge: item.origins.includes('joint'),
       blurb: item.blurb,
       facts: item.facts,
     })),
@@ -133,7 +134,12 @@ type Checked =
 
 /** Referee check of one raw move against what the mover may do this turn. */
 export function checkMove(view: AgentView, raw: RawMove): Checked {
+  // Codes first; an exact item name is accepted too (models sometimes write the name).
   const byCode = new Map(view.menu.map((m) => [m.code.toUpperCase(), m]));
+  for (const m of view.menu) {
+    const key = m.name.trim().toUpperCase();
+    if (!byCode.has(key)) byCode.set(key, m);
+  }
   const tolerance = 1e-6;
   if (raw.action === 'accept') {
     if (!view.onTable) return { ok: false, reason: 'accepted with nothing on the table' };
@@ -217,6 +223,7 @@ export async function negotiate(
       turns,
       weights: setup.weights[side],
       seedNames: seedNames(side),
+      otherSeedNames: seedNames(other(side)),
       menu: menus[side],
       best: Math.round(best[side] * 100),
       minimum,
