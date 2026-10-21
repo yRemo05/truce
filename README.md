@@ -32,9 +32,9 @@ flowchart LR
   C --> L
 ```
 
-1. **Favourites.** Each person names a few films, artists and restaurants they love. Qloo's `/search` finds each one (restaurants near the group's city) and the person confirms the match.
+1. **Favourites.** Each person names a few films, artists and restaurants they love. Qloo's `/search` finds each one (restaurants near the group's city) and the person confirms the match. A restaurant pick can also be a **food**: type "sushi", "meze" or "Lazanya" and Truce finds the Qloo tags that name it (cuisine, dish and menu-highlight tags, with Claude giving the English name of a dish typed in another language).
 2. **Briefs.** Each person can tell their agent about tonight in their own words. One structured Claude call reads the brief into wishes, vetoes, titles to skip and a price cap. Qloo then grounds each one: "cosy" becomes Qloo's *Cozy* ambience tag for restaurants, "nothing scary" the *Horror* genre, "I've seen Dune" the film *Dune (2021)*. The person sees exactly what was understood before it counts. Vetoes are hard rules; wishes guide their agent.
-3. **Candidates.** For each slot, Truce asks Qloo's Insights API what fits each person's taste and what fits **everyone's seeds together**. The joint answers are *bridges*, the options most likely to work for all. Every seed counts in every slot, so films and music also shape the restaurant list (Qloo's cross-domain affinities). The group's vetoes are applied in the query and checked again on every item, and restaurants closed tonight (in the city's own time zone) are left out.
+3. **Candidates.** For each slot, Truce asks Qloo's Insights API what fits each person's taste and what fits **everyone's seeds together**. The joint answers are *bridges*, the options most likely to work for all. Every seed counts in every slot, so films and music also shape the restaurant list (Qloo's cross-domain affinities). A food someone named brings in places that serve it, ranked by that person's taste. The group's vetoes are applied in the query and checked again on every item, and restaurants closed tonight (in the city's own time zone) are left out.
 4. **Scouting.** Before bargaining, each agent gets Qloo as a tool. It searches for options steered by favourites of more than one person, by taste words from the brief, and for restaurants by the group's **taste hotspot** (Qloo's heatmap of where their combined taste concentrates in the city). It may put up to two finds on the table, with a reason everyone sees.
 5. **Private scorecards.** The pool is then scored **once per person** over exactly the same items (`filter.results.entities` with `feature.explainability`) and frozen. Each agent gets its own person's scores from 0 to 100 and which of their seeds drives each score ("In the Mood for Love, 56%"). No agent sees anyone else's scores, so scouting can widen the table but cannot tilt it.
 6. **The negotiation.** The agents (Claude Haiku 5.5) take turns round the table. On its turn an agent either says yes to the offer on the table or replaces it with a full evening and a sentence or two citing Qloo's evidence. An evening is agreed once **every** agent has said yes to it. In the final round the referee mediates: it shows the agent whose turn it is a shortlist of evenings it has checked everyone can accept. After the last turn, everyone who hasn't said yes gets a **last call**.
@@ -93,6 +93,7 @@ The same films scored for two different people in the couple demo:
 
 ## What the result does not establish
 
+- **A food counts by our rule, not Qloo's affinity.** Qloo can filter places by a food's tags but doesn't score a place against a food, so a place serving one counts 60% of that person's restaurant score (above any place without it), and Qloo's affinity orders the rest. Few places serve any one dish: in Istanbul, two lasagnas fit a $$ cap tonight.
 - Qloo affinities describe **aggregate** taste correlations: "people who love X tend to love Y". They are not facts about these people, and Truce presents them as evidence, not truth.
 - Scores are rescaled **within one pool**, so a score says how an option ranks among tonight's options for that person, not how much they will enjoy it.
 - **Restaurant quality depends on a loved restaurant as a seed.** Without one, only cross-domain signals shape the list, and they are weaker for places. Coverage is strongest in large cities.
@@ -102,7 +103,7 @@ The same films scored for two different people in the couple demo:
 
 ## Responsible data handling
 
-- **Qloo receives entity IDs, filters, the city name, and plain taste words or titles** taken from a brief ("cozy", "Dune"). Never names, accounts, device identifiers or anything else about a person.
+- **Qloo receives entity IDs, filters, the city name, and plain taste words, food words or titles** taken from a brief or a search ("cozy", "lasagna", "Dune"). Never names, accounts, device identifiers or anything else about a person.
 - **The model (Claude) receives** each person's first name, their favourites, their brief, their own scores and the public conversation. A brief is shown only to the person who wrote it and their own agent.
 - **Qloo responses are cached privately on the server** and never committed to this repository. Test fixtures are hand-written.
 - **The public demo has limits.** Each client is rate-limited per action, request bodies are capped, and a daily cap on model-run truces switches to the rule-based agents (without scouting) rather than failing.
@@ -123,7 +124,7 @@ Or build the single image: `docker build -t truce . && docker run -p 8787:8787 -
 
 | Command | What it does |
 |---|---|
-| `npm test` | Five suites, no network: Qloo parsing and client; bargaining maths for two and three people; the ledger (including that two people behave exactly as the original two-person formula, and check-ins); the referee over random worlds for groups of 2, 3 and 4 plus deliberately broken agents; and the plan (hours, time zones, safe links, the calendar file, vetoes) |
+| `npm test` | Five suites, no network: Qloo parsing and client; bargaining maths for two and three people; the ledger (including that two people behave exactly as the original two-person formula, and check-ins); the referee over random worlds for groups of 2, 3 and 4 plus deliberately broken agents; and the plan (hours, time zones, safe links, the calendar file, vetoes, foods) |
 | `npm run live -- couple` | Live: the couple demo through the real pipeline (briefs, scouting, negotiation, ledger, a check-in), printing the event stream |
 | `npm run live -- friends` | The same for three friends in Istanbul |
 
