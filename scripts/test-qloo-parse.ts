@@ -199,5 +199,21 @@ const memoryCache = (): QlooCache & { size(): number } => {
   );
 }
 
+{
+  // Seen live: a film search where one hit had `image: {}`, which used to fail the whole search.
+  const noImage = { ...searchFilm, entity_id: 'F-2', properties: { ...searchFilm.properties, image: {} } };
+  const unreadable = { entity_id: 'F-3', types: ['urn:entity:movie'] };
+  const f = fakeFetch([{ status: 200, body: { results: [searchFilm, noImage, unreadable] } }]);
+  const qloo = createQlooClient({ baseUrl: 'https://qloo.test', apiKey: 'k', fetch: f.fn });
+  const hits = await searchEntities(qloo, 'quiet', 'movie');
+  check('search: an image with no url is no image', hits.find((h) => h.id === 'F-2')?.imageUrl === null);
+  check('search: an entity we cannot read is dropped, not the search', hits.length === 2 && !hits.some((h) => h.id === 'F-3'));
+
+  const g = fakeFetch([{ status: 200, body: { results: 'nope' } }]);
+  const broken = createQlooClient({ baseUrl: 'https://qloo.test', apiKey: 'k', fetch: g.fn });
+  const err = await searchEntities(broken, 'quiet', 'movie').then(() => null, (e: unknown) => e);
+  check('search: an unreadable answer is a QlooError, not a request error', err instanceof QlooError && err.status === 502);
+}
+
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');
 process.exit(failures ? 1 : 0);

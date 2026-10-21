@@ -6,11 +6,21 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { insightsResponseSchema, searchResponseSchema, fromInsights, fromSearch } from '../src/qloo/schemas';
+import {
+  eachEntity,
+  fromInsights,
+  fromSearch,
+  insightsEntitySchema,
+  insightsResponseSchema,
+  searchEntitySchema,
+  searchResponseSchema,
+  type ScoredEntity,
+} from '../src/qloo/schemas';
 
 const root = '.qloo-cache';
 let parsed = 0;
 let failed = 0;
+let dropped = 0;
 for (const dir of readdirSync(root).filter((d) => statSync(join(root, d)).isDirectory())) {
   for (const file of readdirSync(join(root, dir)).filter((f) => f.endsWith('.json'))) {
     const { url, status, body } = JSON.parse(readFileSync(join(root, dir, file), 'utf8'));
@@ -25,12 +35,17 @@ for (const dir of readdirSync(root).filter((d) => statSync(join(root, d)).isDire
       continue;
     }
     parsed++;
+    // The app drops an entity it can't read; here every drop is shown.
+    const onDrop = (why: string) => {
+      dropped++;
+      console.log(`DROP  ${dir}/${file}  ${why}`);
+    };
     const entities = isSearch
-      ? (result.data as any).results.map(fromSearch)
-      : (result.data as any).results.entities.map(fromInsights);
+      ? eachEntity((result.data as any).results, searchEntitySchema, fromSearch, onDrop)
+      : eachEntity((result.data as any).results.entities, insightsEntitySchema, fromInsights, onDrop);
     const e = entities[0];
-    if (e) console.log(`ok    ${dir}/${file}  ${e.kind}  ${e.name}  pop=${e.popularity?.toFixed(3)}  facts=${Object.keys(e.facts).join(',') || '-'}  drivers=${e.drivers?.length ?? '-'}`);
+    if (e) console.log(`ok    ${dir}/${file}  ${e.kind}  ${e.name}  pop=${e.popularity?.toFixed(3)}  facts=${Object.keys(e.facts).join(',') || '-'}  drivers=${(e as Partial<ScoredEntity>).drivers?.length ?? '-'}`);
   }
 }
-console.log(`\n${parsed} parsed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+console.log(`\n${parsed} parsed, ${failed} failed, ${dropped} entities dropped`);
+process.exit(failed || dropped ? 1 : 0);

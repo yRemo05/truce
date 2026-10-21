@@ -16,14 +16,32 @@ import { z } from 'zod';
 import { QlooError, type Params, type QlooClient } from './client';
 import {
   URN_BY_KIND,
+  eachEntity,
   fromInsights,
   fromSearch,
+  insightsEntitySchema,
   insightsResponseSchema,
   localityResponseSchema,
+  searchEntitySchema,
   searchResponseSchema,
   type Entity,
   type ScoredEntity,
 } from './schemas';
+
+/**
+ * A Qloo answer we can't read is Qloo's problem, not the person's request, so
+ * it fails as a QlooError: the API reports a ZodError as bad input.
+ */
+function read<S extends z.ZodType>(schema: S, body: unknown): z.infer<S> {
+  const parsed = schema.safeParse(body);
+  if (parsed.success) return parsed.data;
+  const issue = parsed.error.issues[0];
+  throw new QlooError(`Qloo answered in an unexpected shape (${issue?.path.join('.')}: ${issue?.message})`, 502, false);
+}
+
+const searched = (body: unknown) => eachEntity(read(searchResponseSchema, body).results, searchEntitySchema, fromSearch);
+const insights = (body: unknown) =>
+  eachEntity(read(insightsResponseSchema, body).results.entities, insightsEntitySchema, fromInsights);
 
 /** /v2/tags, and Insights with `filter.type=urn:tag`: `{ results: { tags: [...] } }`. */
 const tagsResponseSchema = z.looseObject({
@@ -106,7 +124,7 @@ export async function searchEntities(
     'filter.radius': near ? NEAR_RADIUS_MILES : undefined,
     take,
   });
-  return searchResponseSchema.parse(body).results.map(fromSearch);
+  return searched(body);
 }
 
 /**
@@ -128,7 +146,7 @@ export async function locate(qloo: QlooClient, query: string): Promise<Locality 
     if (err instanceof QlooError && err.status === 400) return null;
     throw err;
   }
-  const found = localityResponseSchema.parse(body).query?.localities?.filter?.[0];
+  const found = read(localityResponseSchema, body).query?.localities?.filter?.[0];
   return found
     ? { name: found.name, disambiguation: found.disambiguation ?? null, lat: found.location.lat, lon: found.location.lon }
     : null;
@@ -171,13 +189,13 @@ export async function recommend(
       : {}),
     take,
   });
-  return insightsResponseSchema.parse(body).results.entities.map(fromInsights);
+  return insights(body);
 }
 
 /** Qloo tags whose names match `query`, across every family ("cozy" → ambience, decor, style…). */
 export async function findTags(qloo: QlooClient, query: string, take = 12): Promise<QlooTag[]> {
   const body = await qloo.get('/v2/tags', { 'filter.query': query, take });
-  return tagsResponseSchema.parse(body).results.tags.flatMap((t) => {
+  return read(tagsResponseSchema, body).results.tags.flatMap((t) => {
     const id = t.id ?? t.tag_id;
     return id && t.name ? [{ id, name: t.name.trim(), type: t.type ?? t.subtype ?? '' }] : [];
   });
@@ -191,7 +209,7 @@ export async function tasteWords(qloo: QlooClient, seeds: readonly string[]): Pr
   if (!seeds.length) return [];
   const ask = async (params: Params) => {
     const body = await qloo.get('/v2/insights', { 'filter.type': 'urn:tag', 'signal.interests.entities': seeds.join(','), ...params });
-    return tagsResponseSchema.parse(body).results.tags;
+    return read(tagsResponseSchema, body).results.tags;
   };
   const [film, music] = await Promise.all([
     ask({ 'filter.parents.types': URN_BY_KIND.movie, take: 15 }),
@@ -228,7 +246,7 @@ export async function tasteHotspot(
     'filter.location.query': locationQuery,
     take: 10,
   });
-  const cells = heatmapResponseSchema.parse(body).results.heatmap ?? [];
+  const cells = read(heatmapResponseSchema, body).results.heatmap ?? [];
   const top = [...cells].sort((x, y) => (y.query?.affinity ?? 0) - (x.query?.affinity ?? 0))[0];
   return top ? { lat: top.location.latitude, lon: top.location.longitude } : null;
 }
@@ -250,7 +268,7 @@ export async function scoreShortlist(
     'feature.explainability': true,
     take: ids.length,
   });
-  const scored = insightsResponseSchema.parse(body).results.entities.map(fromInsights);
+  const scored = insights(body);
   const seen = new Set(scored.map((e) => e.id));
   return { scored, missing: ids.filter((id) => !seen.has(id)) };
 }

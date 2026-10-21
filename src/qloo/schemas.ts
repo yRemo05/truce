@@ -83,7 +83,8 @@ const propertiesSchema = z
     description: z.string().nullish(),
     short_description: z.string().nullish(),
     short_descriptions: z.array(textItem).nullish(),
-    image: z.looseObject({ url: z.string() }).nullish(),
+    // Seen live: `image: {}` with no url (a TV special in a film search).
+    image: z.looseObject({ url: z.string().nullish() }).nullish(),
     release_year: z.number().nullish(),
     // A number on Insights films, `{}` on searched artists, absent elsewhere.
     duration: z.unknown().optional(),
@@ -154,10 +155,30 @@ export const insightsEntitySchema = z.looseObject({
     .nullish(),
 });
 
-export const searchResponseSchema = z.looseObject({ results: z.array(searchEntitySchema) });
+// Envelopes only: the entities in them are read one at a time (`eachEntity`).
+export const searchResponseSchema = z.looseObject({ results: z.array(z.unknown()) });
 export const insightsResponseSchema = z.looseObject({
-  results: z.looseObject({ entities: z.array(insightsEntitySchema) }),
+  results: z.looseObject({ entities: z.array(z.unknown()) }),
 });
+
+/**
+ * Entities parsed one at a time: one in a shape we can't read is dropped and
+ * logged, rather than failing the whole answer (a search, a pool, a score).
+ */
+export function eachEntity<S extends z.ZodType, T>(
+  raws: readonly unknown[],
+  schema: S,
+  to: (raw: z.infer<S>) => T,
+  onDrop: (why: string) => void = (why) => console.warn(`Qloo entity dropped: ${why}`),
+): T[] {
+  return raws.flatMap((raw) => {
+    const parsed = schema.safeParse(raw);
+    if (parsed.success) return [to(parsed.data)];
+    const issue = parsed.error.issues[0];
+    onDrop(`${issue?.path.join('.') || '(entity)'}: ${issue?.message}`);
+    return [];
+  });
+}
 
 /** The locality a `filter.location.query` resolved to, which Insights echoes under `query.localities.filter`. */
 export const localityResponseSchema = z.looseObject({
