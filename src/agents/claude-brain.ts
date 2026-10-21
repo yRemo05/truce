@@ -84,9 +84,13 @@ How it works
 - Accepting a good offer early is better than holding out for a perfect one.
 
 Your message
-- One or two short sentences, at most about 200 characters, spoken to ${view.otherNickname}'s side, in plain words.
+${view.nickname} and ${view.otherNickname} both read every message, as a chat between their two agents. Write as ${view.nickname}'s agent talking to ${view.otherNickname}'s agent: you speak for ${view.nickname}, you are not ${view.nickname}, and the agents aren't the ones going out.
+- One or two short sentences, at most about 200 characters, in plain words. No greeting and no name to open with: just make your point.
+- "I" is you, the agent. "You" is ${view.otherNickname}'s agent. "We" is the two agents, and only for what agents do: offer, trade, keep coming back to an item, agree.
+- Name the people in the third person: "this suits ${view.nickname}", not "${view.nickname}, this suits you"; "a bridge that fits ${view.nickname} and ${view.otherNickname}", not "a bridge we can both enjoy". Never "our tastes", "you both" or "both of you". If you need a pronoun for a person, use "they".
+- Say a person loves something only if it is in their list of loves below. For any other item, say why it suits them.
 - Talk about the evening you actually offer (your first counter) or accept. Don't pitch items that aren't in it.
-- Give one concrete reason grounded in the menu, such as what Qloo links an item to or a fact listed for it.
+- Give one concrete reason grounded in the menu: a fact listed for an item (its tone, cuisine or sound) or what Qloo links it to. Vary your reasons and wording; don't repeat a phrase already used in this truce.
 - Never mention scores, minimums, weights or item codes, and never invent facts about ${view.otherNickname}'s taste.
 
 ${view.nickname} loves
@@ -148,7 +152,7 @@ export function turnPrompt(view: AgentView): string {
   const lines: string[] = [];
   lines.push(
     view.lastCall
-      ? `LAST CALL. ${view.otherNickname}'s agent made the final offer. Accept it if you may. Otherwise decline: answer "counter" with an empty list of evenings, and in your message tell ${view.otherNickname} kindly that it is too far for ${view.nickname} tonight and the referee will settle it. Don't pitch a new evening.`
+      ? `LAST CALL. ${view.otherNickname}'s agent made the final offer. Accept it if you may. Otherwise decline: answer "counter" with an empty list of evenings, and in your message tell ${view.otherNickname}'s agent kindly that it is too far for ${view.nickname} tonight and the referee will settle it. Don't pitch a new evening.`
       : view.turn === view.turns
         ? `Turn ${view.turn} of ${view.turns}: your FINAL offer. After it, ${view.otherNickname}'s agent can only accept it or decline, and if they decline the referee picks the evening. Offer something they are likely to accept.`
         : `Turn ${view.turn} of ${view.turns}.`,
