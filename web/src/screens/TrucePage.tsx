@@ -10,6 +10,9 @@
  *   secondary — the tabs with a short count each, a dot for unseen news; turn progress line;
  *               reconnecting state; skip ahead; jump to the latest move
  *   rare      — a stopped truce: the full notice on its tab, a banner on the others
+ *   rare      — swaps (truce/Decision.tsx): an open request is a card on Decision and a slim
+ *               banner on the other tabs; an evening planned again links forward to its new
+ *               plan, and a re-plan links back to the plan it replaced, on every tab
  *
  * Behaviour: while a truce runs, the tab follows the live phase. Tapping a tab
  * (or opening a link with ?tab=) is the reader's choice and stops the follow;
@@ -24,12 +27,13 @@
  * Icons: gavel (referee), check/x (says yes/no), data (Qloo), quote (agent),
  * sliders (rule-based), bridge/search (origin), film/restaurant/music (slots),
  * pin/calendar (where and when), wifi-off (reconnecting), fast-forward (skip
- * ahead), arrow-down (latest), hourglass (no decision yet), heart (check-in).
+ * ahead), arrow-down (latest), hourglass (no decision yet), heart (check-in),
+ * exchange / retry (a swap or a replan waiting for votes, an evening planned again).
  */
 import type { Side } from '@contract';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
-import { Badge, Button, cx, ErrorNotice, Icon, InfoTip, Notice, Page, PairNames, Spinner } from '@/ui';
+import { Badge, Button, ButtonLink, cx, ErrorNotice, Icon, InfoTip, Notice, Page, PairNames, Spinner } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
 import { mySide } from '@/lib/mine';
 import { agentOf, groupNames, monograms, nameOf } from '@/lib/people';
@@ -46,6 +50,8 @@ import {
   type PhaseTab,
   type TruceState,
 } from '@/lib/truce';
+import { openOf } from '@/lib/swaps';
+import { useSwaps } from '@/lib/useSwaps';
 import { useTruce, type Link as LinkState } from '@/lib/useTruce';
 import { TruceContext, type TruceCtx } from '@/truce/context';
 import { Decision } from '@/truce/Decision';
@@ -54,6 +60,7 @@ import { PhaseBar } from '@/truce/PhaseBar';
 import { RefereeNote } from '@/truce/RefereeNote';
 import { Research } from '@/truce/Research';
 import { Stopped } from '@/truce/Stopped';
+import { VoteBanner } from '@/truce/SwapVote';
 import { NotFound } from './NotFound';
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -190,6 +197,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
   const { state, meta, loadError, link, arrivedLive, backlog, skipAhead, reload } = useTruce(truceId);
   const { tab, following, choose, follow } = usePhaseTab(state);
   const unseen = useUnseen(state, tab, following, meta !== null);
+  const swaps = useSwaps(truceId, state.phase === 'done' && state.result !== null);
   const [atEnd, setAtEnd] = useState(true);
   const [feedEnd, setFeedEnd] = useState<HTMLLIElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -260,6 +268,9 @@ export function TrucePage({ truceId }: { truceId: string }) {
   }
 
   const { names, members } = ctx;
+  const openSwap = openOf(swaps.view);
+  // Known from the truce itself at load, and from the swaps once a replan goes ahead while the page is open.
+  const replacedBy = meta.replacedBy ?? swaps.view?.replacedBy ?? null;
   const stoppedIn = state.error ? errorTab(state) : null;
   // On its own tab the full notice, with the way forward: under the talks it interrupted, else on top.
   const stopped = state.error && stoppedIn === tab && (
@@ -335,6 +346,32 @@ export function TrucePage({ truceId }: { truceId: string }) {
           </Notice>
         )}
 
+        {replacedBy && (
+          <Notice
+            icon="retry"
+            title="Tonight was planned again"
+            action={
+              <ButtonLink size="sm" iconEnd="arrow-right" href={`/t/${replacedBy}`}>
+                See the new plan
+              </ButtonLink>
+            }
+          />
+        )}
+
+        {meta.replaces && !replacedBy && (
+          <Notice
+            icon="retry"
+            title="Planned again, without what was swapped away"
+            action={
+              <ButtonLink size="sm" variant="ghost" icon="arrow-left" href={`/t/${meta.replaces}?tab=decision`}>
+                The first plan
+              </ButtonLink>
+            }
+          />
+        )}
+
+        {openSwap && tab !== 'decision' && <VoteBanner swap={openSwap} onOpen={() => choose('decision')} />}
+
         {state.brain === 'rules' && (
           <Notice tone="info">
             Rule-based agents today: no AI, same referee, same fairness.{' '}
@@ -345,7 +382,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
         <div ref={panelRef} id="phase-panel" role="tabpanel" aria-labelledby={`phase-tab-${tab}`} className="truce__panel">
           {tab !== 'discussion' && stopped}
 
-          {tab === 'research' && <Research state={state} />}
+          {tab === 'research' && <Research state={state} plan={swaps.view?.bundle ?? state.result?.bundle ?? null} />}
 
           {tab === 'discussion' && (
             <div className="phase phase--discussion">
@@ -376,7 +413,15 @@ export function TrucePage({ truceId }: { truceId: string }) {
           )}
 
           {tab === 'decision' && (
-            <Decision state={state} truceId={truceId} pairId={meta.pairId} checkedIn={meta.checkedIn} stamp={!archive && state.sawLive} onFollow={follow} />
+            <Decision
+              state={state}
+              truceId={truceId}
+              pairId={meta.pairId}
+              checkedIn={meta.checkedIn}
+              stamp={!archive && state.sawLive}
+              swaps={swaps}
+              onFollow={follow}
+            />
           )}
         </div>
       </Page>

@@ -9,10 +9,13 @@
  *
  * Viewport budget: the question, the three picks and Send fit one screen at
  * 1440×900 and at 390×844. One narrow column (40rem): it's a short form.
+ * The picks are the evening as it stands after any swaps. A swap waiting for
+ * votes, or an evening planned again, says so instead of the form (the server
+ * would refuse the check-in), with the way to the vote or to the new plan.
  * Icons: check / x (went), heart / check / x (ratings), film / restaurant /
  * music (slots), scale (ledger), plus / ban (learned), arrow-right (back).
  */
-import type { CardItem, CheckinResult, LedgerView, Rating, Side, Slot, StreamEvent, TruceView } from '@contract';
+import type { CardItem, CheckinResult, LedgerView, Rating, Side, Slot, StreamEvent, SwapsView, TruceView } from '@contract';
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/api';
 import { Avatar, Button, ButtonLink, Chip, ErrorNotice, Icon, InfoTip, LedgerMeter, Notice, Page, SectionHeader, Skeleton, Thumb, type IconName } from '@/ui';
@@ -30,12 +33,13 @@ const RATINGS: { value: Rating; label: string; icon: IconName }[] = [
 
 type Done = Extract<StreamEvent, { type: 'done' }>;
 
-/** The evening's three picks, as the pool described them. */
-function picksOf(view: TruceView): CardItem[] | null {
+/** The evening's three picks as it stands after any swaps, as the pool described them. */
+function picksOf(view: TruceView, swapped: SwapsView['bundle']): CardItem[] | null {
   const done = view.events.find((e): e is Done => e.type === 'done');
   const pool = view.events.find((e) => e.type === 'pool');
   if (!done || !pool || pool.type !== 'pool') return null;
-  return SLOTS.map((s) => pool.items[s].find((i) => i.id === done.result.bundle[s])).filter((i): i is CardItem => Boolean(i));
+  const bundle = swapped ?? done.result.bundle;
+  return SLOTS.map((s) => pool.items[s].find((i) => i.id === bundle[s])).filter((i): i is CardItem => Boolean(i));
 }
 
 function Result({ result, before, went, view, side, letters }: { result: CheckinResult; before: LedgerView | null; went: boolean; view: TruceView; side: Side; letters: Names }) {
@@ -103,6 +107,7 @@ function Result({ result, before, went, view, side, letters }: { result: Checkin
 export function CheckIn({ truceId, side }: { truceId: string; side: Side }) {
   const [view, setView] = useState<TruceView | null>(null);
   const [before, setBefore] = useState<LedgerView | null>(null);
+  const [swaps, setSwaps] = useState<SwapsView | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [went, setWent] = useState<boolean | null>(null);
@@ -111,10 +116,11 @@ export function CheckIn({ truceId, side }: { truceId: string; side: Side }) {
 
   useEffect(() => {
     let alive = true;
-    api
-      .getTruce(truceId)
-      .then(async (v) => {
+    // The evening as it stands after any swaps, alongside the truce; the plan as decided if that can't be read.
+    Promise.all([api.getTruce(truceId), api.getSwaps(truceId).catch(() => null)])
+      .then(async ([v, swaps]) => {
         if (!alive) return;
+        setSwaps(swaps);
         setView(v);
         setLoadError(null);
         // The ledger as it stands, so the result can show it moving.
@@ -137,7 +143,9 @@ export function CheckIn({ truceId, side }: { truceId: string; side: Side }) {
 
   const name = view ? nameOf(view.names, side) : '';
   const letters = view ? monograms(view.names, view.members) : {};
-  const picks = view ? picksOf(view) : null;
+  const picks = view ? picksOf(view, swaps?.bundle ?? null) : null;
+  // Why this evening can't take a check-in right now, if it can't.
+  const waitFor = view?.replacedBy ? 'replanned' : swaps?.lock === 'open' ? 'vote' : null;
 
   return (
     <Page
@@ -174,7 +182,34 @@ export function CheckIn({ truceId, side }: { truceId: string; side: Side }) {
         </div>
       )}
 
-      {view && !result && view.status === 'done' && (
+      {view && !result && view.status === 'done' && waitFor === 'replanned' && (
+        <div className="checkin__body">
+          <Notice tone="info" icon="retry" title="This evening was planned again">
+            Check in on the new plan, so you rate what you actually did.
+          </Notice>
+          <ButtonLink variant="primary" iconEnd="arrow-right" href={`/truces/${view.replacedBy}/checkin/${side}`}>
+            Check in on the new plan
+          </ButtonLink>
+        </div>
+      )}
+
+      {view && !result && view.status === 'done' && waitFor === 'vote' && (
+        <div className="checkin__body">
+          <Notice tone="info" icon="exchange" title="A swap is waiting for votes">
+            Check in once it is settled, so you rate the evening as it ends up.
+          </Notice>
+          <span className="checkin__actions">
+            <ButtonLink variant="primary" iconEnd="arrow-right" href={`/t/${truceId}?tab=decision`}>
+              See the vote
+            </ButtonLink>
+            <Button variant="ghost" icon="retry" onClick={() => setAttempt((n) => n + 1)}>
+              Check again
+            </Button>
+          </span>
+        </div>
+      )}
+
+      {view && !result && view.status === 'done' && waitFor === null && (
         <form
           className="checkin__body"
           onSubmit={(e) => {

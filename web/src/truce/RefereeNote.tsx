@@ -38,8 +38,20 @@ function Pill({ icon, title, explain, tone, live, children }: PillProps) {
   );
 }
 
-/** What the referee's polish swapped: old pick struck through, the new one after an arrow. */
-export function Swaps({ event }: { event: EventOf<'polish'> }) {
+/** One item replaced by another: the old one struck through, the new one after an arrow. */
+export function FromTo({ from, to }: { from: string | undefined; to: string | undefined }) {
+  return (
+    <span className="from-to">
+      <s>{from}</s>
+      <Icon name="arrow-right" size={16} className="from-to__arrow" />
+      <span className="visually-hidden"> for </span>
+      <strong>{to}</strong>
+    </span>
+  );
+}
+
+/** What the referee's polish swapped, one line per item. */
+export function PolishSwaps({ event }: { event: EventOf<'polish'> }) {
   const { items } = useTruceCtx();
   return (
     <ul className="sys__swaps">
@@ -47,9 +59,7 @@ export function Swaps({ event }: { event: EventOf<'polish'> }) {
         <li key={slot}>
           <Icon name={SLOT_ICON[slot]} size={16} />
           <span className="visually-hidden">{SLOT_LABEL[slot]}: </span>
-          <s>{items[event.from[slot]]?.name}</s>
-          <Icon name="arrow-right" size={16} />
-          <strong>{items[event.to[slot]]?.name}</strong>
+          <FromTo from={items[event.from[slot]]?.name} to={items[event.to[slot]]?.name} />
         </li>
       ))}
     </ul>

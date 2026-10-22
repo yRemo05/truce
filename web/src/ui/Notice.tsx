@@ -9,6 +9,7 @@ const GLYPH: Record<NoticeTone, IconName> = { info: 'info', warn: 'warning', err
 /** Every inline message: leads with its glyph, says what happened, offers the next step. */
 export function Notice({
   tone = 'info',
+  icon,
   title,
   children,
   action,
@@ -16,6 +17,8 @@ export function Notice({
   live,
 }: {
   tone?: NoticeTone;
+  /** A glyph that says more than the tone's own: a swap, a replan. */
+  icon?: IconName;
   title?: ReactNode;
   children?: ReactNode;
   action?: ReactNode;
@@ -25,7 +28,7 @@ export function Notice({
 }) {
   return (
     <div className={cx('notice', `notice--${tone}`, className)} role={live ? (tone === 'error' ? 'alert' : 'status') : undefined}>
-      <Icon name={GLYPH[tone]} size={20} className="notice__glyph" />
+      <Icon name={icon ?? GLYPH[tone]} size={20} className="notice__glyph" />
       <div className="notice__body">
         {title && <p className="notice__title">{title}</p>}
         {children && <div className="notice__text">{children}</div>}

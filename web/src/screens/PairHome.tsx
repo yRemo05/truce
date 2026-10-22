@@ -4,6 +4,7 @@
  * Inventory, by priority:
  *   primary   — Start the truce (only when everyone is ready), or Watch the running one
  *   primary   — who's ready: each person, a status chip, fill in / redo, their own link
+ *   rare      — a swap or replan of the last evening waiting for votes: a banner on top, to the vote
  *   secondary — after an evening: "How was the evening?", each person's check-in
  *   secondary — the ledger (a split bar for two, a bar each for a group)
  *   secondary — past evenings, each opening its plan, with who checked in
@@ -14,7 +15,8 @@
  * in 8–12. Phone: check-in, tonight, ledger, history. Polls every 4 s while
  * someone is still picking, a truce runs or check-ins are due.
  * Icons: check / pencil (status), arrow-right, copy (link), play (start), eye
- * (watch), heart (check-in), scale (ledger), calendar (history), pin.
+ * (watch), heart (check-in), scale (ledger), calendar (history), pin,
+ * exchange / retry (a swap or replan waiting for votes).
  */
 import type { PairView } from '@contract';
 import { useEffect, useState } from 'react';
@@ -41,10 +43,13 @@ import { EXPLAIN } from '@/lib/glossary';
 import { dayMonth } from '@/lib/format';
 import { groupNames, listNames, modeLabel, monograms, nameOf, possessive, type Names } from '@/lib/people';
 import { absolute } from '@/lib/share';
+import { mySide } from '@/lib/mine';
+import { canVote } from '@/lib/swaps';
 import { gaveGround, SLOTS } from '@/lib/truce';
 import { useStartTruce } from '@/lib/useAction';
 import { usePair } from '@/lib/usePair';
 import { CheckinCard } from '@/truce/CheckinCard';
+import { SwapBanner } from '@/truce/SwapVote';
 import { NotFound } from './NotFound';
 
 function Tonight({ pair, letters, running, pass }: { pair: PairView; letters: Names; running: string | null; pass: boolean }) {
@@ -222,9 +227,10 @@ export function PairHome({ pairId }: { pairId: string }) {
   // A truce still going gets a link to watch it, rather than a second start.
   const running = last?.status === 'running' ? last.id : null;
   const checkinDue = Boolean(pair && last?.status === 'done' && pair.members.some((s) => !last.checkedIn[s]));
+  const openSwap = last?.openSwap ?? null;
 
   // Poll while someone is still picking, a truce runs, or check-ins are due on other phones.
-  const settled = Boolean(pair && pair.members.every((s) => pair.ready[s]) && !running && !checkinDue);
+  const settled = Boolean(pair && pair.members.every((s) => pair.ready[s]) && !running && !checkinDue && !openSwap);
   useEffect(() => setPoll(!settled), [settled]);
 
   if (error?.status === 404) return <NotFound what="pair" />;
@@ -255,6 +261,19 @@ export function PairHome({ pairId }: { pairId: string }) {
       {pair ? (
         <div className="grid pair__grid">
           <div className="pair__main">
+            {openSwap && last && (
+              <SwapBanner
+                swap={openSwap}
+                names={pair.names}
+                action={
+                  <ButtonLink size="sm" iconEnd="arrow-right" href={`/t/${last.id}?tab=decision`}>
+                    {canVote(openSwap, mySide(pair.id)) ? 'Vote' : 'See the vote'}
+                  </ButtonLink>
+                }
+              >
+                Votes are open on tonight’s plan.
+              </SwapBanner>
+            )}
             {checkinDue && last && (
               <CheckinCard
                 members={pair.members}
@@ -263,7 +282,7 @@ export function PairHome({ pairId }: { pairId: string }) {
                 truceId={last.id}
                 checkedIn={last.checkedIn}
                 title="How was the evening?"
-                meta="Each of you says how it really went."
+                meta={openSwap ? 'Each of you says how it really went, once the vote is settled.' : 'Each of you says how it really went.'}
                 footer={
                   <ButtonLink size="sm" variant="ghost" iconEnd="arrow-right" href={`/t/${last.id}`} className="checkin-card__plan">
                     See the plan

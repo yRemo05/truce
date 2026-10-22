@@ -787,6 +787,15 @@
 .chip.is-on .icon {
   color: var(--primary);
 }
+/* A chip may lead with a person's mark: "(M) Maya". */
+.chip .btn__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.chip .avatar {
+  box-shadow: none;
+}
 
 /* ---------- Tabs ---------- */
 .tabs {
@@ -837,4 +846,92 @@
   height: 0.5rem;
   border-radius: var(--radius-full);
   background: var(--primary);
+}
+
+/* ---------- Sheet (a small modal): from the bottom on a phone, centred on wider screens ---------- */
+.sheet {
+  --rise: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  max-height: min(92dvh, 46rem);
+  margin: auto 0 0;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: var(--shadow-pop);
+}
+.sheet[open] {
+  animation: rise 240ms var(--ease-out) both;
+}
+.sheet::backdrop {
+  background: rgb(5 8 8 / 0.64);
+}
+.sheet[open]::backdrop {
+  animation: fade-in 200ms var(--ease-out) both;
+}
+html:has(.sheet[open]) {
+  overflow: hidden;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.sheet__panel {
+  display: grid;
+  gap: var(--s-4);
+  padding: var(--s-5) var(--card-pad) calc(var(--s-5) + env(safe-area-inset-bottom));
+}
+.sheet__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.sheet__title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 2.5rem;
+  font-size: var(--text-lg);
+}
+.sheet__icon {
+  color: var(--muted-foreground);
+}
+.sheet__close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-right: calc(-1 * var(--s-2));
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.sheet__close:hover {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+.sheet__close:focus-visible {
+  outline-offset: -2px;
+}
+@media (min-width: 48em) {
+  .sheet {
+    --rise: 0.5rem;
+    width: min(32rem, 100% - 2rem);
+    margin: auto;
+    border-bottom: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+  }
+  .sheet__panel {
+    padding-bottom: var(--s-5);
+  }
 }

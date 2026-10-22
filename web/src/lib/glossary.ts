@@ -24,4 +24,7 @@ export const EXPLAIN = {
   checkin:
     'Tell Truce how the evening really went. The ledger then counts how it went, not just Qloo’s prediction, and your agent learns what to suggest again.',
   portrait: 'The taste words Qloo connects with each person’s favourites.',
+  swap:
+    'Anyone can ask to change one item of the evening. If it can’t happen, it swaps at once; if it’s a matter of taste, the group votes. Each of you has one taste swap per evening.',
+  floor: 'The least each person may end up with, set by the fair evening. A swap never takes anyone below it.',
 } as const;

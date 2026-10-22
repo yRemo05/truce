@@ -4,7 +4,7 @@ import { Avatar, Badge, cx, Icon, InfoTip, SectionHeader, Spinner, Thumb, Voice 
 import { eveningLabel } from '@/lib/format';
 import { EXPLAIN } from '@/lib/glossary';
 import { agentOf, listNames, nameOf, possessive } from '@/lib/people';
-import { findsOf, type ScoutStep, type TruceState } from '@/lib/truce';
+import { findsOf, type Bundle, type ScoutStep, type TruceState } from '@/lib/truce';
 import { useTruceCtx } from './context';
 import { PoolPanel, PoolSkeleton } from './PoolPanel';
 
@@ -232,7 +232,8 @@ function Scouts({ state }: { state: TruceState }) {
  * Research: everything before the talks. Where and when, how Qloo reads each
  * person, what each agent scouted, and every option with where it came from.
  */
-export function Research({ state }: { state: TruceState }) {
+/** `plan` is the evening as it stands after any swaps, once decided. */
+export function Research({ state, plan }: { state: TruceState; plan: Bundle | null }) {
   const { location } = useTruceCtx();
   const tonight = state.tonight;
   return (
@@ -255,7 +256,7 @@ export function Research({ state }: { state: TruceState }) {
       </div>
       <div className="research__options">
         {state.pool ? (
-          <PoolPanel pool={state.pool} indifferent={state.indifferent} table={state.onTable?.bundle ?? null} final={state.result?.bundle ?? null} />
+          <PoolPanel pool={state.pool} indifferent={state.indifferent} table={state.onTable?.bundle ?? null} final={plan} />
         ) : (
           !state.error && <PoolSkeleton />
         )}

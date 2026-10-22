@@ -294,6 +294,8 @@ interface TimelineInput {
   strikeAt: number | null;
   brain: 'claude' | 'rules';
   ledgerAfter: (concession: PerSide<number>) => Extract<StreamEvent, { type: 'ledger' }>;
+  /** A replan: item names swapped away from the evening it plans again, kept out of the pool. */
+  exclude?: readonly string[];
 }
 
 const MOVES_PER_PERSON = 3;
@@ -308,6 +310,7 @@ function normalize(w: SideInput['weights']): Record<Slot, number> {
 /** The whole truce, with each event's delay from the start in ms. */
 export function buildTimeline(input: TimelineInput): { timeline: Timed[]; result: TruceResult; items: Record<Slot, CardItem[]> } {
   const { members, names, sides, briefs, alpha, brain } = input;
+  const excluded = new Set(input.exclude ?? []);
   const n = members.length;
   const city = cityOf(input.location);
   const name = (s: Side) => names[s] ?? '';
@@ -332,12 +335,14 @@ export function buildTimeline(input: TimelineInput): { timeline: Timed[]; result
     ...FILMS.map(([nm, scores]): Row => ({ slot: 'film', name: nm, scores, scout: null })),
     ...RESTAURANTS[city].map(([nm, scores]): Row => ({ slot: 'restaurant', name: nm, scores, scout: null })),
     ...MUSIC.map(([nm, scores]): Row => ({ slot: 'music', name: nm, scores, scout: null })),
-  ].filter((r) => !vetoed(r, briefs, members) && !members.some((s) => seeds[s]?.[r.slot].includes(r.name)));
+  ].filter((r) => !vetoed(r, briefs, members) && !excluded.has(r.name) && !members.some((s) => seeds[s]?.[r.slot].includes(r.name)));
   // Scouting needs the model: a rule-based truce goes straight from tastes to the pool.
   const plans =
     brain === 'rules'
       ? []
-      : members.map((s) => ({ side: s, plan: SCOUTS[city][seat(s)]! })).filter(({ plan }) => !vetoed({ slot: plan.slot, name: plan.item }, briefs, members));
+      : members
+          .map((s) => ({ side: s, plan: SCOUTS[city][seat(s)]! }))
+          .filter(({ plan }) => !vetoed({ slot: plan.slot, name: plan.item }, briefs, members) && !excluded.has(plan.item));
 
   if (plans.length) push(300, { type: 'status', phase: 'scouting', brain });
   const find = (slot: Slot, nm: string): ScoutFind => {

@@ -41,6 +41,12 @@ export const httpApi: Api = {
   checkin: (truceId, side, input) =>
     request(`/api/truces/${encodeURIComponent(truceId)}/checkins/${side}`, json('PUT', input)),
   calendarUrl: async (truceId) => `/api/truces/${encodeURIComponent(truceId)}/calendar.ics`,
+  getSwaps: (truceId) => request(`/api/truces/${encodeURIComponent(truceId)}/swaps`),
+  askSwap: (truceId, input) => request(`/api/truces/${encodeURIComponent(truceId)}/swaps`, json('POST', input)),
+  vote: (truceId, swapId, side, vote) =>
+    request(`/api/truces/${encodeURIComponent(truceId)}/swaps/${encodeURIComponent(swapId)}/votes/${side}`, json('PUT', { vote })),
+  cancelSwap: (truceId, swapId, side) =>
+    request(`/api/truces/${encodeURIComponent(truceId)}/swaps/${encodeURIComponent(swapId)}/cancel`, json('POST', { side })),
 
   stream(truceId, from, handlers) {
     const source = new EventSource(`/api/truces/${encodeURIComponent(truceId)}/stream?from=${from}`);

@@ -11,7 +11,10 @@ import type {
   SideSaved,
   Slot,
   StreamEvent,
+  SwapInput,
+  SwapsView,
   TruceView,
+  VoteInput,
 } from '@contract';
 
 /** One failed request, as the UI needs it: what to say, and whether waiting helps. */
@@ -68,6 +71,13 @@ export interface Api {
   checkin(truceId: string, side: Side, input: CheckinInput): Promise<CheckinResult>;
   /** Where to download the evening as a calendar event. */
   calendarUrl(truceId: string): Promise<string>;
+  /** The evening as it stands after any swaps, and every request made on it. */
+  getSwaps(truceId: string): Promise<SwapsView>;
+  /** Ask to swap one item, or to plan the evening again. */
+  askSwap(truceId: string, input: SwapInput): Promise<SwapsView>;
+  vote(truceId: string, swapId: string, side: Side, vote: VoteInput['vote']): Promise<SwapsView>;
+  /** The asker withdraws an open request. */
+  cancelSwap(truceId: string, swapId: string, side: Side): Promise<SwapsView>;
   /** Opens the live event stream from event `from` on; returns a function that closes it. */
   stream(truceId: string, from: number, handlers: StreamHandlers): () => void;
 }

@@ -7,9 +7,16 @@
  * gathering, as the server does when Qloo finds no restaurants. Add `?rules`
  * when starting a truce or saving a side to play a server with no model, and
  * `?interrupt` when starting one to have it stop mid-talks.
+ *
+ * Swaps follow the server's rules with stand-in maths and a 30-second vote:
+ * the replacement is the item left in the slot with the highest summed score
+ * that keeps everyone at or above their minimum (the fair evening less 0.10),
+ * and an agent answering for someone says yes when that person's score for
+ * the replacement is within 10 of the item it replaces.
  */
 import type {
   BriefView,
+  CardItem,
   CheckinInput,
   DemoInput,
   LedgerEntry,
@@ -22,12 +29,17 @@ import type {
   Side,
   SideInput,
   Slot,
+  SwapLock,
+  SwapsView,
+  SwapView,
+  SwapVote,
   TruceResult,
   TruceView,
 } from '@contract';
 import { ApiError, type Api } from '../api/api';
-import { membersOf, perSide, type Names } from '@/lib/people';
-import { bySlot, SLOTS } from '@/lib/truce';
+import { membersOf, nameOf, perSide, type Names } from '@/lib/people';
+import { isFact, pendingOf, swappedAway, yesCount } from '@/lib/swaps';
+import { bySlot, SLOTS, type Bundle } from '@/lib/truce';
 import { understand } from './brief';
 import { byName, CATALOG, findFoods, foodByName } from './catalog';
 import { alphaOf, balanceOf, experienced, owedOf, realised, tiltOf } from './ledger';
@@ -68,6 +80,13 @@ interface MockTruce {
   picks: Record<Slot, Seed>;
   checkins: PerSide<CheckinInput>;
   failed?: boolean;
+  /** The evening after any swaps; the result's own until one happens. */
+  bundle?: Bundle;
+  /** Swaps and replans asked for on this evening, oldest first. */
+  swaps?: SwapView[];
+  /** The truce that planned this evening again, and the one this one plans again. */
+  replacedBy?: string | null;
+  replaces?: string | null;
 }
 
 interface Db {
@@ -141,17 +160,38 @@ const trucesOf = (db: Db, pairId: string) =>
     .filter((t) => t.pairId === pairId)
     .sort((x, y) => x.createdAt - y.createdAt);
 
+/** A finished evening the ledger counts: not one a replan replaced. */
+const counted = (t: MockTruce) => settled(t) && !t.replacedBy;
+
 const checkedIn = (t: MockTruce) => perSide(t.members, (s) => Boolean(t.checkins[s]));
 
-/** A finished truce's concessions, with each check-in counted halfway toward how it really went. */
+const poolOf = (t: MockTruce) => {
+  const e = t.timeline.find((x) => x.event.type === 'pool')?.event;
+  return e?.type === 'pool' ? e : null;
+};
+const bundleOf = (t: MockTruce): Bundle => t.bundle ?? t.result!.bundle;
+const swapsOf = (t: MockTruce) => (t.swaps ??= []);
+/** The request waiting for votes on an evening, if any. */
+const openIn = (t: MockTruce) => swapsOf(t).find((w) => w.status === 'open');
+const itemOf = (t: MockTruce, slot: Slot, id: string): CardItem | undefined => poolOf(t)?.items[slot].find((i) => i.id === id);
+
+/** A person's 0–1 value for an evening, summed the way the script sums it. */
+const valueOf = (t: MockTruce, s: Side, bundle: Bundle) =>
+  SLOTS.reduce((sum, slot) => sum + (t.result!.weights[s]?.[slot] ?? 0) * ((itemOf(t, slot, bundle[slot])?.scores[s] ?? 0) / 100), 0);
+const scoresOf = (t: MockTruce, bundle: Bundle) => perSide(t.members, (s) => Math.round(valueOf(t, s, bundle) * 100));
+
+/** A finished truce's concessions at its evening as it stands, with each check-in counted halfway toward how it really went. */
 function concessionOf(t: MockTruce): PerSide<number> {
   const r = t.result!;
+  const bundle = bundleOf(t);
+  const hasPool = poolOf(t) !== null;
   return perSide(t.members, (s) => {
     const c = t.checkins[s];
-    const predicted = r.utilities[s] ?? 0;
+    const predicted = hasPool ? valueOf(t, s, bundle) : (r.utilities[s] ?? 0);
     const best = r.best[s] ?? 0;
-    if (!c?.went) return r.concession[s] ?? 0;
-    return realised(best, predicted, experienced(r.weights[s]!, r.items[s]!, c.ratings));
+    if (!c?.went) return Math.max(0, best - predicted);
+    const items = hasPool ? bySlot((slot) => (itemOf(t, slot, bundle[slot])?.scores[s] ?? 0) / 100) : r.items[s]!;
+    return realised(best, predicted, experienced(r.weights[s]!, items, c.ratings));
   });
 }
 
@@ -184,10 +224,15 @@ function pairView(db: Db, pair: MockPair): PairView {
     names: pair.names,
     location: pair.location,
     ready: perSide(pair.members, (s) => Boolean(pair.sides[s])),
-    ledger: ledgerOf(pair, all.filter(settled)),
+    ledger: ledgerOf(pair, all.filter(counted)),
     lastTruceId: last?.id ?? null,
-    lastTruce: last ? { id: last.id, status: statusOf(last), checkedIn: checkedIn(last) } : null,
+    lastTruce: last ? { id: last.id, status: statusOf(last), checkedIn: checkedIn(last), openSwap: openSwapOf(last) } : null,
   };
+}
+
+function openSwapOf(t: MockTruce): NonNullable<PairView['lastTruce']>['openSwap'] {
+  const open = openIn(t);
+  return open ? { id: open.id, kind: open.kind, side: open.side, slot: open.slot, deadline: open.deadline, waiting: pendingOf(open, t.members) } : null;
 }
 
 function pairOr404(db: Db, id: string): MockPair {
@@ -208,7 +253,13 @@ const fold = (s: string) =>
     .replace(/\p{M}/gu, '')
     .toLowerCase();
 
-function start(db: Db, pairId: string): string {
+/** A replan: the evening it plans again, and the item names to leave out. */
+interface Again {
+  replaces: string;
+  exclude: string[];
+}
+
+function start(db: Db, pairId: string, again?: Again): string {
   const pair = pairOr404(db, pairId);
   const all = trucesOf(db, pairId);
   const running = all.find((t) => !isDone(t));
@@ -217,7 +268,7 @@ function start(db: Db, pairId: string): string {
   if (members.some((s) => !pair.sides[s])) throw new ApiError(409, 'not_ready', 'Everyone needs to finish their picks first.');
   if (pair.location.trim().toLowerCase() === 'atlantis') return failing(db, pair);
 
-  const done = all.filter(settled);
+  const done = all.filter((t) => counted(t) && t.id !== again?.replaces);
   const before = ledgerOf(pair, done);
   const count = done.length;
   // A couple alternates a deal and a stand-off; a group always finds its deal.
@@ -235,6 +286,7 @@ function start(db: Db, pairId: string): string {
     variant,
     strikeAt: rulesToday() ? null : variant === 'hardline' ? 5 : members.length === 2 ? 3 : 4,
     brain: rulesToday() ? 'rules' : 'claude',
+    exclude: again?.exclude,
     ledgerAfter: (concession) => {
       const after = ledgerOf(pair, done, concession);
       return {
@@ -258,6 +310,7 @@ function start(db: Db, pairId: string): string {
     evening: bySlot((s) => pick(s)?.name ?? ''),
     picks: bySlot((s) => ({ id: result.bundle[s], name: pick(s)?.name ?? '' })),
     checkins: {},
+    replaces: again?.replaces ?? null,
   };
   write(db);
   return id;
@@ -382,12 +435,166 @@ function demoPair(kind: DemoInput['kind']): MockPair {
   };
 }
 
+/* ---------- Swaps ---------- */
+
+const VOTE_MS = 30_000;
+/** The fair evening less this is each person's minimum: no replacement takes anyone below it. */
+const MINIMUM_GAP = 0.1;
+/** Requests one evening takes, all kinds together (withdrawn ones aside), and swaps of fact per person. */
+const MAX_REQUESTS = 12;
+const FACT_SWAPS_PER_PERSON = 3;
+
+const iso = (ms: number) => new Date(ms).toISOString();
+const neededOf = (t: MockTruce) => Math.floor(t.members.length / 2) + 1;
+
+const LOCK_MESSAGE: Record<Exclude<SwapLock, 'open'>, string> = {
+  not_done: 'This evening isn’t decided yet.',
+  history: 'This earlier evening can’t be changed.',
+  replanned: 'This evening was planned again. Swap on the new plan instead.',
+  superseded: 'The group has planned a newer evening since, so this one stays as it was.',
+  checked_in: 'Someone already checked in, so this evening is settled.',
+  past: 'This evening has passed.',
+};
+
+/** A newer truce (planning or planned, not failed) has taken this evening's place. */
+const supersededIn = (db: Db, t: MockTruce) => trucesOf(db, t.pairId).some((x) => x.id !== t.id && x.createdAt > t.createdAt && !x.failed);
+
+function lockOf(db: Db, t: MockTruce, pair: MockPair): SwapLock | null {
+  if (!settled(t)) return 'not_done';
+  if (t.replacedBy) return 'replanned';
+  if (supersededIn(db, t)) return 'superseded';
+  if (t.members.some((s) => t.checkins[s])) return 'checked_in';
+  const tonight = poolOf(t)?.tonight;
+  if (tonight && tonight.date < tonightIn(pair.location).date) return 'past';
+  if (openIn(t)) return 'open';
+  return null;
+}
+
+/** Whether someone still has their one taste swap: a withdrawn request gives it back. */
+const canAskOf = (t: MockTruce, s: Side) =>
+  !swapsOf(t).some((w) => w.side === s && w.kind === 'swap' && w.reason !== null && !isFact(w.reason) && w.status !== 'cancelled');
+
+/** The last settled swap was an item that can't happen, with nothing to put in its place, and it is still in the evening. */
+function stuckOf(t: MockTruce): boolean {
+  const last = swapsOf(t).findLast((w) => w.kind === 'swap' && w.status !== 'open' && w.status !== 'cancelled');
+  return Boolean(last?.status === 'no_alternative' && last.reason === 'unavailable' && last.slot && last.from && bundleOf(t)[last.slot] === last.from.id);
+}
+
+/** The referee's stand-in: the item left in the slot with the highest summed score that keeps everyone at or above their minimum. */
+function replacementFor(t: MockTruce, slot: Slot): CardItem | null {
+  const bundle = bundleOf(t);
+  const gone = new Set([bundle[slot], ...swapsOf(t).flatMap((w) => (w.slot === slot && w.from && w.status === 'swapped' ? [w.from.id] : []))]);
+  const floor = (s: Side) => (t.result!.fair.u[s] ?? 0) - MINIMUM_GAP;
+  const total = (i: CardItem) => t.members.reduce((sum, s) => sum + (i.scores[s] ?? 0), 0);
+  const fits = (poolOf(t)?.items[slot] ?? []).filter((i) => !gone.has(i.id) && t.members.every((s) => valueOf(t, s, { ...bundle, [slot]: i.id }) >= floor(s)));
+  return fits.sort((x, y) => total(y) - total(x))[0] ?? null;
+}
+
+/** What an agent answers for someone who stayed silent, with a reason in a few words. */
+function agentVote(t: MockTruce, names: Names, w: SwapView, s: Side): SwapVote {
+  const name = nameOf(names, s);
+  const say = (yes: boolean, why: string): SwapVote => ({ vote: yes ? 'yes' : 'no', by: 'agent', why });
+  if (w.kind === 'replan' || !w.slot || !w.from) {
+    const now = scoresOf(t, bundleOf(t))[s] ?? 0;
+    return now < 70 ? say(true, `Tonight’s plan doesn’t suit ${name} much.`) : say(false, `Tonight’s plan suits ${name} well.`);
+  }
+  const next = replacementFor(t, w.slot);
+  if (!next) return say(true, `${name} doesn’t mind the referee looking.`);
+  const change = (next.scores[s] ?? 0) - (itemOf(t, w.slot, w.from.id)?.scores[s] ?? 0);
+  if (change >= 0) return say(true, `The new ${w.slot} suits ${name} at least as well.`);
+  if (change >= -10) return say(true, `The new ${w.slot} costs ${name} little.`);
+  return say(false, `${w.from.name} matters to ${name} tonight.`);
+}
+
+/** The referee swaps the item in, or finds nothing fair left. */
+function swapIn(t: MockTruce, w: SwapView) {
+  const slot = w.slot!;
+  const next = replacementFor(t, slot);
+  if (!next) {
+    w.status = 'no_alternative';
+    return;
+  }
+  const before = bundleOf(t);
+  const after = { ...before, [slot]: next.id };
+  t.bundle = after;
+  t.evening[slot] = next.name;
+  t.picks[slot] = { id: next.id, name: next.name };
+  w.status = 'swapped';
+  w.to = { id: next.id, name: next.name };
+  w.scores = { before: w.scores?.before ?? scoresOf(t, before), after: scoresOf(t, after) };
+}
+
+/** A new truce for the same evening, without what was swapped away. */
+function replan(db: Db, t: MockTruce, w: SwapView) {
+  const exclude = swappedAway(swapsOf(t)).map((x) => x.from!.name);
+  const id = start(db, t.pairId, { replaces: t.id, exclude });
+  t.replacedBy = id;
+  w.status = 'replanned';
+  w.truceId = id;
+}
+
+/** The group has answered: enough yeses and the request goes ahead, else the evening stays as it is. */
+function resolve(db: Db, t: MockTruce, w: SwapView, now: number) {
+  w.resolvedAt = iso(now);
+  if (yesCount(w) < w.needed) w.status = 'kept';
+  else if (w.kind === 'replan') replan(db, t, w);
+  else swapIn(t, w);
+}
+
+/**
+ * Closes every vote whose time is up, the agents answering for anyone silent,
+ * and calls off one whose evening a newer truce has taken over. The server
+ * does this on its own clock too.
+ */
+function settleSwaps(db: Db, t: MockTruce): boolean {
+  const w = openIn(t);
+  if (!w) return false;
+  const now = Date.now();
+  if (supersededIn(db, t)) {
+    Object.assign(w, { status: 'cancelled', cancelled: 'superseded', resolvedAt: iso(now) });
+    return true;
+  }
+  if (!w.deadline || Date.parse(w.deadline) > now) return false;
+  const names = db.pairs[t.pairId]!.names;
+  for (const s of t.members) if (!w.votes[s]) w.votes[s] = agentVote(t, names, w, s);
+  resolve(db, t, w, now);
+  return true;
+}
+
+function swapsView(db: Db, t: MockTruce): SwapsView {
+  const pair = db.pairs[t.pairId]!;
+  const decided = settled(t);
+  // The ledger with this evening as it is now: every counted evening before it, then it.
+  const before = trucesOf(db, pair.id).filter((x) => x.id !== t.id && counted(x) && x.createdAt < t.createdAt);
+  const ledger = ledgerOf(pair, decided ? [...before, t] : before);
+  return {
+    bundle: decided ? bundleOf(t) : null,
+    scores: decided && poolOf(t) ? scoresOf(t, bundleOf(t)) : null,
+    concession: decided && poolOf(t) ? perSide(t.members, (s) => Math.max(0, (t.result!.best[s] ?? 0) - valueOf(t, s, bundleOf(t)))) : null,
+    ledger: { alpha: ledger.alpha, tilt: ledger.tilt, owed: ledger.owed },
+    swaps: swapsOf(t),
+    lock: lockOf(db, t, pair),
+    canAsk: perSide(t.members, (s) => canAskOf(t, s)),
+    needed: neededOf(t),
+    voteMinutes: VOTE_MS / 60_000,
+    replanNow: stuckOf(t),
+    replacedBy: t.replacedBy ?? null,
+  };
+}
+
+/** A truce with its votes brought up to date, saved only if that changed anything. */
+function liveTruce(db: Db, id: string): MockTruce {
+  const t = truceOr404(db, id);
+  if (settleSwaps(db, t)) write(db);
+  return t;
+}
+
 /** The evening as a calendar file: 19:30 to 23:30 in the restaurant's city. */
 function calendarFile(t: MockTruce, pair: MockPair): string {
-  const pool = t.timeline.find((x) => x.event.type === 'pool')?.event;
-  const tonight = pool?.type === 'pool' ? pool.tonight : tonightIn(pair.location);
+  const pool = poolOf(t);
+  const tonight = pool?.tonight ?? tonightIn(pair.location);
   const day = tonight.date.replace(/-/g, '');
-  const restaurant = pool?.type === 'pool' ? pool.items.restaurant.find((i) => i.id === t.result?.bundle.restaurant) : undefined;
+  const restaurant = pool && t.result ? itemOf(t, 'restaurant', bundleOf(t).restaurant) : undefined;
   const esc = (s: string) => s.replace(/([,;\\])/g, '\\$1');
   return [
     'BEGIN:VCALENDAR',
@@ -445,7 +652,10 @@ export const mockApi: Api = {
   async getPair(id) {
     await wait(180);
     const db = read();
-    return pairView(db, pairOr404(db, id));
+    const pair = pairOr404(db, id);
+    const last = trucesOf(db, id).at(-1);
+    if (last) liveTruce(db, last.id);
+    return pairView(db, pair);
   },
 
   async setLocation(pairId, location) {
@@ -503,6 +713,8 @@ export const mockApi: Api = {
       endedAt: isDone(t) ? new Date(t.createdAt + endOf(t)).toISOString() : null,
       checkedIn: checkedIn(t),
       events: t.timeline.filter((x) => x.at <= elapsed).map((x) => x.event),
+      replacedBy: t.replacedBy ?? null,
+      replaces: t.replaces ?? null,
     } satisfies TruceView;
   },
 
@@ -512,11 +724,117 @@ export const mockApi: Api = {
     const t = truceOr404(db, truceId);
     if (!t.members.includes(side)) throw new ApiError(404, 'not_found', 'There is no such person in this truce.');
     if (!settled(t)) throw new ApiError(409, 'not_done', 'This evening isn’t planned yet.');
+    if (t.replacedBy) throw new ApiError(409, 'locked', 'This evening was planned again. Check in on the new plan.');
+    if (settleSwaps(db, t)) write(db);
+    // A check-in settles the evening, so it waits for a vote in progress rather than cutting it off.
+    if (openIn(t)) throw new ApiError(409, 'swap_open', 'A swap is waiting for votes. Check in once it is settled.');
     t.checkins[side] = input;
     write(db);
     const pair = db.pairs[t.pairId]!;
     const rated = (r: string) => (input.went ? SLOTS.filter((s) => input.ratings[s] === r).map((s) => t.picks[s]) : []);
-    return { ledger: ledgerOf(pair, trucesOf(db, pair.id).filter(settled)), learned: { loved: rated('loved'), avoided: rated('not_for_me') } };
+    return { ledger: ledgerOf(pair, trucesOf(db, pair.id).filter(counted)), learned: { loved: rated('loved'), avoided: rated('not_for_me') } };
+  },
+
+  async getSwaps(truceId) {
+    await wait(200);
+    const db = read();
+    return swapsView(db, liveTruce(db, truceId));
+  },
+
+  async askSwap(truceId, input) {
+    await wait(380);
+    const db = read();
+    const t = truceOr404(db, truceId);
+    if (settleSwaps(db, t)) write(db);
+    const pair = db.pairs[t.pairId]!;
+    const { side } = input;
+    if (!t.members.includes(side)) throw new ApiError(404, 'not_found', 'There is no such person in this truce.');
+    const lock = lockOf(db, t, pair);
+    if (lock === 'open') throw new ApiError(409, 'swap_open', 'Another request is waiting for votes. Ask again once it is settled.');
+    if (lock) throw new ApiError(409, 'locked', LOCK_MESSAGE[lock]);
+    const live = swapsOf(t).filter((w) => w.status !== 'cancelled');
+    const mine = live.filter((w) => w.side === side);
+    if (live.length >= MAX_REQUESTS) throw new ApiError(409, 'too_many', 'That’s a lot of changes for one evening. Plan it again instead.');
+
+    const now = Date.now();
+    const asked = {
+      id: newId(),
+      side,
+      status: 'open' as const,
+      createdAt: iso(now),
+      resolvedAt: null,
+      votes: { [side]: { vote: 'yes', by: 'person', why: null } } as PerSide<SwapVote>,
+      to: null,
+      truceId: null,
+      cancelled: null,
+    };
+    let w: SwapView;
+    if (input.kind === 'swap') {
+      const { slot, reason } = input;
+      if (reason === 'seen' && slot !== 'film') throw new ApiError(400, 'invalid', 'Only a film can be one you’ve seen.');
+      const fact = isFact(reason);
+      if (fact && mine.filter((w) => w.reason === 'unavailable').length >= FACT_SWAPS_PER_PERSON)
+        throw new ApiError(409, 'too_many', 'That’s a lot of swaps for one evening. Plan it again instead.');
+      if (!fact && !canAskOf(t, side))
+        throw new ApiError(409, 'swap_used', 'You’ve used your swap for tonight. Something that can’t happen (booked, closed, can’t watch it) still swaps.');
+      const bundle = bundleOf(t);
+      w = {
+        ...asked,
+        kind: 'swap',
+        slot,
+        reason,
+        deadline: fact ? null : iso(now + VOTE_MS),
+        needed: fact ? 0 : neededOf(t),
+        from: { id: bundle[slot], name: itemOf(t, slot, bundle[slot])?.name ?? '' },
+        scores: { before: scoresOf(t, bundle), after: null },
+      };
+    } else {
+      if (mine.some((w) => w.kind === 'replan')) throw new ApiError(409, 'swap_used', 'You’ve already asked to plan tonight again.');
+      if (trucesOf(db, t.pairId).some((x) => !isDone(x))) throw new ApiError(409, 'locked', 'A new truce is already being planned for this group.');
+      // An item that can't happen and has no replacement leaves no way around it: plan again at once.
+      const stuck = stuckOf(t);
+      w = { ...asked, kind: 'replan', slot: null, reason: null, deadline: stuck ? null : iso(now + VOTE_MS), needed: stuck ? 0 : neededOf(t), from: null, scores: null };
+    }
+    swapsOf(t).push(w);
+    if (w.needed === 0) resolve(db, t, w, now);
+    write(db);
+    return swapsView(db, t);
+  },
+
+  async vote(truceId, swapId, side, vote) {
+    await wait(260);
+    const db = read();
+    const t = truceOr404(db, truceId);
+    if (settleSwaps(db, t)) write(db);
+    const w = swapsOf(t).find((x) => x.id === swapId);
+    if (!w) throw new ApiError(404, 'not_found', 'This request does not exist.');
+    if (!t.members.includes(side)) throw new ApiError(404, 'not_found', 'There is no such person in this truce.');
+    if (w.status !== 'open') throw new ApiError(409, 'locked', 'This vote has already closed.');
+    const name = nameOf(db.pairs[t.pairId]!.names, side);
+    if (w.side === side) throw new ApiError(409, 'not_voter', `${name} asked for this, so their yes already counts.`);
+    if (w.votes[side]) throw new ApiError(409, 'not_voter', `${name} has already answered.`);
+    w.votes[side] = { vote, by: 'person', why: null };
+    // Decided once enough said yes, or too many said no for the rest to make up.
+    const noes = t.members.filter((s) => w.votes[s]?.vote === 'no').length;
+    if (yesCount(w) >= w.needed || noes > t.members.length - w.needed) resolve(db, t, w, Date.now());
+    write(db);
+    return swapsView(db, t);
+  },
+
+  async cancelSwap(truceId, swapId, side) {
+    await wait(260);
+    const db = read();
+    const t = truceOr404(db, truceId);
+    if (settleSwaps(db, t)) write(db);
+    const w = swapsOf(t).find((x) => x.id === swapId);
+    if (!w) throw new ApiError(404, 'not_found', 'This request does not exist.');
+    if (w.status !== 'open') throw new ApiError(409, 'locked', 'This request has already closed.');
+    if (w.side !== side) throw new ApiError(409, 'not_voter', 'Only the person who asked can withdraw it.');
+    w.status = 'cancelled';
+    w.cancelled = 'withdrawn';
+    w.resolvedAt = iso(Date.now());
+    write(db);
+    return swapsView(db, t);
   },
 
   async calendarUrl(truceId) {

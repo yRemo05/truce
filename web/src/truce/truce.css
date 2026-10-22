@@ -32,6 +32,7 @@
   gap: var(--s-1);
 }
 .research__main,
+.decision__main,
 .decision__side {
   display: grid;
   gap: var(--s-5);
@@ -618,6 +619,8 @@
   color: var(--muted-foreground);
 }
 .scorerow__label {
+  display: inline-flex;
+  align-items: center;
   font-weight: 550;
 }
 .scorerow__item {
@@ -782,8 +785,14 @@
   align-items: center;
   gap: 0.375rem;
 }
-.sys__swaps s {
+/* One item replaced by another, struck through → bold: the polish and the swaps. */
+.from-to s {
   color: var(--muted-foreground);
+}
+.from-to__arrow {
+  display: inline-block;
+  margin-inline: 0.25rem;
+  vertical-align: -3px;
 }
 
 /* ---------- Options from Qloo ---------- */
@@ -931,57 +940,104 @@
   align-items: center;
   gap: 0.125rem;
 }
-.plan__picks {
-  list-style: none;
-  padding: 0;
-  display: grid;
-}
-/* A wide plan card lays the three picks side by side. */
+/*
+ * One full-width row per item. A phone keeps one text column beside the
+ * thumb; a wide card splits it: what it is and how it fits (left), where and
+ * how to act on it (right). Swap sits at the top right of every row.
+ */
 .plan__card {
   container-type: inline-size;
 }
-@container (min-width: 52rem) {
-  .plan__picks {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    column-gap: var(--s-5);
-    padding-top: var(--s-4);
-    border-top: 1px solid var(--border);
-  }
-  .plan__picks .pick-row {
-    padding-block: 0;
-    border-top: 0;
-  }
-}
-.pick-row {
+.plan__rows {
+  list-style: none;
+  padding: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--s-4);
-  align-items: start;
-  padding-block: var(--s-3);
   border-top: 1px solid var(--border);
 }
-.pick-row__text {
+.plan-row {
   display: grid;
-  gap: 0.25rem;
-  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  grid-template-areas:
+    'thumb top'
+    'thumb what'
+    'thumb act';
+  gap: var(--s-2) var(--s-4);
+  padding-block: var(--s-4);
+  border-bottom: 1px solid var(--border);
 }
-.pick-row__kind {
+.plan-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.plan-row__thumb {
+  grid-area: thumb;
+}
+.plan-row__top {
+  grid-area: top;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-2);
+  min-height: var(--control-h-sm);
+}
+.plan-row__kind {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
 }
-.pick-row__name {
+/* The ghost button's padding hangs past the text edge, so its label lines up with the row's right edge. */
+.plan-row__action {
+  margin-left: auto;
+  margin-right: calc(-1 * var(--s-3));
+}
+.plan-row__what,
+.plan-row__act {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.plan-row__what {
+  grid-area: what;
+}
+.plan-row__act {
+  grid-area: act;
+}
+.plan-row__act:empty {
+  display: none;
+}
+.plan-row__name {
   font-size: 1.0625rem;
   overflow-wrap: anywhere;
 }
-.pick-row__line {
+@container (min-width: 40rem) {
+  .plan-row {
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      'thumb top top'
+      'thumb what act';
+    column-gap: var(--s-5);
+  }
+}
+/* A line led by a small glyph: an address, today's hours. */
+.icon-line {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.375rem;
 }
-.pick-row__line > .icon {
+.icon-line > .icon {
   flex: none;
+}
+/* A line of text that may run long (an address): the glyph stays at its first line. */
+.icon-line--text {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+.icon-line--text > .icon {
+  margin-top: 0.1875rem;
 }
 .act-links {
   list-style: none;
@@ -989,6 +1045,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
+}
+.act-links:not(:first-child) {
   margin-top: var(--s-2);
 }
 .plan__label {
@@ -1005,6 +1063,165 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
+}
+
+/* ---------- An open swap or replan, on top of the plan ---------- */
+.vote-card {
+  display: grid;
+  gap: var(--s-4);
+  border-color: rgb(110 168 163 / 0.5);
+}
+.vote-card__ask {
+  display: grid;
+  gap: var(--s-3);
+}
+.vote-card__q {
+  font-weight: 600;
+}
+.vote-card__answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.vote-card__mine .icon {
+  color: var(--primary);
+}
+.vote-card__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-4);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+}
+.vote-card__foot > .btn {
+  margin-left: auto;
+  margin-right: calc(-1 * var(--s-3));
+}
+/* "2 of 3 needed  Maya ✓  Ecrin ✕  Lina ⧗", then the time left on its own line. */
+.tally {
+  display: grid;
+  gap: var(--s-1);
+  min-width: 0;
+}
+.tally__votes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
+}
+.tally__who {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+  font-weight: 550;
+}
+.tally__who--yes .icon {
+  color: var(--primary);
+}
+.tally__who--no .icon {
+  color: var(--destructive);
+}
+.tally__who--waiting {
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+
+/* ---------- Asking for a swap (in a sheet) ---------- */
+.ask {
+  display: grid;
+  gap: var(--s-4);
+}
+.ask__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+.ask__item-text {
+  display: grid;
+  min-width: 0;
+}
+.ask__item-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ask__group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ask__legend {
+  padding: 0;
+  margin-bottom: var(--s-2);
+  font-size: var(--text-sm);
+  font-weight: 550;
+}
+.ask__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.ask__note {
+  margin-top: var(--s-2);
+}
+/* What happens next: one line, with room kept for it before a reason is picked. */
+.ask__next {
+  min-height: 3rem;
+  padding: var(--s-3);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+}
+.ask__next-icon {
+  color: var(--primary);
+}
+.ask__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+@media (max-width: 29.99em) {
+  .ask__actions > .btn {
+    flex: 1 1 0;
+  }
+}
+
+/* ---------- What changed since the decision ---------- */
+.swaplog {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--s-3);
+}
+.swaplog__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s-2);
+  align-items: start;
+  font-size: var(--text-sm);
+}
+.swaplog__icon {
+  margin-top: 3px;
+  color: var(--muted-foreground);
+}
+.swaplog__item.is-muted {
+  color: var(--muted-foreground);
+}
+.swaplog__text {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.swaplog__action {
+  justify-self: start;
+  margin-top: var(--s-1);
+}
+.swaplog__action--link {
+  margin-left: calc(-1 * var(--s-3));
 }
 
 /* ---------- Check-in (group page and Decision) ---------- */

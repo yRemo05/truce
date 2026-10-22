@@ -22,6 +22,10 @@ export const api: Api = {
   getTruce: async (...args) => (await load()).getTruce(...args),
   checkin: async (...args) => (await load()).checkin(...args),
   calendarUrl: async (...args) => (await load()).calendarUrl(...args),
+  getSwaps: async (...args) => (await load()).getSwaps(...args),
+  askSwap: async (...args) => (await load()).askSwap(...args),
+  vote: async (...args) => (await load()).vote(...args),
+  cancelSwap: async (...args) => (await load()).cancelSwap(...args),
   stream(truceId, from, handlers) {
     let close = () => {};
     let closed = false;

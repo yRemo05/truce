@@ -7,7 +7,7 @@ export function Hours({ hours }: { hours: CardItem['hours'] }) {
   if (!hours) return null;
   if (hours.openTonight === false) {
     return (
-      <p className="pick-row__line small">
+      <p className="icon-line small">
         <Badge variant="warning" icon="warning">
           May be closed tonight
         </Badge>
@@ -18,7 +18,7 @@ export function Hours({ hours }: { hours: CardItem['hours'] }) {
   }
   if (!hours.today) return null;
   return (
-    <p className="pick-row__line small">
+    <p className="icon-line small">
       <Icon name="clock" size={16} className="muted" />
       <span>Open today {hours.today}</span>
       <InfoTip label="About opening hours">{EXPLAIN.openTonight}</InfoTip>

@@ -13,6 +13,8 @@ export type ScoutStep = EventOf<'scout'>;
 
 export const SLOTS: readonly Slot[] = ['film', 'restaurant', 'music'];
 export const SLOT_LABEL: Record<Slot, string> = { film: 'Film', restaurant: 'Restaurant', music: 'Music' };
+/** The slot in the middle of a sentence: "swap the film". */
+export const SLOT_NOUN: Record<Slot, string> = { film: 'film', restaurant: 'restaurant', music: 'music' };
 export const SLOT_ICON: Record<Slot, IconName> = { film: 'film', restaurant: 'restaurant', music: 'music' };
 
 /** One value per slot. */

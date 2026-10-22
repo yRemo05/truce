@@ -17,6 +17,7 @@ export { PersonRow } from './PersonRow';
 export { ScoreMeter } from './ScoreMeter';
 export { SectionHeader } from './SectionHeader';
 export { Segmented } from './Segmented';
+export { Sheet } from './Sheet';
 export { Skeleton } from './Skeleton';
 export { Spinner } from './Spinner';
 export { Tabs, type TabItem } from './Tabs';

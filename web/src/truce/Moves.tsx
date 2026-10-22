@@ -1,4 +1,4 @@
-import type { PerSide, Side } from '@contract';
+import type { Side } from '@contract';
 import { memo, type ReactNode } from 'react';
 import { Avatar, cx, Icon, InfoTip, Thumb, Voice } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
@@ -6,6 +6,7 @@ import { agentOf, listNames, nameOf } from '@/lib/people';
 import { SLOT_ICON, SLOT_LABEL, SLOTS, turnLabel, type EventOf, type MoveEvent } from '@/lib/truce';
 import { Because } from './Because';
 import { useTruceCtx } from './context';
+import { ScoreRow } from './ScoreRow';
 import { Serves } from './Serves';
 
 interface BubbleProps {
@@ -67,23 +68,6 @@ export function Accepts({ acceptedBy }: { acceptedBy: readonly Side[] }) {
         </span>
       ))}
       {waiting.length > 0 && <span className="muted">· waiting for {listNames(waiting.map((s) => nameOf(names, s)))}</span>}
-    </p>
-  );
-}
-
-/** Everyone's fit for an offer in one line: a dot in each person's colour, their name and score. */
-function ScoreRow({ scores }: { scores: PerSide<number> }) {
-  const { names, members } = useTruceCtx();
-  return (
-    <p className="scorerow small">
-      <span className="scorerow__label">Fit</span>
-      {members.map((s) => (
-        <span key={s} className={cx('scorerow__item', `p-${s}`)}>
-          <span className="scorerow__dot" aria-hidden="true" />
-          {nameOf(names, s)} <strong className="num">{scores[s] ?? 0}</strong>
-        </span>
-      ))}
-      <InfoTip label="What the scores mean">{EXPLAIN.score}</InfoTip>
     </p>
   );
 }
