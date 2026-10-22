@@ -6,6 +6,11 @@ import { openOf } from './swaps';
 /** Every 3 s while a request waits for votes, else every 15 s; never while the page is hidden. */
 const FAST_MS = 3000;
 const SLOW_MS = 15_000;
+/**
+ * Locks that never lift. A replanned or superseded evening can come back:
+ * the newer truce may fail, and then the server gives this evening back.
+ */
+const FINAL: ReadonlySet<string> = new Set(['checked_in', 'past', 'history']);
 
 export interface Swaps {
   view: SwapsView | null;
@@ -27,8 +32,7 @@ export function useSwaps(truceId: string, enabled: boolean): Swaps {
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   const alive = useRef(true);
   const open = openOf(view) !== null;
-  // Checked in, past, planned again: nothing more can happen to this evening. A newer truce can still fail and give it back.
-  const settled = view !== null && view.lock !== null && view.lock !== 'open' && view.lock !== 'superseded';
+  const settled = view?.lock != null && FINAL.has(view.lock);
 
   useEffect(() => {
     alive.current = true;

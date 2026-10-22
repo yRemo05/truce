@@ -5,7 +5,7 @@
  */
 import type { Side, Slot, SwapReason, SwapsView, SwapView } from '@contract';
 import type { IconName } from '@/ui/Icon';
-import { agentOf, nameOf, possessive, type Names } from './people';
+import { agentOf, listNames, nameOf, type Names } from './people';
 import { SLOT_NOUN } from './truce';
 
 /** The glyph for a request wherever it shows: a swap, or planning again. */
@@ -45,6 +45,9 @@ export const replanLine = (view: SwapsView) =>
 
 /** Whether the person on this phone can still answer: anyone on a shared phone, else only someone the vote waits for. */
 export const canVote = (open: { waiting: readonly Side[] }, mine: Side | null) => mine === null || open.waiting.includes(mine);
+
+/** "Waiting for Deniz.", "Waiting for Ecrin and Lina." */
+export const waitingLine = (waiting: readonly Side[], names: Names) => `Waiting for ${listNames(waiting.map((s) => nameOf(names, s)))}.`;
 
 /** Who still has to answer an open request, in seat order. */
 export const pendingOf = (swap: Pick<SwapView, 'votes'>, members: readonly Side[]) => members.filter((s) => !swap.votes[s]);
@@ -115,7 +118,7 @@ export function outcomeLine(swap: SwapView, members: readonly Side[], names: Nam
       return `${askedLine(swap, names)}. Planned again.`;
     case 'cancelled':
       return swap.cancelled === 'superseded'
-        ? `${possessive(who)} request to ${what} was called off: the group planned a newer evening.`
+        ? `${askedLine(swap, names)}. Called off: the group planned a newer evening.`
         : `${who} withdrew their request to ${what}.`;
     case 'swapped':
       return `${who} swapped ${swap.from?.name ?? theSlot(swap.slot)} for ${swap.to?.name ?? 'something else'}.`;

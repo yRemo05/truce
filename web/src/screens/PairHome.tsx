@@ -44,7 +44,7 @@ import { dayMonth } from '@/lib/format';
 import { groupNames, listNames, modeLabel, monograms, nameOf, possessive, type Names } from '@/lib/people';
 import { absolute } from '@/lib/share';
 import { mySide } from '@/lib/mine';
-import { canVote } from '@/lib/swaps';
+import { canVote, waitingLine } from '@/lib/swaps';
 import { gaveGround, SLOTS } from '@/lib/truce';
 import { useStartTruce } from '@/lib/useAction';
 import { usePair } from '@/lib/usePair';
@@ -271,7 +271,7 @@ export function PairHome({ pairId }: { pairId: string }) {
                   </ButtonLink>
                 }
               >
-                Votes are open on tonight’s plan.
+                {waitingLine(openSwap.waiting, pair.names)}
               </SwapBanner>
             )}
             {checkinDue && last && (

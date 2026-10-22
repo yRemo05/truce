@@ -1,5 +1,6 @@
 import type { Side, SwapView } from '@contract';
 import type { ReactNode } from 'react';
+import { useLocation } from 'wouter';
 import { api } from '@/api';
 import { Badge, Button, cx, ErrorNotice, Icon, InfoTip, Notice, PersonRow, SectionHeader, type IconName } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
@@ -92,12 +93,18 @@ interface VoteCardProps {
 export function VoteCard({ swap, swaps, truceId }: VoteCardProps) {
   const { members, names, letters, mine, items } = useTruceCtx();
   const call = useSwapCall(swaps);
+  const [, navigate] = useLocation();
   const view = swaps.view!;
   const pending = pendingOf(swap, members);
   const keep = swap.from?.name ?? (swap.slot && view.bundle ? items[view.bundle[swap.slot]]?.name : undefined);
   const a = answersFor(swap, keep);
   const asker = nameOf(names, swap.side);
   const busy = call.busy !== null;
+  const vote = async (side: Side, v: Vote) => {
+    const next = await call.run(`${side}:${v}`, () => api.vote(truceId, swap.id, side, v));
+    const settled = next?.swaps.find((s) => s.id === swap.id);
+    if (settled?.status === 'replanned' && settled.truceId) navigate(`/t/${settled.truceId}`);
+  };
 
   const answers = (side: Side, compact: boolean) =>
     (['yes', 'no'] as const).map((v) => (
@@ -108,7 +115,7 @@ export function VoteCard({ swap, swaps, truceId }: VoteCardProps) {
         busy={call.busy === `${side}:${v}`}
         disabled={busy}
         aria-label={compact ? `${nameOf(names, side)}: ${a[v].label}` : undefined}
-        onClick={() => void call.run(`${side}:${v}`, () => api.vote(truceId, swap.id, side, v))}
+        onClick={() => void vote(side, v)}
       >
         {compact ? a[v].short : a[v].label}
       </Button>

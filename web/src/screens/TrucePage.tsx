@@ -269,8 +269,8 @@ export function TrucePage({ truceId }: { truceId: string }) {
 
   const { names, members } = ctx;
   const openSwap = openOf(swaps.view);
-  // Known from the truce itself at load, and from the swaps once a replan goes ahead while the page is open.
-  const replacedBy = meta.replacedBy ?? swaps.view?.replacedBy ?? null;
+  // From the truce at load; then from the swaps, which also see a replan go ahead, or fail and give the evening back.
+  const replacedBy = swaps.view ? swaps.view.replacedBy : meta.replacedBy;
   const stoppedIn = state.error ? errorTab(state) : null;
   // On its own tab the full notice, with the way forward: under the talks it interrupted, else on top.
   const stopped = state.error && stoppedIn === tab && (
