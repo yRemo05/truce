@@ -129,6 +129,7 @@ export function toSwapView(s: SwapRow): SwapView {
     to: s.to,
     scores: s.scores,
     truceId: s.newTruce,
+    cancelled: s.status === 'cancelled' ? (s.cancelReason ?? 'withdrawn') : null,
   };
 }
 
@@ -249,7 +250,7 @@ export function createSwaps(deps: SwapsDeps) {
     const { truce, pair } = load(swap.truceId);
     const e = eveningOf(truce, pair);
     if (!e || truce.replacedBy || superseded(truce)) {
-      store.resolveSwap(swap.id, 'cancelled');
+      store.resolveSwap(swap.id, 'cancelled', { cancelReason: 'superseded' });
       return;
     }
     const bundle = truce.result!.bundle;
@@ -289,7 +290,7 @@ export function createSwaps(deps: SwapsDeps) {
     const over = superseded(truce);
     for (const s of store.swapsOf(truceId)) {
       if (s.status !== 'open') continue;
-      if (over) store.resolveSwap(s.id, 'cancelled');
+      if (over) store.resolveSwap(s.id, 'cancelled', { cancelReason: 'superseded' });
       else if (s.deadline && Date.parse(s.deadline) <= now()) close(s.id);
     }
   }
@@ -304,6 +305,7 @@ export function createSwaps(deps: SwapsDeps) {
     return {
       bundle: decided,
       scores: e && decided ? scoresOf(e, decided) : null,
+      concession: decided ? truce.result!.concession : null,
       ledger: { alpha: ledger.alpha, tilt: ledger.tilt, owed: ledger.owed },
       swaps: swaps.map(toSwapView),
       lock: lockOf(truce, pair, swaps),
@@ -422,7 +424,7 @@ export function createSwaps(deps: SwapsDeps) {
       if (!swap || swap.truceId !== truce.id) throw new UserFacingError('This request does not exist.', 404, 'not_found');
       if (swap.status !== 'open') throw new UserFacingError('This request is already settled.', 409, 'locked');
       if (swap.side !== side) throw new UserFacingError('Only the person who asked can withdraw it.', 409, 'not_voter');
-      store.resolveSwap(swap.id, 'cancelled');
+      store.resolveSwap(swap.id, 'cancelled', { cancelReason: 'withdrawn' });
       return view(truce.id);
     },
 

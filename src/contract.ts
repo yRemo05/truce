@@ -168,7 +168,7 @@ export interface PairView {
     status: TruceView['status'];
     checkedIn: PerSide<boolean>;
     /** A swap or replan waiting for votes on that evening, if any. */
-    openSwap: Pick<SwapView, 'id' | 'kind' | 'side' | 'slot' | 'deadline'> | null;
+    openSwap: (Pick<SwapView, 'id' | 'kind' | 'side' | 'slot' | 'deadline'> & { /** Who hasn't answered yet. */ waiting: Side[] }) | null;
   } | null;
 }
 
@@ -367,6 +367,8 @@ export interface SwapView {
   scores: { before: PerSide<number>; after: PerSide<number> | null } | null;
   /** Replans: the new truce, once it has started. */
   truceId: string | null;
+  /** Cancelled only: the asker withdrew it, or a newer evening took this one's place and called it off. */
+  cancelled: 'withdrawn' | 'superseded' | null;
 }
 
 /** Why no new request can be made on an evening, or null if one can. */
@@ -384,6 +386,8 @@ export interface SwapsView {
   bundle: Record<Slot, string> | null;
   /** Everyone's evening score now, 0–100. */
   scores: PerSide<number> | null;
+  /** How far each person's evening now falls short of their own best, 0–1, as the ledger counts it before check-ins. */
+  concession: PerSide<number> | null;
   /** The ledger as it stands with this evening as it is now: next time's weights and who is owed. */
   ledger: { alpha: PerSide<number>; tilt: PerSide<number>; owed: Side | null };
   /** Oldest first. */

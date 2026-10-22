@@ -228,7 +228,9 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
             checkedIn: perSide(pair.members, (s) => said.some((x) => x.side === s)),
             openSwap: (() => {
               const open = swaps.openOf(last.id);
-              return open ? { id: open.id, kind: open.kind, side: open.side, slot: open.slot, deadline: open.deadline } : null;
+              if (!open) return null;
+              const waiting = pair.members.filter((s) => s !== open.side && !open.votes[s]);
+              return { id: open.id, kind: open.kind, side: open.side, slot: open.slot, deadline: open.deadline, waiting };
             })(),
           }
         : null,

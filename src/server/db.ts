@@ -75,6 +75,7 @@ create table if not exists swaps (
   slot text check (slot in ('film', 'restaurant', 'music')),
   reason text check (reason in ('unavailable', 'seen', 'not_feeling')),
   status text not null check (status in ('open', 'swapped', 'kept', 'no_alternative', 'replanned', 'cancelled')),
+  cancel_reason text check (cancel_reason in ('withdrawn', 'superseded')),
   needed integer not null,
   votes text not null default '{}',
   from_item text,
@@ -173,6 +174,7 @@ export interface SwapRow {
   scores: { before: PerSide<number>; after: PerSide<number> | null } | null;
   /** A replan's new truce. */
   newTruce: string | null;
+  cancelReason: 'withdrawn' | 'superseded' | null;
   deadline: string | null;
   createdAt: string;
   resolvedAt: string | null;
@@ -203,6 +205,10 @@ export function openStore(dataDir: string) {
   const hasReplaced = (db.prepare("select 1 from pragma_table_info('truces') where name = 'replaced_by'").get() as unknown) !== undefined;
   if (hasTruces && !hasReplaced) migrateFrom2(db);
   db.exec(SCHEMA);
+  // Early version 3 databases have swaps without a cancel reason.
+  if ((db.prepare("select 1 from pragma_table_info('swaps') where name = 'cancel_reason'").get() as unknown) === undefined) {
+    db.exec("alter table swaps add column cancel_reason text check (cancel_reason in ('withdrawn', 'superseded'))");
+  }
   db.pragma(`user_version = ${VERSION}`);
 
   const q = {
@@ -256,7 +262,7 @@ export function openStore(dataDir: string) {
     openSwaps: db.prepare("select * from swaps where status = 'open'"),
     setVotes: db.prepare("update swaps set votes = ? where id = ? and status = 'open'"),
     resolveSwap: db.prepare(
-      `update swaps set status = ?, to_item = ?, scores = coalesce(?, scores), new_truce = ?,
+      `update swaps set status = ?, to_item = ?, scores = coalesce(?, scores), new_truce = ?, cancel_reason = ?,
          resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') where id = ? and status = 'open'`,
     ),
     checkinsOfPair: db.prepare(
@@ -307,6 +313,7 @@ export function openStore(dataDir: string) {
     to: r.to_item ? JSON.parse(r.to_item) : null,
     scores: r.scores ? JSON.parse(r.scores) : null,
     newTruce: r.new_truce,
+    cancelReason: r.cancel_reason ?? null,
     deadline: r.deadline,
     createdAt: r.created_at,
     resolvedAt: r.resolved_at,
@@ -441,7 +448,7 @@ export function openStore(dataDir: string) {
     resolveSwap(
       id: string,
       status: Exclude<SwapStatus, 'open'>,
-      fields: { to?: SwapItem | null; scores?: SwapRow['scores']; newTruce?: string | null } = {},
+      fields: { to?: SwapItem | null; scores?: SwapRow['scores']; newTruce?: string | null; cancelReason?: SwapRow['cancelReason'] } = {},
     ): boolean {
       return (
         q.resolveSwap.run(
@@ -449,6 +456,7 @@ export function openStore(dataDir: string) {
           fields.to ? JSON.stringify(fields.to) : null,
           fields.scores ? JSON.stringify(fields.scores) : null,
           fields.newTruce ?? null,
+          fields.cancelReason ?? null,
           id,
         ).changes === 1
       );

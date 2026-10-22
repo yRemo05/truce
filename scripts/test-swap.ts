@@ -174,6 +174,7 @@ const refused = (fn: () => unknown, code: string) => {
   const s = v.swaps[0]!;
   check('fact: swaps at once, to the referee\'s pick', s.status === 'swapped' && s.to?.id === 'R2' && v.bundle?.restaurant === 'R2');
   check('fact: before and after scores', s.scores?.before.a === 63 && s.scores?.after?.a === 70 && v.scores?.b === 73);
+  check('fact: the concession as the ledger counts it', Math.abs(v.concession!.a! - (0.9 - 0.7)) < 1e-9);
   const t = store.truce(truceId)!;
   check('fact: the stored evening is updated (names, utilities, items)', t.evening?.restaurant === 'R2 name' && Math.abs(t.result!.utilities.a! - 0.7) < 1e-9 && t.result!.items.a!.restaurant === 0.7);
   check('fact: teaches the asker nothing', store.sides(pairId).a!.learned.avoided.length === 0);
@@ -241,7 +242,7 @@ const refused = (fn: () => unknown, code: string) => {
   const v = swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'film', reason: 'not_feeling' });
   check('cancel: only the asker can withdraw', refused(() => swaps.cancel(truceId, v.swaps[0]!.id, 'b'), 'not_voter'));
   const c = swaps.cancel(truceId, v.swaps[0]!.id, 'a');
-  check('cancel: withdrawn, and the taste swap is theirs again', c.swaps[0]!.status === 'cancelled' && c.canAsk.a === true && c.lock === null);
+  check('cancel: withdrawn, and the taste swap is theirs again', c.swaps[0]!.status === 'cancelled' && c.swaps[0]!.cancelled === 'withdrawn' && c.canAsk.a === true && c.lock === null);
   const passed = swaps.vote(truceId, swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'film', reason: 'not_feeling' }).swaps[1]!.id, 'b', 'yes');
   check('no alternative: the group is OK with it, but no film keeps both above their minimum', passed.swaps[1]!.status === 'no_alternative' && passed.bundle?.film === 'F2');
   check('no alternative: a taste dead end needs a vote to replan', passed.replanNow === false);
@@ -311,7 +312,7 @@ const refused = (fn: () => unknown, code: string) => {
   store.createTruce('newer-1', pairId, 'rules', { a: 0.5, b: 0.5 }, 'b');
   const after = swaps.view(truceId);
   check('superseded: a newer truce locks the older evening', after.lock === 'superseded');
-  check('superseded: and its open vote is called off', after.swaps[0]!.status === 'cancelled' && after.swaps[0]!.id === v.swaps[0]!.id);
+  check('superseded: and its open vote is called off, saying why', after.swaps[0]!.status === 'cancelled' && after.swaps[0]!.cancelled === 'superseded' && after.swaps[0]!.id === v.swaps[0]!.id);
   store.failTruce('newer-1');
   check('superseded: … unless the newer truce failed', swaps.view(truceId).lock === null);
 }
