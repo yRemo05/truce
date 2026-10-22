@@ -28,8 +28,11 @@ flowchart LR
   R[Referee in code] -. checks every move .-> N
   L[Fairness ledger] -. bargaining weights .-> R
   N --> E[The plan: hours, map, links, calendar]
+  E --> W[Swaps: one item at a time,<br/>by fact or by majority vote]
+  W --> E
   E --> C[Next day: check-in]
   C --> L
+  W -. asked and not granted .-> L
 ```
 
 1. **Favourites.** Each person names a few films, artists and restaurants they love. Qloo's `/search` finds each one (restaurants near the group's city) and the person confirms the match. A restaurant pick can also be a **food**: type "sushi", "meze" or "Lazanya" and Truce finds the Qloo tags that name it (cuisine, dish and menu-highlight tags, with Claude giving the English name of a dish typed in another language).
@@ -45,7 +48,14 @@ flowchart LR
    - With no deal, the referee rules the **weighted Nash bargaining solution**: the evening that maximises Σ αᵢ·log(Uᵢ).
    - If another evening is better for *everyone* than the one agreed, the referee upgrades to it.
 8. **The plan.** The evening comes back with what you need to go: today's opening hours, address, map and phone for the restaurant; IMDb, Letterboxd or Netflix for the film; Spotify for the music; and a calendar event for 19:00 in the city's own time.
-9. **The ledger.** Each person's concession is their best possible evening minus what they got. The next truce's bargaining weights come from the decayed balance of how far each person's concessions sat above the group's average (for a couple: 0.35 to 0.65), and the favoured person's agent also concedes more slowly. The next day, each person can **check in**: loved, fine or not for me, per pick. An evening that disappointed someone counts as more ground given; loved picks become favourites, and the rest stay off the table.
+9. **Swaps.** Plans meet reality: the place is fully booked, the film isn't on any of your services, someone has already seen it. Anyone can ask to swap one item.
+   - **A fact** ("booked or closed", "can't watch it") swaps at once.
+   - **A taste** ("seen it", "not feeling it") goes to the group. A strict majority, the asker included, must be OK with *an* alternative, without seeing it first: both people in a couple, two of three, three of four. Whoever hasn't answered within ten minutes is answered for by their agent, which knows its person's scores and says yes only if the swap costs them little.
+   - **The referee picks the replacement**, never the asker: of the items left in that slot, one that keeps everyone at or above their minimum, items argued for in the talks first, then the fairest by the same weighted Nash rule. So the vote can promise everyone they won't end up below their minimum.
+   - **Limits:** one request at a time, one taste swap per person per evening, and a check-in settles the evening.
+   - **When nothing fair is left,** the group can plan again, which needs the same majority. The new truce leaves out what was swapped away, and the evening it replaces leaves the ledger.
+   - **A swap someone asked for and didn't get counts as ground they gave.** The item stays off their table from then on.
+10. **The ledger.** Each person's concession is their best possible evening minus what they got. The next truce's bargaining weights come from the decayed balance of how far each person's concessions sat above the group's average (for a couple: 0.35 to 0.65), and the favoured person's agent also concedes more slowly. The next day, each person can **check in**: loved, fine or not for me, per pick. An evening that disappointed someone counts as more ground given; loved picks become favourites, and the rest stay off the table.
 
 ## Why Qloo is essential here
 
@@ -124,7 +134,7 @@ Or build the single image: `docker build -t truce . && docker run -p 8787:8787 -
 
 | Command | What it does |
 |---|---|
-| `npm test` | Five suites, no network: Qloo parsing and client; bargaining maths for two and three people; the ledger (including that two people behave exactly as the original two-person formula, and check-ins); the referee over random worlds for groups of 2, 3 and 4 plus deliberately broken agents; and the plan (hours, time zones, safe links, the calendar file, vetoes, foods) |
+| `npm test` | Six suites, no network: Qloo parsing and client; bargaining maths for two and three people; the ledger (including that two people behave exactly as the original two-person formula, and check-ins); the referee over random worlds for groups of 2, 3 and 4 plus deliberately broken agents; the plan (hours, time zones, safe links, the calendar file, vetoes, foods); and swaps (the referee's replacement, agent answers, majorities, deadlines, limits, the ledger, replans) |
 | `npm run live -- couple` | Live: the couple demo through the real pipeline (briefs, scouting, negotiation, ledger, a check-in), printing the event stream |
 | `npm run live -- friends` | The same for three friends in Istanbul |
 
