@@ -373,7 +373,8 @@ export interface SwapView {
 export type SwapLock =
   | 'not_done' // still being planned, or it stopped
   | 'history' // a made-up earlier evening
-  | 'replanned' // a newer truce replaced it
+  | 'replanned' // a replan replaced it
+  | 'superseded' // the group has planned a newer evening since
   | 'checked_in' // someone already said how it went
   | 'past' // the evening's date has passed where it happens
   | 'open'; // a request is waiting for votes

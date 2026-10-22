@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CardItem, SideInput, StreamEvent } from '../src/contract';
 import { openStore } from '../src/server/db';
-import { dislikedOf, ledgerOf, type Runner } from '../src/server/runner';
+import { createRunner, dislikedOf, ledgerOf, type Runner } from '../src/server/runner';
 import { createSwaps } from '../src/server/swaps';
 import type { TruceResult } from '../src/truce/negotiate';
 import { agentVote, fairAlternative, majority, tally, type Evening } from '../src/truce/swap';
@@ -45,6 +45,7 @@ const evening = (talked: Partial<Record<Slot, string[]>> = {}): Evening => ({
   },
   items: Object.fromEntries(SLOTS.map((s) => [s, Object.keys(SCORES[s])])) as Record<Slot, string[]>,
   fair: FAIR,
+  fairBundle: TONIGHT,
   talked: Object.fromEntries(SLOTS.map((s) => [s, new Set(talked[s] ?? [])])) as Record<Slot, Set<string>>,
 });
 
@@ -76,7 +77,10 @@ check('tally: open while it still could pass', tally(['a', 'b', 'c', 'd'], { a: 
   check('agent: no when it costs its person more than the tolerance (Maya, R3: −7 points)', maya.vote === 'no' && maya.why === 'too_costly');
   check('agent: no when nothing fair is left', agentVote(e, 'swap', 'a', TONIGHT, null).why === 'nothing_fair');
   check('agent: a replan is a yes for someone at or under their fair share', agentVote(e, 'replan', 'a', TONIGHT, null).vote === 'yes');
-  check('agent: … and a no for someone doing better than fair', agentVote({ ...e, fair: { a: 0.5, b: 0.7 } }, 'replan', 'a', TONIGHT, null).vote === 'no');
+  const lowFair = { film: 'F3', restaurant: 'R1', music: 'M1' }; // Maya 50 there, 63 tonight
+  check('agent: … and a no for someone doing better than fair', agentVote({ ...e, fairBundle: lowFair }, 'replan', 'a', TONIGHT, null).vote === 'no');
+  // Tonight is the fair evening, but the stored exact utility sits a rounding above the menu one.
+  check('agent: compares with the fair evening on the menu scale, not a rounding off', agentVote({ ...e, fair: { a: 0.6301, b: 0.7 } }, 'replan', 'a', TONIGHT, null).vote === 'yes');
 }
 
 // --- The whole flow on a real store ---------------------------------------------------
@@ -110,6 +114,11 @@ function decided(talked: Bundle[] = []): { pairId: string; truceId: string } {
   store.saveSide(pairId, 'a', side, null);
   store.saveSide(pairId, 'b', side, null);
   store.createTruce(truceId, pairId, 'claude', { a: 0.5, b: 0.5 }, 'a');
+  finish(truceId, talked);
+  return { pairId, truceId };
+}
+/** Gives a created truce (a replan's, say) the made-up decided evening. */
+function finish(truceId: string, talked: Bundle[] = []) {
   const events: StreamEvent[] = [
     {
       type: 'pool',
@@ -141,8 +150,12 @@ function decided(talked: Bundle[] = []): { pairId: string; truceId: string } {
     fair: { bundle: TONIGHT, u: FAIR },
   };
   store.finishTruce(truceId, result, { film: 'F2 name', restaurant: 'R1 name', music: 'M1 name' });
-  return { pairId, truceId };
 }
+/** created_at has millisecond precision: wait one, so a later truce is later. */
+const tick = () => {
+  const t = Date.now();
+  while (Date.now() <= t + 1);
+};
 const refused = (fn: () => unknown, code: string) => {
   try {
     fn();
@@ -193,8 +206,11 @@ const refused = (fn: () => unknown, code: string) => {
   const counted = ledgerOf(['a', 'b'], truces, new Map(), store.swapsOfPair(pairId));
   check('ledger: a swap asked for and not granted counts as ground given', counted.entries[0]!.concession.a! > plain.entries[0]!.concession.a! + 0.05);
   check('ledger: only for the one who asked', Math.abs(counted.entries[0]!.concession.b! - plain.entries[0]!.concession.b!) < 1e-9);
-  check('ledger: dislikedOf names the slot', dislikedOf(store.swapsOf(truceId)).a?.join() === 'film');
-  store.saveCheckin(truceId, 'a', { went: true, ratings: { film: 'loved' } });
+  check('ledger: dislikedOf names the slot', dislikedOf(store.swapsOf(truceId), store.truce(truceId)!.result!.bundle).a?.join() === 'film');
+  check('kept: the swap keeps its before scores', swaps.view(truceId).swaps[0]!.scores?.before.a === 63);
+  check('taste: the kept film is avoided from now on', store.sides(pairId).a!.learned.avoided.some((x) => x.id === 'F2'));
+  createRunner({ store, qloo: null as never, anthropic: null, dailyCap: 0, log: () => {} }).checkin(truceId, 'a', { went: true, ratings: { film: 'loved' } });
+  check('check-in: loved after all, the film is no longer avoided', !store.sides(pairId).a!.learned.avoided.some((x) => x.id === 'F2'));
   const own = ledgerOf(['a', 'b'], store.trucesOf(pairId), store.checkinsOfPair(pairId), store.swapsOfPair(pairId));
   check('ledger: the person\'s own check-in rating wins over the inferred one', own.entries[0]!.concession.a! < counted.entries[0]!.concession.a!);
   check('lock: a check-in settles the evening', refused(() => swaps.ask(truceId, { kind: 'swap', side: 'b', slot: 'music', reason: 'unavailable' }), 'locked'));
@@ -273,6 +289,55 @@ const refused = (fn: () => unknown, code: string) => {
   check('lock: an evening whose date has passed', swaps.view(truceId).lock === 'past');
   clock -= 2 * 86_400_000;
   check('lock: an unknown truce is not found', refused(() => swaps.view('nope'), 'not_found'));
+}
+
+{
+  // A dislike counts only while the disliked item is still in the evening.
+  const { pairId, truceId } = decided();
+  const v = swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'restaurant', reason: 'not_feeling' });
+  swaps.vote(truceId, v.swaps[0]!.id, 'b', 'no');
+  swaps.ask(truceId, { kind: 'swap', side: 'b', slot: 'restaurant', reason: 'unavailable' });
+  const truces = store.trucesOf(pairId);
+  const plain = ledgerOf(['a', 'b'], truces, new Map());
+  const counted = ledgerOf(['a', 'b'], truces, new Map(), store.swapsOfPair(pairId));
+  check('ledger: a dislike no longer counts once a later swap replaced the item', Math.abs(counted.entries[0]!.concession.a! - plain.entries[0]!.concession.a!) < 1e-9);
+}
+
+{
+  // A newer evening planned since locks this one, and calls off its open vote.
+  const { pairId, truceId } = decided();
+  const v = swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'film', reason: 'not_feeling' });
+  tick();
+  store.createTruce('newer-1', pairId, 'rules', { a: 0.5, b: 0.5 }, 'b');
+  const after = swaps.view(truceId);
+  check('superseded: a newer truce locks the older evening', after.lock === 'superseded');
+  check('superseded: and its open vote is called off', after.swaps[0]!.status === 'cancelled' && after.swaps[0]!.id === v.swaps[0]!.id);
+  store.failTruce('newer-1');
+  check('superseded: … unless the newer truce failed', swaps.view(truceId).lock === null);
+}
+
+{
+  // A replan of a replan leaves out what was swapped away from both evenings.
+  const { pairId, truceId } = decided();
+  swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'restaurant', reason: 'unavailable' });
+  const first = swaps.vote(truceId, swaps.ask(truceId, { kind: 'replan', side: 'a' }).swaps.at(-1)!.id, 'b', 'yes').replacedBy!;
+  finish(first);
+  swaps.ask(first, { kind: 'swap', side: 'b', slot: 'music', reason: 'unavailable' });
+  swaps.vote(first, swaps.ask(first, { kind: 'replan', side: 'b' }).swaps.at(-1)!.id, 'a', 'yes');
+  const last = started.at(-1)!;
+  check('replan chain: the second replan leaves out both evenings\' swapped-away items', last.pairId === pairId && last.exclude.includes('R1') && last.exclude.includes('M1'));
+}
+
+{
+  // A replan cut off by a restart gives the evening back.
+  const { truceId } = decided();
+  const replanned = swaps.vote(truceId, swaps.ask(truceId, { kind: 'replan', side: 'a' }).swaps[0]!.id, 'b', 'yes');
+  check('replan: marked replaced while the new truce runs', replanned.replacedBy !== null);
+  const reopened = openStore(dir);
+  check('restart: a replan cut off by a restart gives the evening back', reopened.truce(truceId)!.replacedBy === null);
+  reopened.close();
+  check('restart: the evening takes requests again', swaps.view(truceId).lock === null && swaps.view(truceId).replacedBy === null);
+  check('restart: and the failed replan doesn\'t use up the ask', swaps.ask(truceId, { kind: 'replan', side: 'a' }).swaps.at(-1)!.status === 'open');
 }
 
 store.close();

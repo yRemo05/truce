@@ -243,6 +243,7 @@ export function openStore(dataDir: string) {
     setResult: db.prepare('update truces set result = ?, evening = ? where id = ?'),
     setReplacedBy: db.prepare('update truces set replaced_by = ? where id = ?'),
     replacedOf: db.prepare('select id from truces where replaced_by = ?'),
+    unreplace: db.prepare('update truces set replaced_by = null where replaced_by = ?'),
     insertSwap: db.prepare(
       `insert into swaps (id, truce_id, kind, side, slot, reason, status, needed, votes, from_item, scores, deadline)
        values (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)`,
@@ -255,7 +256,7 @@ export function openStore(dataDir: string) {
     openSwaps: db.prepare("select * from swaps where status = 'open'"),
     setVotes: db.prepare("update swaps set votes = ? where id = ? and status = 'open'"),
     resolveSwap: db.prepare(
-      `update swaps set status = ?, to_item = ?, scores = ?, new_truce = ?,
+      `update swaps set status = ?, to_item = ?, scores = coalesce(?, scores), new_truce = ?,
          resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') where id = ? and status = 'open'`,
     ),
     checkinsOfPair: db.prepare(
@@ -321,9 +322,11 @@ export function openStore(dataDir: string) {
 
   // A truce still "running" when the process starts was cut off by a restart:
   // it fails, and its log ends with the interruption so pages stop waiting.
+  // A replan cut off that way gives the evening it was replacing back.
   for (const r of q.running.all() as { id: string; events: string }[]) {
     q.setEvents.run(JSON.stringify([...JSON.parse(r.events), INTERRUPTED]), r.id);
     q.fail.run(r.id);
+    q.unreplace.run(r.id);
   }
 
   return {

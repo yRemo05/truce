@@ -45,8 +45,10 @@ export interface Evening {
   utilities: PerSide<Record<Slot, Record<string, number>>>;
   /** Every pool item's id, by slot. */
   items: Record<Slot, string[]>;
-  /** Each person's utility for the fair evening (the referee's own pick). */
+  /** Each person's utility for the fair evening (the referee's own pick), exact: minimums come from it, as in the talks. */
   fair: PerSide<number>;
+  /** The fair evening itself, to compare with on the menu scale. */
+  fairBundle: Bundle;
   /** Items some agent put in an offer during the talks, by slot. */
   talked: Record<Slot, Set<string>>;
 }
@@ -125,7 +127,8 @@ export function agentVote(
 ): { vote: 'yes' | 'no'; why: AgentWhy } {
   const now = eveningUtility(e, side, bundle);
   if (kind === 'replan') {
-    return now <= at(e.fair, side) + 1e-9 ? { vote: 'yes', why: 'fair_share' } : { vote: 'no', why: 'ahead' };
+    // Both on the menu scale: the stored fair utility is exact and could differ by a rounding.
+    return now <= eveningUtility(e, side, e.fairBundle) + 1e-9 ? { vote: 'yes', why: 'fair_share' } : { vote: 'no', why: 'ahead' };
   }
   if (!alternative) return { vote: 'no', why: 'nothing_fair' };
   const then = at(alternative.u, side);

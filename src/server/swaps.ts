@@ -35,6 +35,7 @@ const LOCKED: Record<Exclude<SwapLock, 'open'>, string> = {
   not_done: "This evening isn't decided yet.",
   history: "This earlier evening can't be changed.",
   replanned: 'This evening was planned again. Swap on the new plan instead.',
+  superseded: 'The group has planned a newer evening since, so this one stays as it was.',
   checked_in: 'Someone already checked in, so this evening is settled.',
   past: 'This evening has passed.',
 };
@@ -84,6 +85,7 @@ export function eveningOf(truce: TruceRow, pair: PairRow): Evening | null {
     ),
     items: Object.fromEntries(SLOTS.map((s) => [s, pool.items[s].map((i: CardItem) => i.id)])) as Record<Slot, string[]>,
     fair: r.fair.u,
+    fairBundle: r.fair.bundle,
     talked,
   };
 }
@@ -155,11 +157,17 @@ export function createSwaps(deps: SwapsDeps) {
   const nameOf = (truce: TruceRow, slot: Slot, id: string) =>
     poolOf(truce)?.items[slot].find((i) => i.id === id)?.name ?? truce.evening?.[slot] ?? id;
 
+  /** A newer truce (planning or planned, not failed) has taken this evening's place. */
+  const superseded = (truce: TruceRow) =>
+    store.trucesOf(truce.pairId).some((t) => !t.earlier && t.id !== truce.id && t.createdAt > truce.createdAt && t.status !== 'failed');
+
   function lockOf(truce: TruceRow, pair: PairRow, swaps: readonly SwapRow[]): SwapLock | null {
     if (truce.earlier) return 'history';
     if (truce.status !== 'done' || !truce.result) return 'not_done';
     if (!eveningOf(truce, pair)) return 'history';
     if (truce.replacedBy) return 'replanned';
+    // Changing it now would rewrite the history a newer truce's weights came from.
+    if (superseded(truce)) return 'superseded';
     if (store.checkinsOf(truce.id).length) return 'checked_in';
     const tonight: Tonight | undefined = poolOf(truce)?.tonight;
     if (tonight && localDate(tonight.timeZone, now()) > tonight.date) return 'past';
@@ -190,14 +198,17 @@ export function createSwaps(deps: SwapsDeps) {
     const bundle = { ...r.bundle, [slot]: alternative.id };
     const to = { id: alternative.id, name: nameOf(truce, slot, alternative.id) };
     if (!store.resolveSwap(swap.id, 'swapped', { to, scores: { before: swap.scores!.before, after: scoresOf(e, bundle) } })) return;
+    // Only the swapped slot changes: the other two keep the exact utilities the talks used.
+    const items = perSide(e.members, (s) => ({ ...at(r.items, s), [slot]: at(e.utilities, s)[slot][alternative.id] ?? 0 }));
+    const utilities = perSide(e.members, (s) => at(r.utilities, s) + at(r.weights, s)[slot] * (at(items, s)[slot] - at(r.items, s)[slot]));
     store.updateResult(
       truce.id,
       {
         ...r,
         bundle,
-        utilities: alternative.u,
-        concession: perSide(e.members, (s) => concession(at(r.best, s), at(alternative.u, s))),
-        items: perSide(e.members, (s) => ({ ...at(r.items, s), [slot]: at(e.utilities, s)[slot][alternative.id] ?? 0 })),
+        utilities,
+        concession: perSide(e.members, (s) => concession(at(r.best, s), at(utilities, s))),
+        items,
       },
       { ...(truce.evening ?? ({} as Record<Slot, string>)), [slot]: to.name },
     );
@@ -211,7 +222,12 @@ export function createSwaps(deps: SwapsDeps) {
       store.resolveSwap(swap.id, 'kept');
       throw new UserFacingError('A new truce is already being planned for this group.', 409, 'locked');
     }
-    const id = runner.start(pair.id, { exclude: swappedAway(store.swapsOf(truce.id)), replaces: truce.id });
+    // Everything swapped away from this evening, and from any evening it replanned before.
+    const exclude = new Set<string>();
+    for (let t: string | null = truce.id, hops = 0; t && hops < 20; t = store.replacedOf(t), hops++) {
+      for (const id of swappedAway(store.swapsOf(t))) exclude.add(id);
+    }
+    const id = runner.start(pair.id, { exclude: [...exclude], replaces: truce.id });
     store.resolveSwap(swap.id, 'replanned', { newTruce: id });
     log(`truce ${truce.id}: replanned as ${id}`);
   }
@@ -232,7 +248,7 @@ export function createSwaps(deps: SwapsDeps) {
     if (!swap || swap.status !== 'open') return;
     const { truce, pair } = load(swap.truceId);
     const e = eveningOf(truce, pair);
-    if (!e || truce.replacedBy) {
+    if (!e || truce.replacedBy || superseded(truce)) {
       store.resolveSwap(swap.id, 'cancelled');
       return;
     }
@@ -262,10 +278,19 @@ export function createSwaps(deps: SwapsDeps) {
     timers.set(swap.id, timer);
   }
 
-  /** Closes any vote of this truce whose deadline has passed (a timer may have been lost to a restart). */
+  /**
+   * Closes any vote of this truce whose deadline has passed (a timer may have
+   * been lost to a restart), and calls off one whose evening a newer truce
+   * has since taken over.
+   */
   function sweep(truceId: string) {
+    const truce = store.truce(truceId);
+    if (!truce) return;
+    const over = superseded(truce);
     for (const s of store.swapsOf(truceId)) {
-      if (s.status === 'open' && s.deadline && Date.parse(s.deadline) <= now()) close(s.id);
+      if (s.status !== 'open') continue;
+      if (over) store.resolveSwap(s.id, 'cancelled');
+      else if (s.deadline && Date.parse(s.deadline) <= now()) close(s.id);
     }
   }
 
@@ -345,7 +370,8 @@ export function createSwaps(deps: SwapsDeps) {
         // A fact can't be voted away: the item has to change.
         if (fact) swapIn(store.swap(id)!, truce, pair);
       } else {
-        if (mine.some((s) => s.kind === 'replan')) {
+        // A replan whose new truce failed gave this evening back, and doesn't count.
+        if (mine.some((s) => s.kind === 'replan' && !(s.newTruce && store.truce(s.newTruce)?.status === 'failed'))) {
           throw new UserFacingError("You've already asked to plan tonight again.", 409, 'swap_used');
         }
         if (store.runningTruceOf(pair.id)) throw new UserFacingError('A new truce is already being planned for this group.', 409, 'locked');

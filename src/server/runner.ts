@@ -46,7 +46,7 @@ import {
   type PoolOptions,
 } from '../truce/pool';
 import { hoursTonight, tonightAt, type Tonight } from '../truce/tonight';
-import { SLOTS, at, perSide, type PerSide, type Side, type Slot } from '../truce/types';
+import { SLOTS, at, perSide, type Bundle, type PerSide, type Side, type Slot } from '../truce/types';
 import { normalizeWeights } from '../truce/utility';
 import type { CheckinRow, Learned, PairRow, Store, SwapRow, TruceRow } from './db';
 
@@ -70,12 +70,14 @@ const MAX_PER_SLOT = 12;
 /**
  * Per truce and person, the slots they asked to swap for taste and had to
  * keep (voted down, or nothing fair to swap in): what they told the group
- * they don't like, and went along with.
+ * they don't like, and went along with. Only while that item is still in the
+ * evening: a later swap may have replaced it anyway.
  */
-export function dislikedOf(swaps: readonly SwapRow[]): PerSide<Slot[]> {
+export function dislikedOf(swaps: readonly SwapRow[], bundle: Bundle): PerSide<Slot[]> {
   const out: PerSide<Slot[]> = {};
   for (const s of swaps) {
-    if (s.kind !== 'swap' || !s.slot || s.reason === 'unavailable' || (s.status !== 'kept' && s.status !== 'no_alternative')) continue;
+    if (s.kind !== 'swap' || !s.slot || !s.from || s.reason === 'unavailable' || (s.status !== 'kept' && s.status !== 'no_alternative')) continue;
+    if (bundle[s.slot] !== s.from.id) continue;
     out[s.side] = [...new Set([...(out[s.side] ?? []), s.slot])];
   }
   return out;
@@ -97,7 +99,7 @@ export function ledgerOf(
   const entries = done.map((t) => {
     const r = t.result!;
     const said = checkins.get(t.id) ?? [];
-    const disliked = dislikedOf(swaps.get(t.id) ?? []);
+    const disliked = dislikedOf(swaps.get(t.id) ?? [], r.bundle);
     const present = members.filter((s) => r.utilities[s] !== undefined);
     const concession = perSide(present, (s) => {
       const c = said.find((x) => x.side === s);
@@ -378,6 +380,9 @@ export function createRunner(deps: RunnerDeps) {
       const fixable = err instanceof UserFacingError && (err.code === 'no_restaurants' || err.code === 'no_options') ? err : null;
       log(`truce ${truceId} failed: ${(err as Error).stack ?? err}`);
       store.failTruce(truceId);
+      // A replan that failed gives back the evening it was replacing.
+      const replaced = store.replacedOf(truceId);
+      if (replaced) store.setReplacedBy(replaced, null);
       push({
         type: 'error',
         code: fixable ? (fixable.code as StreamErrorCode) : 'internal',
@@ -432,6 +437,7 @@ export function createRunner(deps: RunnerDeps) {
       if (truce.status !== 'done' || !truce.result || truce.earlier) {
         throw new UserFacingError('Only a finished evening can be checked in.', 409, 'not_ready');
       }
+      if (truce.replacedBy) throw new UserFacingError('This evening was planned again. Check in on the new plan.', 409, 'locked');
       const pair = store.pair(truce.pairId)!;
       if (!pair.members.includes(side) || truce.result.utilities[side] === undefined) {
         throw new UserFacingError('That person was not part of this evening.', 404, 'not_found');
@@ -447,6 +453,8 @@ export function createRunner(deps: RunnerDeps) {
             const seed: Seed = { id: truce.result.bundle[slot], name: evening[slot] };
             if (input.ratings[slot] === 'loved') {
               learned.loved[slot] = [seed, ...learned.loved[slot].filter((x) => x.id !== seed.id)].slice(0, LEARNED_PER_SLOT);
+              // Loved after all (say, after a swap they asked for was voted down): no longer avoided.
+              learned.avoided = learned.avoided.filter((x) => x.id !== seed.id);
               learnedNow.loved.push(seed);
             } else if (input.ratings[slot] === 'not_for_me') {
               learned.avoided = [seed, ...learned.avoided.filter((x) => x.id !== seed.id)].slice(0, AVOIDED_MAX);
