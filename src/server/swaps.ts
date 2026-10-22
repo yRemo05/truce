@@ -305,7 +305,8 @@ export function createSwaps(deps: SwapsDeps) {
     return {
       bundle: decided,
       scores: e && decided ? scoresOf(e, decided) : null,
-      concession: decided ? truce.result!.concession : null,
+      // The ledger's own figure, so "how close" and who is owed next time never disagree.
+      concession: decided ? (ledger.entries.find((x) => x.truceId === truce.id)?.concession ?? truce.result!.concession) : null,
       ledger: { alpha: ledger.alpha, tilt: ledger.tilt, owed: ledger.owed },
       swaps: swaps.map(toSwapView),
       lock: lockOf(truce, pair, swaps),

@@ -209,6 +209,11 @@ const refused = (fn: () => unknown, code: string) => {
   check('ledger: only for the one who asked', Math.abs(counted.entries[0]!.concession.b! - plain.entries[0]!.concession.b!) < 1e-9);
   check('ledger: dislikedOf names the slot', dislikedOf(store.swapsOf(truceId), store.truce(truceId)!.result!.bundle).a?.join() === 'film');
   check('kept: the swap keeps its before scores', swaps.view(truceId).swaps[0]!.scores?.before.a === 63);
+  const view = swaps.view(truceId);
+  check(
+    'view: the concession is the ledger\'s, refused swap included',
+    Math.abs(view.concession!.a! - counted.entries[0]!.concession.a!) < 1e-9 && view.concession!.a! > store.truce(truceId)!.result!.concession.a! + 0.05,
+  );
   check('taste: the kept film is avoided from now on', store.sides(pairId).a!.learned.avoided.some((x) => x.id === 'F2'));
   createRunner({ store, qloo: null as never, anthropic: null, dailyCap: 0, log: () => {} }).checkin(truceId, 'a', { went: true, ratings: { film: 'loved' } });
   check('check-in: loved after all, the film is no longer avoided', !store.sides(pairId).a!.learned.avoided.some((x) => x.id === 'F2'));

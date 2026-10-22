@@ -386,7 +386,12 @@ export interface SwapsView {
   bundle: Record<Slot, string> | null;
   /** Everyone's evening score now, 0–100. */
   scores: PerSide<number> | null;
-  /** How far each person's evening now falls short of their own best, 0–1, as the ledger counts it before check-ins. */
+  /**
+   * How far each person's evening now falls short of their own best, 0–1,
+   * exactly as the ledger counts it: with any swap they asked for and didn't
+   * get, and any check-in. An evening a replan replaced isn't in the ledger;
+   * then it's the plain prediction.
+   */
   concession: PerSide<number> | null;
   /** The ledger as it stands with this evening as it is now: next time's weights and who is owed. */
   ledger: { alpha: PerSide<number>; tilt: PerSide<number>; owed: Side | null };
