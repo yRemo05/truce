@@ -9,14 +9,15 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch --env-file=.env src/server/index.ts",
     "start": "node --env-file-if-exists=.env --import tsx src/server/index.ts",
-    "test": "npm run test:qloo && npm run test:bargain && npm run test:ledger && npm run test:negotiate && npm run test:plan",
+    "test": "npm run test:qloo && npm run test:bargain && npm run test:ledger && npm run test:negotiate && npm run test:plan && npm run test:swap",
     "test:qloo": "tsx scripts/test-qloo-parse.ts",
     "test:bargain": "tsx scripts/test-bargain.ts",
     "test:ledger": "tsx scripts/test-ledger.ts",
     "test:negotiate": "tsx scripts/test-negotiate.ts",
     "test:plan": "tsx scripts/test-plan.ts",
     "probe": "node --env-file=.env scripts/probe.mjs",
-    "live": "node --env-file=.env --import tsx scripts/live-truce.ts"
+    "live": "node --env-file=.env --import tsx scripts/live-truce.ts",
+    "test:swap": "tsx scripts/test-swap.ts"
   },
   "engines": {
     "node": ">=22.12"

@@ -22,6 +22,10 @@
  *                                                 closes after `ledger` or `error`.
  *   GET  /api/truces/:id/calendar.ics           → the evening as a calendar event (text/calendar)
  *   PUT  /api/truces/:id/checkins/:side  CheckinInput → CheckinResult   (how the evening went)
+ *   GET  /api/truces/:id/swaps                  → SwapsView   (the evening as it stands, and its swaps)
+ *   POST /api/truces/:id/swaps       SwapInput  → SwapsView   (ask to swap one item, or to plan again)
+ *   PUT  /api/truces/:id/swaps/:swapId/votes/:side  VoteInput → SwapsView
+ *   POST /api/truces/:id/swaps/:swapId/cancel  { side }      → SwapsView   (the asker withdraws an open request)
  *
  * Errors are `{ error: { code, message } }` with a 4xx/5xx status;
  * `code: 'rate_limited'` comes with a `retryAfterSeconds`.
@@ -159,7 +163,13 @@ export interface PairView {
   ready: PerSide<boolean>;
   ledger: LedgerView;
   lastTruceId: string | null;
-  lastTruce: { id: string; status: TruceView['status']; checkedIn: PerSide<boolean> } | null;
+  lastTruce: {
+    id: string;
+    status: TruceView['status'];
+    checkedIn: PerSide<boolean>;
+    /** A swap or replan waiting for votes on that evening, if any. */
+    openSwap: Pick<SwapView, 'id' | 'kind' | 'side' | 'slot' | 'deadline'> | null;
+  } | null;
 }
 
 export type LinkKind = 'imdb' | 'letterboxd' | 'netflix' | 'spotify' | 'maps' | 'website' | 'menu' | 'phone';
@@ -273,6 +283,10 @@ export interface TruceView {
   endedAt: string | null;
   checkedIn: PerSide<boolean>;
   events: StreamEvent[];
+  /** The truce that planned this evening again, if a replan replaced it. */
+  replacedBy: string | null;
+  /** The truce this one planned again, if it is a replan. */
+  replaces: string | null;
 }
 
 export interface CheckinInput {
@@ -286,6 +300,104 @@ export interface CheckinResult {
   ledger: LedgerView;
   /** What the check-in taught this person's agent: loved picks become favourites, the rest stay off the table. */
   learned: { loved: Seed[]; avoided: Seed[] };
+}
+
+/**
+ * Swaps: changing one item of a decided evening.
+ *
+ * A fact ("unavailable": booked or closed, can't watch it, can't play it)
+ * swaps at once. A taste ("seen" for a film, "not_feeling") goes to the
+ * group: a strict majority, the asker included, must be OK with an
+ * alternative they don't see beforehand. Whoever hasn't answered when the
+ * vote closes is answered for by their agent. The referee picks the
+ * replacement: the fairest item left in that slot that keeps everyone above
+ * their minimum, preferring items argued for in the talks. With none left,
+ * the group can plan again without what it swapped away ("replan"). A
+ * replan needs the same majority, unless an item that can't happen left no
+ * way around it.
+ *
+ * One request is open at a time. Each person may ask for one taste swap per
+ * evening. Once anyone checks in, the evening is over and swaps stop.
+ */
+export type SwapReason = 'unavailable' | 'seen' | 'not_feeling';
+
+export type SwapInput = { kind: 'swap'; side: Side; slot: Slot; reason: SwapReason } | { kind: 'replan'; side: Side };
+
+export interface VoteInput {
+  vote: 'yes' | 'no';
+}
+
+/**
+ * open: votes being collected. swapped: the referee replaced the item.
+ * kept: not enough people were OK with it, so nothing changed. no_alternative:
+ * the group was OK with a swap, but no fair replacement was left. replanned:
+ * a new truce is planning the evening again. cancelled: the asker withdrew it.
+ */
+export type SwapStatus = 'open' | 'swapped' | 'kept' | 'no_alternative' | 'replanned' | 'cancelled';
+
+export interface SwapVote {
+  vote: 'yes' | 'no';
+  /** The person, or their agent once the vote closed without them. */
+  by: 'person' | 'agent';
+  /** An agent's reason, in a few words ("The new film costs Ecrin little."). Null for a person. */
+  why: string | null;
+}
+
+export interface SwapView {
+  id: string;
+  kind: 'swap' | 'replan';
+  /** Who asked. */
+  side: Side;
+  /** Swaps only: the slot and why. */
+  slot: Slot | null;
+  reason: SwapReason | null;
+  status: SwapStatus;
+  createdAt: string;
+  /** When an open vote closes and the agents answer for anyone silent. Null when no vote is needed. */
+  deadline: string | null;
+  resolvedAt: string | null;
+  /** Yes votes needed, the asker's included (a strict majority); 0 when no vote is needed. */
+  needed: number;
+  /** Everyone who has answered so far. The asker's yes is there from the start. */
+  votes: PerSide<SwapVote>;
+  /** Swaps: the item asked to go, and what replaced it once swapped. */
+  from: { id: string; name: string } | null;
+  to: { id: string; name: string } | null;
+  /** Swaps: everyone's evening score (0–100) before, and after once swapped. */
+  scores: { before: PerSide<number>; after: PerSide<number> | null } | null;
+  /** Replans: the new truce, once it has started. */
+  truceId: string | null;
+}
+
+/** Why no new request can be made on an evening, or null if one can. */
+export type SwapLock =
+  | 'not_done' // still being planned, or it stopped
+  | 'history' // a made-up earlier evening
+  | 'replanned' // a newer truce replaced it
+  | 'checked_in' // someone already said how it went
+  | 'past' // the evening's date has passed where it happens
+  | 'open'; // a request is waiting for votes
+
+export interface SwapsView {
+  /** The evening as it stands, after any swaps: an item id per slot, each one in the truce's pool. Null until decided. */
+  bundle: Record<Slot, string> | null;
+  /** Everyone's evening score now, 0–100. */
+  scores: PerSide<number> | null;
+  /** The ledger as it stands with this evening as it is now: next time's weights and who is owed. */
+  ledger: { alpha: PerSide<number>; tilt: PerSide<number>; owed: Side | null };
+  /** Oldest first. */
+  swaps: SwapView[];
+  lock: SwapLock | null;
+  /** Per person: whether they still have their taste swap for this evening. */
+  canAsk: PerSide<boolean>;
+  /** Yes votes a vote needs in this group, the asker's included. */
+  needed: number;
+  /** How long a vote stays open before the agents answer for anyone silent, in minutes. */
+  voteMinutes: number;
+  /** Whether a replan would go ahead at once: the item in the way can't happen and nothing can replace it. */
+  replanNow: boolean;
+  /** The truce that planned this evening again, if one did. */
+  replacedBy: string | null;
 }
 
 export interface DemoInput {

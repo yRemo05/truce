@@ -18,6 +18,8 @@ export const LIMITS = {
   truce: { max: 8, windowMs: 10 * 60_000 },
   demo: { max: 6, windowMs: 10 * 60_000 },
   checkin: { max: 20, windowMs: 10 * 60_000 },
+  swap: { max: 20, windowMs: 10 * 60_000 },
+  vote: { max: 60, windowMs: 10 * 60_000 },
 } satisfies Record<string, Limit>;
 
 export type Action = keyof typeof LIMITS;

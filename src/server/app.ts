@@ -21,6 +21,7 @@ import type {
   SearchResult,
   SideSaved,
   StreamEvent,
+  SwapsView,
   TruceView,
 } from '../contract';
 import { QlooError, type QlooClient } from '../qloo/client';
@@ -31,6 +32,7 @@ import { INTERRUPTED, type Store } from './db';
 import { createDemos } from './demo';
 import { clientOf, createLimiter, type Action } from './limits';
 import { costOf, newId, pairLedger, UserFacingError, type Runner } from './runner';
+import { createSwaps } from './swaps';
 
 const slot = z.enum(SLOTS);
 const side = z.enum(SIDES);
@@ -78,6 +80,14 @@ const checkinInput = z.object({
   ratings: z.object({ film: rating.optional(), restaurant: rating.optional(), music: rating.optional() }),
 });
 const demoInput = z.object({ kind: z.enum(['couple', 'friends']).default('couple') });
+const swapInput = z.discriminatedUnion('kind', [
+  z
+    .object({ kind: z.literal('swap'), side, slot, reason: z.enum(['unavailable', 'seen', 'not_feeling']) })
+    .refine((v) => v.reason !== 'seen' || v.slot === 'film', '"Seen it" is for the film.'),
+  z.object({ kind: z.literal('replan'), side }),
+]);
+const voteInput = z.object({ vote: z.enum(['yes', 'no']) });
+const cancelInput = z.object({ side });
 
 /** Search hits below this popularity percentile are listed after the rest. */
 const OBSCURE = 0.2;
@@ -95,6 +105,8 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
   const limiter = createLimiter();
   const demos = createDemos(qloo, anthropic);
   demos.warm();
+  const swaps = createSwaps({ store, runner });
+  swaps.resume();
 
   const fail = (c: Context, status: number, code: string, message: string, retryAfterSeconds?: number) =>
     c.json<ApiError>({ error: { code, message, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) } }, status as 400);
@@ -209,7 +221,17 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
       ready: perSide(pair.members, (s) => Boolean(sides[s])),
       ledger: pairLedger(store, pair),
       lastTruceId: last?.id ?? null,
-      lastTruce: last ? { id: last.id, status: last.status, checkedIn: perSide(pair.members, (s) => said.some((x) => x.side === s)) } : null,
+      lastTruce: last
+        ? {
+            id: last.id,
+            status: last.status,
+            checkedIn: perSide(pair.members, (s) => said.some((x) => x.side === s)),
+            openSwap: (() => {
+              const open = swaps.openOf(last.id);
+              return open ? { id: open.id, kind: open.kind, side: open.side, slot: open.slot, deadline: open.deadline } : null;
+            })(),
+          }
+        : null,
     };
   };
 
@@ -303,6 +325,8 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
       endedAt: truce.finishedAt,
       checkedIn: perSide(pair.members, (s) => said.some((x) => x.side === s)),
       events,
+      replacedBy: truce.replacedBy,
+      replaces: store.replacedOf(truce.id),
     });
   });
 
@@ -331,7 +355,32 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     if (!truce) return fail(c, 404, 'not_found', 'This truce does not exist.');
     const s = memberOf(truce.pairId, c.req.param('side'));
     const input = checkinInput.parse(await c.req.json());
+    // A check-in settles the evening, so it waits for a vote in progress rather than cutting it off.
+    if (swaps.openOf(truce.id)) return fail(c, 409, 'swap_open', 'A swap is waiting for votes. Check in once it is settled.');
     return c.json(runner.checkin(truce.id, s, input));
+  });
+
+  app.get('/api/truces/:id/swaps', (c) => c.json<SwapsView>(swaps.view(c.req.param('id'))));
+
+  app.post('/api/truces/:id/swaps', async (c) => {
+    const blocked = limited(c, 'swap');
+    if (blocked) return blocked;
+    const input = swapInput.parse(await c.req.json());
+    return c.json<SwapsView>(swaps.ask(c.req.param('id'), input), 201);
+  });
+
+  app.put('/api/truces/:id/swaps/:swapId/votes/:side', async (c) => {
+    const blocked = limited(c, 'vote');
+    if (blocked) return blocked;
+    const { vote } = voteInput.parse(await c.req.json());
+    return c.json<SwapsView>(swaps.vote(c.req.param('id'), c.req.param('swapId'), side.parse(c.req.param('side')), vote));
+  });
+
+  app.post('/api/truces/:id/swaps/:swapId/cancel', async (c) => {
+    const blocked = limited(c, 'vote');
+    if (blocked) return blocked;
+    const input = cancelInput.parse(await c.req.json());
+    return c.json<SwapsView>(swaps.cancel(c.req.param('id'), c.req.param('swapId'), input.side));
   });
 
   app.get('/api/truces/:id/stream', (c) => {

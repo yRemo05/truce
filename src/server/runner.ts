@@ -11,6 +11,10 @@
  * scouting) after it. Every event is appended to the truce's stored log as it
  * happens, so a page that connects late, or reconnects, replays the whole
  * truce.
+ *
+ * A replan (see server/swaps.ts) starts a truce that replaces a decided one,
+ * leaving out what the group swapped away; the ledger then counts only the
+ * new one.
  */
 import type Anthropic from '@anthropic-ai/sdk';
 import { randomBytes } from 'node:crypto';
@@ -44,7 +48,7 @@ import {
 import { hoursTonight, tonightAt, type Tonight } from '../truce/tonight';
 import { SLOTS, at, perSide, type PerSide, type Side, type Slot } from '../truce/types';
 import { normalizeWeights } from '../truce/utility';
-import type { CheckinRow, Learned, PairRow, Store, TruceRow } from './db';
+import type { CheckinRow, Learned, PairRow, Store, SwapRow, TruceRow } from './db';
 
 export const newId = () => randomBytes(9).toString('base64url');
 
@@ -59,22 +63,50 @@ export const costOf = (usage: readonly UsageReport[]) =>
 
 /** Most favourites a person's check-ins can add per slot, newest kept. */
 const LEARNED_PER_SLOT = 3;
-const AVOIDED_MAX = 30;
+export const AVOIDED_MAX = 30;
 /** Most items per slot once scouting has added its finds. */
 const MAX_PER_SLOT = 12;
 
-/** The ledger as everyone sees it: realised concessions (after check-ins), balances and next weights. */
-export function ledgerOf(members: Side[], truces: readonly TruceRow[], checkins: Map<string, CheckinRow[]>): LedgerView {
-  const done = truces.filter((t) => t.status === 'done' && t.result);
+/**
+ * Per truce and person, the slots they asked to swap for taste and had to
+ * keep (voted down, or nothing fair to swap in): what they told the group
+ * they don't like, and went along with.
+ */
+export function dislikedOf(swaps: readonly SwapRow[]): PerSide<Slot[]> {
+  const out: PerSide<Slot[]> = {};
+  for (const s of swaps) {
+    if (s.kind !== 'swap' || !s.slot || s.reason === 'unavailable' || (s.status !== 'kept' && s.status !== 'no_alternative')) continue;
+    out[s.side] = [...new Set([...(out[s.side] ?? []), s.slot])];
+  }
+  return out;
+}
+
+/**
+ * The ledger as everyone sees it: realised concessions (after check-ins and
+ * swaps), balances and next weights. An evening a replan replaced doesn't
+ * count. A swap someone asked for and didn't get counts like a "not for me"
+ * for that item, unless their own check-in says otherwise.
+ */
+export function ledgerOf(
+  members: Side[],
+  truces: readonly TruceRow[],
+  checkins: Map<string, CheckinRow[]>,
+  swaps: Map<string, SwapRow[]> = new Map(),
+): LedgerView {
+  const done = truces.filter((t) => t.status === 'done' && t.result && !t.replacedBy);
   const entries = done.map((t) => {
     const r = t.result!;
     const said = checkins.get(t.id) ?? [];
+    const disliked = dislikedOf(swaps.get(t.id) ?? []);
     const present = members.filter((s) => r.utilities[s] !== undefined);
     const concession = perSide(present, (s) => {
-      const c = said.find((x) => x.side === s && x.went);
+      const c = said.find((x) => x.side === s);
       const weights = r.weights?.[s];
       const items = r.items?.[s];
-      const reported = c && weights && items ? experienced(weights, items, c.ratings) : null;
+      const kept = Object.fromEntries((disliked[s] ?? []).map((slot) => [slot, 'not_for_me' as const]));
+      // Someone who says the evening didn't happen for them reports nothing, as before.
+      const ratings = c ? (c.went ? { ...kept, ...c.ratings } : null) : Object.keys(kept).length ? kept : null;
+      const reported = ratings && weights && items ? experienced(weights, items, ratings) : null;
       return realisedConcession(at(r.best, s), at(r.utilities, s), reported);
     });
     return {
@@ -92,7 +124,7 @@ export function ledgerOf(members: Side[], truces: readonly TruceRow[], checkins:
 }
 
 export function pairLedger(store: Store, pair: PairRow): LedgerView {
-  return ledgerOf(pair.members, store.trucesOf(pair.id), store.checkinsOfPair(pair.id));
+  return ledgerOf(pair.members, store.trucesOf(pair.id), store.checkinsOfPair(pair.id), store.swapsOfPair(pair.id));
 }
 
 /** The chosen items' names from an old truce's log, for rows stored before names were kept apart. */
@@ -189,7 +221,7 @@ export function createRunner(deps: RunnerDeps) {
   const live = new Map<string, Live>();
   const rules = new RuleBrain();
 
-  async function run(truceId: string, pair: PairRow, alpha: PerSide<number>, opener: Side, brain: 'claude' | 'rules') {
+  async function run(truceId: string, pair: PairRow, alpha: PerSide<number>, opener: Side, brain: 'claude' | 'rules', exclude: readonly string[]) {
     const { members } = pair;
     const state: Live = { events: [], listeners: new Set() };
     live.set(truceId, state);
@@ -219,6 +251,8 @@ export function createRunner(deps: RunnerDeps) {
         briefs,
         perSide(members, (s) => at(sides, s).learned),
       );
+      // A replan leaves out what the group swapped away from the evening it replaces.
+      constraints.excludeEntities = [...new Set([...constraints.excludeEntities, ...exclude])];
 
       const locality = await locate(qloo, pair.location);
       if (!locality) {
@@ -362,22 +396,29 @@ export function createRunner(deps: RunnerDeps) {
     /**
      * Starts a truce for a group whose people are all ready. Returns the
      * running truce instead when one is already in progress, so a double tap
-     * costs nothing.
+     * costs nothing. A replan names the truce it `replaces` (marked before the
+     * ledger is read, so it no longer counts) and what to `exclude`.
      */
-    start(pairId: string): string {
+    start(pairId: string, opts: { exclude?: readonly string[]; replaces?: string } = {}): string {
       const running = store.runningTruceOf(pairId);
       if (running) return running;
       const pair = store.pair(pairId);
       if (!pair) throw new UserFacingError('This truce link does not exist.', 404, 'not_found');
       const sides = store.sides(pairId);
       if (pair.members.some((s) => !sides[s])) throw new UserFacingError('Everyone needs to finish their picks first.', 409, 'not_ready');
-      const past = store.trucesOf(pairId);
-      const { alpha } = pairLedger(store, pair);
-      const opener = pair.members[past.filter((t) => t.status === 'done').length % pair.members.length]!;
-      const brain = anthropic && store.claudeTrucesSince(startOfUtcDay()) < deps.dailyCap ? 'claude' : 'rules';
       const id = newId();
-      store.createTruce(id, pairId, brain, alpha, opener);
-      void run(id, pair, alpha, opener, brain);
+      if (opts.replaces) store.setReplacedBy(opts.replaces, id);
+      try {
+        const past = store.trucesOf(pairId).filter((t) => t.status === 'done' && !t.replacedBy);
+        const { alpha } = pairLedger(store, pair);
+        const opener = pair.members[past.length % pair.members.length]!;
+        const brain = anthropic && store.claudeTrucesSince(startOfUtcDay()) < deps.dailyCap ? 'claude' : 'rules';
+        store.createTruce(id, pairId, brain, alpha, opener);
+        void run(id, pair, alpha, opener, brain, opts.exclude ?? []);
+      } catch (err) {
+        if (opts.replaces) store.setReplacedBy(opts.replaces, null);
+        throw err;
+      }
       return id;
     },
 
@@ -433,12 +474,15 @@ export function createRunner(deps: RunnerDeps) {
 
 export type Runner = ReturnType<typeof createRunner>;
 
+/** Why a swap request or vote was refused (409). */
+export type SwapErrorCode = 'locked' | 'swap_open' | 'swap_used' | 'too_many' | 'not_voter';
+
 /** An error whose message is safe and useful to show the person. */
 export class UserFacingError extends Error {
   constructor(
     message: string,
     readonly status = 422,
-    readonly code: StreamErrorCode | 'not_ready' | 'not_found' = 'internal',
+    readonly code: StreamErrorCode | 'not_ready' | 'not_found' | SwapErrorCode = 'internal',
   ) {
     super(message);
   }
