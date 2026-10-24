@@ -28,7 +28,7 @@ flowchart LR
   R[Referee in code] -. checks every move .-> N
   L[Fairness ledger] -. bargaining weights .-> R
   N --> E[The plan: hours, map, links, calendar]
-  E --> W[Swaps: one item at a time,<br/>by fact or by majority vote]
+  E --> W[Swaps: one item at a time,<br/>by majority vote]
   W --> E
   E --> C[Next day: check-in]
   C --> L
@@ -49,8 +49,9 @@ flowchart LR
    - If another evening is better for *everyone* than the one agreed, the referee upgrades to it.
 8. **The plan.** The evening comes back with what you need to go: today's opening hours, address, map and phone for the restaurant; IMDb, Letterboxd or Netflix for the film; Spotify for the music; and a calendar event for 19:00 in the city's own time.
 9. **Swaps.** Plans meet reality: the place is fully booked, the film isn't on any of your services, someone has already seen it. Anyone can ask to swap one item.
-   - **A fact** ("booked or closed", "can't watch it") swaps at once.
-   - **A taste** ("seen it", "not feeling it") goes to the group. A strict majority, the asker included, must be OK with *an* alternative, without seeing it first: both people in a couple, two of three, three of four. Whoever hasn't answered within ten minutes is answered for by their agent, which knows its person's scores and says yes only if the swap costs them little.
+   - **Every swap goes to the group.** A strict majority, the asker included, must be OK with *an* alternative, without seeing it first: both people in a couple, two of three, three of four.
+   - **A taste** ("seen it", "not feeling it"): whoever hasn't answered within ten minutes is answered for by their agent, which knows its person's scores and says yes only if the swap costs them little.
+   - **A fact** ("booked or closed", "can't watch it") is voted on too, so "it can't happen" can't stand in for a taste swap someone has already used. An agent can't check a booking, so silence counts as OK. Once it passes, the item has to change, even if nothing left keeps everyone above their minimum; the ledger makes up for it.
    - **The referee picks the replacement**, never the asker: of the items left in that slot, one that keeps everyone at or above their minimum, items argued for in the talks first, then the fairest by the same weighted Nash rule. So the vote can promise everyone they won't end up below their minimum.
    - **Limits:** one request at a time, one taste swap per person per evening, and a check-in settles the evening.
    - **When nothing fair is left,** the group can plan again, which needs the same majority. The new truce leaves out what was swapped away, and the evening it replaces leaves the ledger.

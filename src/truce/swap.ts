@@ -1,11 +1,14 @@
 /**
  * Swaps: changing one item of a decided evening without undoing its fairness.
  *
- * Someone asks for a slot to change. A fact (the place is booked, the film
- * can't be watched) changes it at once; a taste goes to the group, and a
+ * Someone asks for a slot to change, and every request goes to the group: a
  * strict majority, the asker included, must be OK with an alternative they
- * don't see beforehand. Whoever is silent when the vote closes is answered
- * for by their agent, which knows its person's scores.
+ * don't see beforehand. A fact (the place is booked, the film can't be
+ * watched) is voted on too, so "it can't happen" can't stand in for a taste
+ * the asker has no swap left for. Whoever is silent when the vote closes is
+ * answered for by their agent: on a taste it knows its person's scores; on a
+ * fact it can't check, so it trusts the asker (the person had the whole vote
+ * to say otherwise).
  *
  * The referee, not the asker, picks the replacement: of the items left in
  * that slot, one that keeps everyone at or above their minimum (the fair
@@ -24,7 +27,7 @@ export const VOTE_MINUTES = 10;
 export const AGENT_TOLERANCE = 0.05;
 /** Taste swaps each person may ask for per evening; facts aren't limited this way. */
 export const TASTE_SWAPS_PER_PERSON = 1;
-/** Fact swaps each person may ask for per evening, so "booked" can't stand in for a vote forever. */
+/** Fact swaps each person may ask for per evening, each voted on. */
 export const FACT_SWAPS_PER_PERSON = 3;
 /** Requests of any kind per evening. */
 export const REQUESTS_MAX = 12;
@@ -109,14 +112,15 @@ export function fairAlternative(
 }
 
 /** Why an agent answered as it did; the server turns these into words. */
-export type AgentWhy = 'no_worse' | 'small_cost' | 'too_costly' | 'nothing_fair' | 'fair_share' | 'ahead';
+export type AgentWhy = 'no_worse' | 'small_cost' | 'too_costly' | 'nothing_fair' | 'fair_share' | 'ahead' | 'trusts';
 
 /**
  * An agent's answer for a person who didn't vote. On a swap it knows what the
  * referee would put in (the person doesn't), and says yes when that costs its
- * person at most AGENT_TOLERANCE of their evening. On a replan, which throws
- * the whole evening open, it says yes unless its person is doing better than
- * the fair evening would give them.
+ * person at most AGENT_TOLERANCE of their evening. On a fact it says yes: it
+ * can't tell whether the place is booked, and its person was asked. On a
+ * replan, which throws the whole evening open, it says yes unless its person
+ * is doing better than the fair evening would give them.
  */
 export function agentVote(
   e: Evening,
@@ -124,7 +128,9 @@ export function agentVote(
   side: Side,
   bundle: Bundle,
   alternative: Alternative | null,
+  fact = false,
 ): { vote: 'yes' | 'no'; why: AgentWhy } {
+  if (kind === 'swap' && fact) return { vote: 'yes', why: 'trusts' };
   const now = eveningUtility(e, side, bundle);
   if (kind === 'replan') {
     // Both on the menu scale: the stored fair utility is exact and could differ by a rounding.

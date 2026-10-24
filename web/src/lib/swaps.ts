@@ -26,7 +26,7 @@ const UNAVAILABLE: Record<Slot, string> = { film: 'Can’t watch it', restaurant
 export const reasonLabel = (slot: Slot, reason: SwapReason) =>
   reason === 'unavailable' ? UNAVAILABLE[slot] : reason === 'seen' ? 'Seen it' : 'Not feeling it';
 
-/** Something that can't happen swaps at once; a matter of taste goes to a vote. */
+/** Something that can't happen, as opposed to a matter of taste. Both go to a vote; the agents take a fact on the asker's word. */
 export const isFact = (reason: SwapReason) => reason === 'unavailable';
 
 /** The request waiting for votes, if any. */
@@ -77,19 +77,32 @@ export function askedLine(swap: Asked, names: Names): string {
 /**
  * What a vote needs, in one line: "Deniz needs to be OK with it." for a
  * couple, "Asks the group: 3 of 4 need to be OK with an alternative." for more.
- * `asker` is null while nobody has said who's asking.
+ * `asker` is null while nobody has said who's asking. On a `fact`, silence
+ * counts as OK, since an agent can't check whether the place is booked.
  */
-export function voteRule(kind: SwapView['kind'], asker: Side | null, members: readonly Side[], names: Names, needed: number, voteMinutes: number): string {
+export function voteRule(
+  kind: SwapView['kind'],
+  asker: Side | null,
+  members: readonly Side[],
+  names: Names,
+  needed: number,
+  voteMinutes: number,
+  fact = false,
+): string {
   const ok = kind === 'swap' ? 'be OK with it' : 'agree';
   const window = minutesLabel(voteMinutes);
   if (members.length === 2) {
     const other = asker && members.find((s) => s !== asker);
     if (!other) return `Both of you need to ${ok}.`;
     const name = nameOf(names, other);
-    return `${name} needs to ${ok}. If ${name} hasn’t answered in ${window}, ${agentOf(name)} answers.`;
+    return fact
+      ? `${name} needs to be OK with swapping it. If ${name} hasn’t answered in ${window}, it’s swapped.`
+      : `${name} needs to ${ok}. If ${name} hasn’t answered in ${window}, ${agentOf(name)} answers.`;
   }
   const what = kind === 'swap' ? 'be OK with an alternative' : 'agree to plan again';
-  return `Asks the group: ${needed} of ${members.length} need to ${what}. Anyone who hasn’t answered in ${window} is answered for by their agent.`;
+  return fact
+    ? `Asks the group: ${needed} of ${members.length} need to be OK with swapping it. Anyone who hasn’t answered in ${window} counts as OK.`
+    : `Asks the group: ${needed} of ${members.length} need to ${what}. Anyone who hasn’t answered in ${window} is answered for by their agent.`;
 }
 
 /** "Ecrin’s agent answered No: The Lobster matters to Ecrin tonight." */

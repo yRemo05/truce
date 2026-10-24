@@ -503,6 +503,7 @@ function agentVote(t: MockTruce, names: Names, w: SwapView, s: Side): SwapVote {
     const now = scoresOf(t, bundleOf(t))[s] ?? 0;
     return now < 70 ? say(true, `Tonight’s plan doesn’t suit ${name} much.`) : say(false, `Tonight’s plan suits ${name} well.`);
   }
+  if (w.reason && isFact(w.reason)) return say(true, `It can’t check whether ${w.from.name} is off tonight, so it takes ${nameOf(names, w.side)}’s word.`);
   const next = replacementFor(t, w.slot);
   if (!next) return say(true, `${name} doesn’t mind the referee looking.`);
   const change = (next.scores[s] ?? 0) - (itemOf(t, w.slot, w.from.id)?.scores[s] ?? 0);
@@ -797,15 +798,16 @@ export const mockApi: Api = {
       if (fact && mine.filter((w) => w.reason === 'unavailable').length >= FACT_SWAPS_PER_PERSON)
         throw new ApiError(409, 'too_many', 'That’s a lot of swaps for one evening. Plan it again instead.');
       if (!fact && !canAskOf(t, side))
-        throw new ApiError(409, 'swap_used', 'You’ve used your swap for tonight. Something that can’t happen (booked, closed, can’t watch it) still swaps.');
+        throw new ApiError(409, 'swap_used', 'You’ve used your swap for tonight. Something that can’t happen (booked, closed, can’t watch it) can still go to the group.');
       const bundle = bundleOf(t);
+      // A fact goes to the vote too.
       w = {
         ...asked,
         kind: 'swap',
         slot,
         reason,
-        deadline: fact ? null : iso(now + VOTE_MS),
-        needed: fact ? 0 : neededOf(t),
+        deadline: iso(now + VOTE_MS),
+        needed: neededOf(t),
         from: { id: bundle[slot], name: itemOf(t, slot, bundle[slot])?.name ?? '' },
         scores: { before: scoresOf(t, bundle), after: null },
       };

@@ -157,6 +157,11 @@ const tick = () => {
   const t = Date.now();
   while (Date.now() <= t + 20);
 };
+/** A couple's fact swap, asked and passed by the partner's yes. */
+const factSwap = (truceId: string, side: 'a' | 'b', slot: Slot) => {
+  const asked = swaps.ask(truceId, { kind: 'swap', side, slot, reason: 'unavailable' });
+  return swaps.vote(truceId, asked.swaps.at(-1)!.id, side === 'a' ? 'b' : 'a', 'yes');
+};
 const refused = (fn: () => unknown, code: string) => {
   try {
     fn();
@@ -171,9 +176,12 @@ const refused = (fn: () => unknown, code: string) => {
   const first = swaps.view(truceId);
   check('view: a decided evening is open to swaps', first.lock === null && first.needed === 2 && first.canAsk.a === true && first.scores?.a === 63);
 
-  const v = swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'restaurant', reason: 'unavailable' });
+  const asked = swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'restaurant', reason: 'unavailable' });
+  const open = asked.swaps[0]!;
+  check('fact: goes to a vote too, the asker\'s yes in', open.status === 'open' && open.needed === 2 && open.votes.a?.vote === 'yes' && open.deadline !== null);
+  const v = swaps.vote(truceId, open.id, 'b', 'yes');
   const s = v.swaps[0]!;
-  check('fact: swaps at once, to the referee\'s pick', s.status === 'swapped' && s.to?.id === 'R2' && v.bundle?.restaurant === 'R2');
+  check('fact: passed, it swaps to the referee\'s pick', s.status === 'swapped' && s.to?.id === 'R2' && v.bundle?.restaurant === 'R2');
   check('fact: before and after scores', s.scores?.before.a === 63 && s.scores?.after?.a === 70 && v.scores?.b === 73);
   check('fact: the concession as the ledger counts it', Math.abs(v.concession!.a! - (0.9 - 0.7)) < 1e-9);
   const t = store.truce(truceId)!;
@@ -195,7 +203,34 @@ const refused = (fn: () => unknown, code: string) => {
   check('vote: a couple passes on the partner\'s yes; the referee swaps in R2', s.status === 'swapped' && after.bundle?.restaurant === 'R2' && after.lock === null);
   check('taste: the asker\'s disliked item joins their avoided picks', store.sides(pairId).a!.learned.avoided.some((x) => x.id === 'R1'));
   check('taste: one per person per evening', refused(() => swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'film', reason: 'seen' }), 'swap_used'));
-  check('taste: a fact still swaps after it', swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'music', reason: 'unavailable' }).bundle?.music === 'M2');
+  const fact = swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'music', reason: 'unavailable' });
+  check('taste: a fact may still be asked after it, and the partner decides', fact.swaps.at(-1)!.status === 'open' && fact.bundle?.music === 'M1');
+  check('taste: … and passes on their yes', swaps.vote(truceId, fact.swaps.at(-1)!.id, 'b', 'yes').bundle?.music === 'M2');
+}
+
+{
+  // "Can't watch it" as a way round a used taste swap: the partner can say no.
+  const { pairId, truceId } = decided();
+  const asked = swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'film', reason: 'unavailable' });
+  const kept = swaps.vote(truceId, asked.swaps[0]!.id, 'b', 'no');
+  check('fact: the partner\'s no keeps the film', kept.swaps[0]!.status === 'kept' && kept.bundle?.film === 'F2');
+  check('fact: a refused fact teaches nothing', store.sides(pairId).a!.learned.avoided.length === 0);
+  const truces = store.trucesOf(pairId);
+  const plain = ledgerOf(['a', 'b'], truces, new Map());
+  const counted = ledgerOf(['a', 'b'], truces, new Map(), store.swapsOfPair(pairId));
+  check('fact: a refused fact isn\'t counted as ground given', Math.abs(counted.entries[0]!.concession.a! - plain.entries[0]!.concession.a!) < 1e-9);
+}
+
+{
+  // Silent on a fact: the agent can't check, so it takes the asker's word.
+  const { truceId } = decided([{ film: 'F2', restaurant: 'R3', music: 'M1' }]);
+  swaps.ask(truceId, { kind: 'swap', side: 'b', slot: 'restaurant', reason: 'unavailable' });
+  clock += 10 * 60_000 + 1;
+  const closed = swaps.view(truceId);
+  const s = closed.swaps[0]!;
+  check('fact deadline: the silent person\'s agent says yes, on the asker\'s word', s.votes.a?.by === 'agent' && s.votes.a.vote === 'yes' && /Deniz's word/.test(s.votes.a.why ?? ''));
+  check('fact deadline: and the item changes', s.status === 'swapped' && closed.bundle?.restaurant !== 'R1');
+  clock -= 10 * 60_000 + 1;
 }
 
 {
@@ -257,12 +292,12 @@ const refused = (fn: () => unknown, code: string) => {
 {
   const { pairId, truceId } = decided();
   // Booked, booked, booked, booked: the last one leaves no restaurant at all.
-  swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'restaurant', reason: 'unavailable' });
-  swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'restaurant', reason: 'unavailable' });
-  const third = swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'restaurant', reason: 'unavailable' });
+  factSwap(truceId, 'a', 'restaurant');
+  factSwap(truceId, 'a', 'restaurant');
+  const third = factSwap(truceId, 'a', 'restaurant');
   check('fact: once nothing fair is left, the fairest place left goes in anyway', third.bundle?.restaurant === 'R4');
   check('fact: three per person', refused(() => swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'restaurant', reason: 'unavailable' }), 'too_many'));
-  const fourth = swaps.ask(truceId, { kind: 'swap', side: 'b', slot: 'restaurant', reason: 'unavailable' });
+  const fourth = factSwap(truceId, 'b', 'restaurant');
   check('fact: with no restaurant left, nothing to swap in', fourth.swaps.at(-1)!.status === 'no_alternative' && fourth.replanNow);
   const re = swaps.ask(truceId, { kind: 'replan', side: 'b' });
   const r = re.swaps.at(-1)!;
@@ -303,7 +338,7 @@ const refused = (fn: () => unknown, code: string) => {
   const { pairId, truceId } = decided();
   const v = swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'restaurant', reason: 'not_feeling' });
   swaps.vote(truceId, v.swaps[0]!.id, 'b', 'no');
-  swaps.ask(truceId, { kind: 'swap', side: 'b', slot: 'restaurant', reason: 'unavailable' });
+  factSwap(truceId, 'b', 'restaurant');
   const truces = store.trucesOf(pairId);
   const plain = ledgerOf(['a', 'b'], truces, new Map());
   const counted = ledgerOf(['a', 'b'], truces, new Map(), store.swapsOfPair(pairId));
@@ -326,10 +361,10 @@ const refused = (fn: () => unknown, code: string) => {
 {
   // A replan of a replan leaves out what was swapped away from both evenings.
   const { pairId, truceId } = decided();
-  swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'restaurant', reason: 'unavailable' });
+  factSwap(truceId, 'a', 'restaurant');
   const first = swaps.vote(truceId, swaps.ask(truceId, { kind: 'replan', side: 'a' }).swaps.at(-1)!.id, 'b', 'yes').replacedBy!;
   finish(first);
-  swaps.ask(first, { kind: 'swap', side: 'b', slot: 'music', reason: 'unavailable' });
+  factSwap(first, 'b', 'music');
   swaps.vote(first, swaps.ask(first, { kind: 'replan', side: 'b' }).swaps.at(-1)!.id, 'a', 'yes');
   const last = started.at(-1)!;
   check('replan chain: the second replan leaves out both evenings\' swapped-away items', last.pairId === pairId && last.exclude.includes('R1') && last.exclude.includes('M1'));

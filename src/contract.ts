@@ -343,13 +343,16 @@ export interface CheckinResult {
 /**
  * Swaps: changing one item of a decided evening.
  *
- * A fact ("unavailable": booked or closed, can't watch it, can't play it)
- * swaps at once. A taste ("seen" for a film, "not_feeling") goes to the
- * group: a strict majority, the asker included, must be OK with an
- * alternative they don't see beforehand. Whoever hasn't answered when the
- * vote closes is answered for by their agent. The referee picks the
- * replacement: the fairest item left in that slot that keeps everyone above
- * their minimum, preferring items argued for in the talks. With none left,
+ * Every swap goes to the group: a strict majority, the asker included, must
+ * be OK with an alternative they don't see beforehand. That holds for a fact
+ * ("unavailable": booked or closed, can't watch it, can't play it) as much as
+ * for a taste ("seen" for a film, "not_feeling"), so a fact can't stand in for
+ * a taste swap. Whoever hasn't answered when the vote closes is answered for
+ * by their agent, which takes a fact on the asker's word. The referee picks
+ * the replacement: the fairest item left in that slot that keeps everyone
+ * above their minimum, preferring items argued for in the talks; for a fact,
+ * the fairest left even below someone's minimum, since the item has to go
+ * and the ledger makes up for it. With none left,
  * the group can plan again without what it swapped away ("replan"). A
  * replan needs the same majority, unless an item that can't happen left no
  * way around it.

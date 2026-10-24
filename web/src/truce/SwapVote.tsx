@@ -5,7 +5,7 @@ import { api } from '@/api';
 import { Badge, Button, cx, ErrorNotice, Icon, InfoTip, Notice, PersonRow, SectionHeader, type IconName } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
 import { nameOf, possessive, type Names } from '@/lib/people';
-import { askedLine, canVote, KIND_ICON, pendingOf, replanLine, thenAgents, timeLeft, yesCount, type Asked } from '@/lib/swaps';
+import { askedLine, canVote, isFact, KIND_ICON, pendingOf, replanLine, thenAgents, timeLeft, yesCount, type Asked } from '@/lib/swaps';
 import { SLOT_ICON } from '@/lib/truce';
 import { useNow } from '@/lib/useNow';
 import { useSwapCall, type Swaps } from '@/lib/useSwaps';
@@ -27,6 +27,13 @@ function answersFor(swap: SwapView, keep: string | undefined): { question: strin
       question: 'Are you OK with planning again?',
       yes: { label: 'Plan again', short: 'OK', icon: KIND_ICON.replan, said: 'You’re OK with planning again.' },
       no: { label: 'Keep tonight’s plan', short: 'Keep', icon: 'calendar', said: 'You’d keep tonight’s plan.' },
+    };
+  }
+  if (swap.reason && isFact(swap.reason)) {
+    return {
+      question: `Is ${keep ?? 'it'} really off tonight?`,
+      yes: { label: 'OK, swap it', short: 'OK', icon: KIND_ICON.swap, said: 'You’re OK with swapping it.' },
+      no: { label: `Keep ${keep ?? 'it'}`, short: 'Keep', icon: SLOT_ICON[swap.slot], said: `You’d keep ${keep ?? 'it'}.` },
     };
   }
   return {
@@ -162,7 +169,9 @@ export function VoteCard({ swap, swaps, truceId }: VoteCardProps) {
         id="vote-title"
         title={askedLine(swap, names)}
         meta={
-          swap.kind === 'swap' ? (
+          swap.kind === 'swap' && swap.reason && isFact(swap.reason) ? (
+            'If it can’t happen, it has to change: the referee picks the fairest replacement, and the ledger makes up any loss.'
+          ) : swap.kind === 'swap' ? (
             <>
               Whatever replaces it, you won’t end up below your minimum. <InfoTip label="What your minimum is">{EXPLAIN.floor}</InfoTip>
             </>

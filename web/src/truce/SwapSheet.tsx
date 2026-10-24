@@ -67,17 +67,16 @@ function AskForm({ ask, view, swaps, truceId, onClose }: AskFormProps) {
     else onClose();
   };
 
-  // It happens at once (a fact, or a replan nothing else can solve), or it asks the others.
-  const instant = ask.kind === 'swap' ? reason === null || isFact(reason) : view.replanNow;
+  // Every swap asks the others; only a replan nothing else can solve starts at once.
+  const instant = ask.kind === 'replan' && view.replanNow;
   const other = members.length === 2 && side ? members.find((s) => s !== side) : undefined;
-  const submitLabel = instant ? (ask.kind === 'swap' ? `Swap the ${SLOT_NOUN[ask.slot]}` : 'Plan again') : other ? `Ask ${nameOf(names, other)}` : 'Ask the group';
-  const submitIcon: IconName = instant ? KIND_ICON[ask.kind] : 'users';
+  const submitLabel = instant ? 'Plan again' : other ? `Ask ${nameOf(names, other)}` : 'Ask the group';
+  const submitIcon: IconName = instant ? KIND_ICON.replan : 'users';
   const whatNext = (): { icon: IconName; text: string } | null => {
     if (ask.kind === 'swap' && reason === null) return null;
-    if (!instant) return { icon: 'users', text: voteRule(ask.kind, side, members, names, view.needed, view.voteMinutes) };
-    return ask.kind === 'swap'
-      ? { icon: 'gavel', text: 'Swaps now. The referee picks the fairest replacement.' }
-      : { icon: 'retry', text: 'Starts now, because what can’t happen has nothing to replace it.' };
+    if (instant) return { icon: 'retry', text: 'Starts now, because what can’t happen has nothing to replace it.' };
+    const fact = ask.kind === 'swap' && reason !== null && isFact(reason);
+    return { icon: 'users', text: voteRule(ask.kind, side, members, names, view.needed, view.voteMinutes, fact) };
   };
   const next = whatNext();
 
@@ -121,7 +120,7 @@ function AskForm({ ask, view, swaps, truceId, onClose }: AskFormProps) {
           {tasteUsed && side && (
             <p className="ask__note icon-line icon-line--text small muted">
               <Icon name="ban" size={16} />
-              <span>{usedLine(side, mine, names)} Something that can’t happen can still be swapped.</span>
+              <span>{usedLine(side, mine, names)} Something that can’t happen can still go to {other ? nameOf(names, other) : 'the group'}.</span>
             </p>
           )}
         </fieldset>

@@ -40,9 +40,11 @@ const LOCKED: Record<Exclude<SwapLock, 'open'>, string> = {
   past: 'This evening has passed.',
 };
 
-function agentWords(why: AgentWhy, name: string, slot: Slot | null, item: string | null): string {
+function agentWords(why: AgentWhy, name: string, slot: Slot | null, item: string | null, asker: string): string {
   const what = slot ? SLOT_WORD[slot] : 'evening';
   switch (why) {
+    case 'trusts':
+      return `It can't check whether ${item ?? `the ${what}`} is off tonight, so it takes ${asker}'s word.`;
     case 'no_worse':
       return `The new ${what} suits ${name} as well or better.`;
     case 'small_cost':
@@ -261,13 +263,15 @@ export function createSwaps(deps: SwapsDeps) {
       return;
     }
     const bundle = truce.result!.bundle;
+    const fact = swap.kind === 'swap' && isFact(swap.reason!);
     const alternative =
-      swap.kind === 'swap' ? fairAlternative(e, bundle, swap.slot!, new Set(swappedAway(store.swapsOf(truce.id))), false) : null;
+      swap.kind === 'swap' ? fairAlternative(e, bundle, swap.slot!, new Set(swappedAway(store.swapsOf(truce.id))), fact) : null;
     const votes = { ...swap.votes };
     for (const s of e.members) {
       if (votes[s]) continue;
-      const answer = agentVote(e, swap.kind, s, bundle, alternative);
-      votes[s] = { vote: answer.vote, by: 'agent', why: agentWords(answer.why, at(pair.names, s), swap.slot, swap.from?.name ?? null) };
+      const answer = agentVote(e, swap.kind, s, bundle, alternative, fact);
+      const why = agentWords(answer.why, at(pair.names, s), swap.slot, swap.from?.name ?? null, at(pair.names, swap.side));
+      votes[s] = { vote: answer.vote, by: 'agent', why };
     }
     if (!store.setSwapVotes(swap.id, votes)) return;
     const outcome = tally(e.members, plainVotes(votes), swap.needed);
@@ -359,11 +363,12 @@ export function createSwaps(deps: SwapsDeps) {
         }
         if (!fact && mine.filter((s) => s.kind === 'swap' && s.reason && !isFact(s.reason)).length >= TASTE_SWAPS_PER_PERSON) {
           throw new UserFacingError(
-            "You've used your swap for tonight. Something that can't happen (booked, closed, can't watch it) still swaps.",
+            "You've used your swap for tonight. Something that can't happen (booked, closed, can't watch it) can still go to the group.",
             409,
             'swap_used',
           );
         }
+        // A fact goes to the vote too; once it passes, the item has to change (see swapIn).
         store.createSwap({
           id,
           truceId: truce.id,
@@ -371,14 +376,12 @@ export function createSwaps(deps: SwapsDeps) {
           side: input.side,
           slot: input.slot,
           reason: input.reason,
-          needed: fact ? 0 : majority(e.members.length),
+          needed: majority(e.members.length),
           votes: yes,
           from: { id: bundle[input.slot], name: nameOf(truce, input.slot, bundle[input.slot]) },
           scores: { before: scoresOf(e, bundle), after: null },
-          deadline: fact ? null : new Date(now() + voteMs).toISOString(),
+          deadline: new Date(now() + voteMs).toISOString(),
         });
-        // A fact can't be voted away: the item has to change.
-        if (fact) swapIn(store.swap(id)!, truce, pair);
       } else {
         // A replan whose new truce failed gave this evening back, and doesn't count.
         if (mine.some((s) => s.kind === 'replan' && !(s.newTruce && store.truce(s.newTruce)?.status === 'failed'))) {
