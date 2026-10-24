@@ -3,7 +3,9 @@
  *
  * Inventory, by priority:
  *   primary   — Start the truce (only when everyone is ready), or Watch the running one
- *   primary   — who's ready: each person, a status chip, fill in / redo, their own link
+ *   primary   — who's ready: each person, a status chip, fill in / redo, their own link; after an
+ *               evening, "Tonight's questions" and Answer for each (favourites stay). A demo group
+ *               shows the chips alone: its people's picks can't be changed
  *   rare      — a swap or replan of the last evening waiting for votes: a banner on top, to the vote
  *   secondary — after an evening: "How was the evening?", each person's check-in
  *   secondary — the ledger (a split bar for two, a bar each for a group)
@@ -14,12 +16,12 @@
  * Grid: 12 columns — the check-in and "Tonight" in 1–7, the ledger and history
  * in 8–12. Phone: check-in, tonight, ledger, history. Polls every 4 s while
  * someone is still picking, a truce runs or check-ins are due.
- * Icons: check / pencil (status), arrow-right, copy (link), play (start), eye
+ * Icons: check / hourglass (status: ready, tonight's questions), pencil, arrow-right, copy (link), play (start), eye
  * (watch), heart (check-in), scale (ledger), calendar (history), pin,
  * exchange / retry (a swap or replan waiting for votes), play (a recorded demo, when Truce is too
  * busy to start one live).
  */
-import type { PairView } from '@contract';
+import type { PairView, Side } from '@contract';
 import { useEffect, useState } from 'react';
 import { Link, useSearch } from 'wouter';
 import {
@@ -54,11 +56,19 @@ import { CheckinCard } from '@/truce/CheckinCard';
 import { SwapBanner } from '@/truce/SwapVote';
 import { NotFound } from './NotFound';
 
+/** Where someone stands for tonight: favourites still to pick, tonight's questions to answer, or ready. */
+type Standing = 'picking' | 'due' | 'ready';
+
 function Tonight({ pair, letters, running, pass }: { pair: PairView; letters: Names; running: string | null; pass: boolean }) {
   const start = useStartTruce(pair.id);
   const demo = useDemo();
-  const waiting = pair.members.filter((s) => !pair.ready[s]);
+  // A running truce is tonight's: the questions it makes due are for the next evening, so they wait until it ends.
+  const standing = (s: Side): Standing => (pair.ready[s] || (running && pair.tonightDue[s]) ? 'ready' : pair.tonightDue[s] ? 'due' : 'picking');
+  const waiting = pair.members.filter((s) => standing(s) !== 'ready');
   const all = waiting.length === 0;
+  const due = waiting.some((s) => standing(s) === 'due');
+  // A demo's people keep their picks: nothing to change, no links to send.
+  const editable = pair.demo === null;
 
   return (
     <section className="card tonight" aria-labelledby="tonight-title">
@@ -66,12 +76,20 @@ function Tonight({ pair, letters, running, pass }: { pair: PairView; letters: Na
         icon="calendar"
         id="tonight-title"
         title="Tonight"
-        meta={all ? 'Everyone’s ready.' : pass ? 'Each of you picks your favourites, privately.' : 'Each of you picks on your own phone. Send each person their link.'}
+        meta={
+          all
+            ? 'Everyone’s ready.'
+            : due
+              ? 'A new evening: everyone answers tonight’s questions again. Favourites stay.'
+              : pass
+                ? 'Each of you picks your favourites, privately.'
+                : 'Each of you picks on your own phone. Send each person their link.'
+        }
       />
       <ul className="people">
         {pair.members.map((side) => {
           const name = nameOf(pair.names, side);
-          const ready = pair.ready[side];
+          const now = standing(side);
           const href = withPass(`/p/${pair.id}/${side}`, pass);
           return (
             <PersonRow
@@ -80,27 +98,37 @@ function Tonight({ pair, letters, running, pass }: { pair: PairView; letters: Na
               letters={nameOf(letters, side)}
               name={name}
               status={
-                ready ? (
+                now === 'ready' ? (
                   <Badge variant="success" icon="check">
                     Ready
+                  </Badge>
+                ) : now === 'due' ? (
+                  <Badge variant="secondary" icon="hourglass">
+                    Tonight&rsquo;s questions
                   </Badge>
                 ) : (
                   <Badge variant="secondary">Still picking</Badge>
                 )
               }
               actions={
-                <>
-                  {!ready && !pass && <CopyButton text={absolute(`/p/${pair.id}/${side}`)} compact description={`Copy link for ${name}`} />}
-                  {ready ? (
-                    <ButtonLink size="sm" variant="ghost" icon="pencil" href={href}>
-                      Change
-                    </ButtonLink>
-                  ) : (
-                    <ButtonLink size="sm" iconEnd="arrow-right" href={href} aria-label={`Add favourites for ${name}`}>
-                      Add favourites
-                    </ButtonLink>
-                  )}
-                </>
+                editable && (
+                  <>
+                    {now !== 'ready' && !pass && <CopyButton text={absolute(`/p/${pair.id}/${side}`)} compact description={`Copy link for ${name}`} />}
+                    {now === 'ready' ? (
+                      <ButtonLink size="sm" variant="ghost" icon="pencil" href={href}>
+                        Change
+                      </ButtonLink>
+                    ) : now === 'due' ? (
+                      <ButtonLink size="sm" iconEnd="arrow-right" href={href} aria-label={`Answer tonight’s questions for ${name}`}>
+                        Answer
+                      </ButtonLink>
+                    ) : (
+                      <ButtonLink size="sm" iconEnd="arrow-right" href={href} aria-label={`Add favourites for ${name}`}>
+                        Add favourites
+                      </ButtonLink>
+                    )}
+                  </>
+                )
               }
             />
           );
@@ -123,7 +151,7 @@ function Tonight({ pair, letters, running, pass }: { pair: PairView; letters: Na
             <p className="small muted">
               {all
                 ? pullSentence(pair.ledger.tilt, pair.ledger.owed, pair.names, pair.members, 'tonight')
-                : `Waiting for ${listNames(waiting.map((s) => possessive(nameOf(pair.names, s))))} picks.`}
+                : `Waiting for ${listNames(waiting.map((s) => possessive(nameOf(pair.names, s))))} ${due ? 'answers' : 'picks'}.`}
             </p>
           </>
         )}

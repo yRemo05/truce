@@ -1202,6 +1202,15 @@
 .ask__note {
   margin-top: var(--s-2);
 }
+/* Nothing fair to swap in: the note, then its way out under the note's text, not its glyph. */
+.ask__stuck {
+  display: grid;
+  justify-items: start;
+  gap: var(--s-2);
+}
+.ask__stuck > .btn {
+  margin-left: calc(1rem + 0.375rem);
+}
 /* What happens next: one line, with room kept for it before a reason is picked. */
 .ask__next {
   min-height: 3rem;

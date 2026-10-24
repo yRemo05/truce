@@ -454,6 +454,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
               truceId={truceId}
               pairId={meta.pairId}
               demoKind={demo ?? (meta.mode === 'couple' ? 'couple' : 'friends')}
+              demo={demo !== null}
               checkedIn={meta.checkedIn}
               stamp={!archive && state.sawLive}
               swaps={swaps}

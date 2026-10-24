@@ -12,7 +12,12 @@
  * the replacement is the item left in the slot with the highest summed score
  * that keeps everyone at or above their minimum (the fair evening less 0.10),
  * and an agent answering for someone says yes when that person's score for
- * the replacement is within 10 of the item it replaces.
+ * the replacement is within 10 of the item it replaces. With no such item, a
+ * taste swap is refused up front (`nothing_fair`), as on the server.
+ *
+ * As on the server, an evening since someone last saved asks tonight's
+ * questions again (`tonightDue`), and a new truce waits for them; the demo
+ * groups' people keep their picks (403 `demo`).
  */
 import type {
   BriefView,
@@ -39,7 +44,7 @@ import type {
 import { ApiError, type Api } from '../api/api';
 import { membersOf, nameOf, perSide, type Names } from '@/lib/people';
 import { isFact, pendingOf, swappedAway, yesCount } from '@/lib/swaps';
-import { bySlot, SLOTS, type Bundle } from '@/lib/truce';
+import { bySlot, SLOT_NOUN, SLOTS, type Bundle } from '@/lib/truce';
 import { understand } from './brief';
 import { byName, CATALOG, findFoods, foodByName } from './catalog';
 import { alphaOf, balanceOf, experienced, owedOf, realised, tiltOf } from './ledger';
@@ -48,6 +53,8 @@ import { buildTimeline, tonightIn, type Timed } from './script';
 interface MockSide {
   input: SideInput;
   brief: BriefView | null;
+  /** When it was last saved (ms): an evening since asks tonight's questions again. Absent in older stores. */
+  savedAt?: number;
 }
 
 /** A made-up earlier evening the demo groups start with. */
@@ -102,6 +109,12 @@ const KEY = 'truce:mock:v2';
 
 /** `?rules` on the page plays the server without a model: rule-based agents, no scouting, notes unread. */
 const rulesToday = () => new URLSearchParams(location.search).has('rules');
+/** A note as the agent understood it: null with no note, or with no model today. */
+function briefOf(note: string | undefined): BriefView | null {
+  const text = note?.trim() ?? '';
+  if (text.length > 280) throw new ApiError(400, 'invalid', 'Keep the note to 280 characters.');
+  return text && !rulesToday() ? understand(text) : null;
+}
 /** `?interrupt` when starting: the truce stops after turn 4, as the server does when it restarts mid-truce. */
 const interruptToday = () => new URLSearchParams(location.search).has('interrupt');
 
@@ -218,6 +231,29 @@ function ledgerOf(pair: MockPair, done: readonly MockTruce[], extra?: PerSide<nu
   return { members, balance, alpha, tilt: tiltOf(alpha, members), owed: owedOf(balance, members), entries };
 }
 
+/**
+ * Per person: tonight's questions are due again once the group has had an
+ * evening (any truce that didn't fail, a running one included) since they
+ * last saved. Never for a demo group, whose people keep their answers.
+ */
+function tonightDueOf(db: Db, pair: MockPair): PerSide<boolean> {
+  const last = trucesOf(db, pair.id)
+    .filter((t) => !t.failed)
+    .at(-1);
+  return perSide(pair.members, (s) => {
+    const side = pair.sides[s];
+    return Boolean(!pair.demo && last && side && (side.savedAt ?? 0) <= last.createdAt);
+  });
+}
+
+/** Favourites saved and tonight's answers current. */
+function readyOf(db: Db, pair: MockPair): PerSide<boolean> {
+  const due = tonightDueOf(db, pair);
+  return perSide(pair.members, (s) => Boolean(pair.sides[s]) && !due[s]);
+}
+
+const demoLocked = () => new ApiError(403, 'demo', 'The demo’s people keep their picks. Make your own group to choose yours.');
+
 function pairView(db: Db, pair: MockPair): PairView {
   const all = trucesOf(db, pair.id);
   const last = all[all.length - 1];
@@ -227,7 +263,9 @@ function pairView(db: Db, pair: MockPair): PairView {
     members: pair.members,
     names: pair.names,
     location: pair.location,
-    ready: perSide(pair.members, (s) => Boolean(pair.sides[s])),
+    ready: readyOf(db, pair),
+    tonightDue: tonightDueOf(db, pair),
+    demo: pair.demo ?? null,
     ledger: ledgerOf(pair, all.filter(counted)),
     lastTruceId: last?.id ?? null,
     lastTruce: last ? { id: last.id, status: statusOf(last), checkedIn: checkedIn(last), openSwap: openSwapOf(last) } : null,
@@ -270,6 +308,9 @@ function start(db: Db, pairId: string, again?: Again): string {
   if (running) return running.id;
   const { members } = pair;
   if (members.some((s) => !pair.sides[s])) throw new ApiError(409, 'not_ready', 'Everyone needs to finish their picks first.');
+  // A new evening asks tonight's questions again; a replan is the same evening.
+  const due = tonightDueOf(db, pair);
+  if (!again && members.some((s) => due[s])) throw new ApiError(409, 'not_ready', 'Everyone answers tonight’s questions first.');
   if (pair.location.trim().toLowerCase() === 'atlantis') return failing(db, pair);
 
   const done = all.filter((t) => counted(t) && t.id !== again?.replaces);
@@ -581,8 +622,8 @@ function swapsView(db: Db, t: MockTruce): SwapsView {
     swaps: swapsOf(t),
     lock: lockOf(db, t, pair),
     canAsk: perSide(t.members, (s) => canAskOf(t, s)),
-    // The mock's referee always finds something to put in.
-    tasteRoom: perSide(t.members, () => ({ film: true, restaurant: true, music: true })),
+    // A taste swap has room when the referee's stand-in finds something fair to put in; the same for everyone here.
+    tasteRoom: perSide(t.members, () => bySlot((slot) => !decided || !poolOf(t) || replacementFor(t, slot) !== null)),
     needed: neededOf(t),
     voteMinutes: VOTE_MS / 60_000,
     replanNow: stuckOf(t),
@@ -670,6 +711,7 @@ export const mockApi: Api = {
     await wait(250);
     const db = read();
     const pair = pairOr404(db, pairId);
+    if (pair.demo) throw demoLocked();
     pair.location = location.trim();
     write(db);
     return pairView(db, pair);
@@ -679,15 +721,35 @@ export const mockApi: Api = {
     await wait(350);
     const db = read();
     const pair = pairOr404(db, pairId);
+    if (pair.demo) throw demoLocked();
     if (!pair.members.includes(side)) throw new ApiError(404, 'not_found', 'There is no such person in this truce.');
     if (!SLOTS.some((s) => input.seeds[s].length > 0)) throw new ApiError(400, 'invalid', 'Pick at least one film, artist or restaurant you love.');
     if (input.seeds.restaurant.length + (input.foods?.length ?? 0) > 3) throw new ApiError(400, 'invalid', 'Up to three restaurants and foods together.');
-    const text = input.brief?.trim() ?? '';
-    if (text.length > 280) throw new ApiError(400, 'invalid', 'Keep the note to 280 characters.');
-    const brief = text && !rulesToday() ? understand(text) : null;
-    pair.sides[side] = { input, brief };
+    const brief = briefOf(input.brief);
+    pair.sides[side] = { input, brief, savedAt: Date.now() };
     write(db);
-    return { ready: perSide(pair.members, (s) => Boolean(pair.sides[s])), brief };
+    return { ready: readyOf(db, pair), brief };
+  },
+
+  async saveTonight(pairId, side, input) {
+    await wait(350);
+    const db = read();
+    const pair = pairOr404(db, pairId);
+    if (pair.demo) throw demoLocked();
+    if (!pair.members.includes(side)) throw new ApiError(404, 'not_found', 'There is no such person in this truce.');
+    const saved = pair.sides[side];
+    if (!saved) throw new ApiError(409, 'not_ready', 'Pick your favourites first.');
+    if (saved.input.seeds.restaurant.length + (input.foods?.length ?? 0) > 3) throw new ApiError(400, 'invalid', 'Up to three restaurants and foods together.');
+    const brief = briefOf(input.brief);
+    // Favourites stay; tonight's answers are replaced, an empty one included.
+    const text = input.brief?.trim();
+    pair.sides[side] = {
+      input: { seeds: saved.input.seeds, weights: input.weights, ...(input.foods?.length ? { foods: input.foods } : {}), ...(text ? { brief: text } : {}) },
+      brief,
+      savedAt: Date.now(),
+    };
+    write(db);
+    return { ready: readyOf(db, pair), brief };
   },
 
   async startTruce(pairId) {
@@ -801,6 +863,9 @@ export const mockApi: Api = {
         throw new ApiError(409, 'too_many', 'That’s a lot of swaps for one evening. Plan it again instead.');
       if (!fact && !canAskOf(t, side))
         throw new ApiError(409, 'swap_used', 'You’ve used your swap for tonight. Something that can’t happen (booked, closed, can’t watch it) can still go to the group.');
+      // A vote on a taste couldn't change anything with nothing fair to put in: refused up front.
+      if (!fact && !replacementFor(t, slot))
+        throw new ApiError(409, 'nothing_fair', `Nothing left on tonight’s list would be fair to everyone else in place of the ${SLOT_NOUN[slot]}. Plan tonight again instead.`);
       const bundle = bundleOf(t);
       // A fact goes to the vote too.
       w = {

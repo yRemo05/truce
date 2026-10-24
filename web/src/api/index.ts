@@ -17,6 +17,7 @@ export const api: Api = {
   getPair: async (...args) => (await load()).getPair(...args),
   setLocation: async (...args) => (await load()).setLocation(...args),
   saveSide: async (...args) => (await load()).saveSide(...args),
+  saveTonight: async (...args) => (await load()).saveTonight(...args),
   startTruce: async (...args) => (await load()).startTruce(...args),
   demo: async (...args) => (await load()).demo(...args),
   getTruce: async (...args) => (await load()).getTruce(...args),

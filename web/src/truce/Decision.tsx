@@ -6,8 +6,10 @@
  *               is, everyone's fit, where and when, and its links
  *   primary   — an open request, on top: who asked and why, the question, the answers, the tally and
  *               the countdown, Withdraw for the asker
- *   secondary — each row's Swap (a sheet: who's asking, why, what happens next); plan tonight again
- *               (New truce once the evening is settled), calendar, share, group page
+ *   secondary — each row's Swap (a sheet: who's asking, why, what happens next); plan tonight again;
+ *               once the evening is settled, Plan a new evening (to the group page, where everyone
+ *               answers tonight's questions again; a demo's New truce runs again at once instead);
+ *               calendar, share, group page
  *   secondary — how it was reached, then every swap since in plain words; the ledger; the check-in
  *   rare      — why swapping is off: a vote waiting, someone checked in, the evening passed
  *
@@ -18,7 +20,8 @@
  * card, Swap at each row's top right; on a phone "where" sits under "what" in the same column.
  * Icons: exchange (swap), retry (plan again), users (asks the group), gavel (the referee picks),
  * hourglass / check-circle / calendar (why swapping is off), check / x (answers), film / restaurant /
- * music (keep), arrow-right (from → to), ban (taste swap used).
+ * music (keep), arrow-right (from → to), ban (taste swap used, or nothing fair to swap in), plus (a new
+ * evening), home (group page).
  */
 import type { CardItem, PerSide, Side, SwapLock, SwapsView } from '@contract';
 import { useEffect, useState } from 'react';
@@ -103,6 +106,8 @@ interface EveningProps {
   pairId: string;
   /** The recorded demo to offer when Truce is too busy for a new live truce. */
   demoKind: DemoKind;
+  /** A ready-made demo group: its people's picks are fixed, so a new truce runs again at once. */
+  demo: boolean;
   stamp: boolean;
   swaps: Swaps;
   /** Who the ledger favours next time, with the evening as it stands. */
@@ -111,7 +116,7 @@ interface EveningProps {
 }
 
 /** The evening: one row per item to act on, each with its Swap, and what to do next. */
-function EveningCard({ state, truceId, pairId, demoKind, stamp, swaps, owed, onAsk }: EveningProps) {
+function EveningCard({ state, truceId, pairId, demoKind, demo, stamp, swaps, owed, onAsk }: EveningProps) {
   const { names, members, location } = useTruceCtx();
   const again = useStartTruce(pairId);
   const recorded = useDemo();
@@ -125,6 +130,9 @@ function EveningCard({ state, truceId, pairId, demoKind, stamp, swaps, owed, onA
   // Swapping and planning again are offered on an evening that takes requests, or is waiting on one.
   const takes = view !== null && (lock === null || lock === 'open');
   const locked = lock ? LOCKED[lock] : undefined;
+  // A settled evening of the group's own: the next one starts on the group page, where everyone answers tonight's questions.
+  const nextOnGroupPage = !takes && !demo;
+  const more = owed ? `, and ${agentOf(nameOf(names, owed))} gets a bit more say` : '';
 
   return (
     <section className={cx('card plan__card', stamp && 'plan--live')} aria-labelledby="plan-title">
@@ -198,6 +206,10 @@ function EveningCard({ state, truceId, pairId, demoKind, stamp, swaps, owed, onA
           <Button variant="secondary" icon="retry" disabled={lock === 'open'} onClick={() => onAsk({ kind: 'replan' })}>
             Plan tonight again
           </Button>
+        ) : nextOnGroupPage ? (
+          <ButtonLink variant="primary" icon="plus" href={`/p/${pairId}`}>
+            Plan a new evening
+          </ButtonLink>
         ) : (
           <Button variant="primary" icon="plus" busy={again.busy} onClick={() => void again.run()}>
             New truce
@@ -205,14 +217,19 @@ function EveningCard({ state, truceId, pairId, demoKind, stamp, swaps, owed, onA
         )}
         {tonight && <CalendarLink truceId={truceId} version={SLOTS.map((s) => bundle[s]).join()} />}
         <ShareButton plan={(url) => planText({ who: groupNames(names, members), tonight, location, items, url })} />
-        <ButtonLink variant="ghost" icon="home" href={`/p/${pairId}`}>
-          Group page
-        </ButtonLink>
+        {/* "Plan a new evening" already goes to the group page. */}
+        {!nextOnGroupPage && (
+          <ButtonLink variant="ghost" icon="home" href={`/p/${pairId}`}>
+            Group page
+          </ButtonLink>
+        )}
       </div>
       <p className="small muted">
         {takes
           ? 'Something can’t happen, or doesn’t feel right? Swap that one item, or plan tonight again.'
-          : `New truce runs again with the same favourites${owed ? `, and ${agentOf(nameOf(names, owed))} gets a bit more say` : ''}.`}
+          : nextOnGroupPage
+            ? `Everyone answers tonight’s questions again, and the favourites stay${more}.`
+            : `New truce runs again with the same favourites${more}.`}
       </p>
       {again.error && (
         <ErrorNotice
@@ -315,6 +332,8 @@ interface DecisionProps {
   pairId: string;
   /** The recorded demo to offer when Truce is too busy for a new live truce. */
   demoKind: DemoKind;
+  /** A ready-made demo group, live or replayed. */
+  demo: boolean;
   checkedIn: PerSide<boolean>;
   /** The decision just arrived live: animate it in. */
   stamp: boolean;
@@ -328,7 +347,7 @@ interface DecisionProps {
  * swaps, how it was reached and changed since, where the ledger leans next
  * time, and the check-in for afterwards.
  */
-export function Decision({ state, truceId, pairId, demoKind, checkedIn, stamp, swaps, onFollow }: DecisionProps) {
+export function Decision({ state, truceId, pairId, demoKind, demo, checkedIn, stamp, swaps, onFollow }: DecisionProps) {
   const { names, letters, members } = useTruceCtx();
   const [ask, setAsk] = useState<Ask | null>(null);
   if (!state.result) {
@@ -360,7 +379,7 @@ export function Decision({ state, truceId, pairId, demoKind, checkedIn, stamp, s
       </p>
       <div className="decision__main">
         {open && <VoteCard key={open.id} swap={open} swaps={swaps} truceId={truceId} />}
-        <EveningCard state={state} truceId={truceId} pairId={pairId} demoKind={demoKind} stamp={stamp} swaps={swaps} owed={ledger?.owed ?? null} onAsk={setAsk} />
+        <EveningCard state={state} truceId={truceId} pairId={pairId} demoKind={demoKind} demo={demo} stamp={stamp} swaps={swaps} owed={ledger?.owed ?? null} onAsk={setAsk} />
       </div>
       <div className="decision__side">
         <HowCard state={state} stamp={stamp} view={view} onAsk={setAsk} />

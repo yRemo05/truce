@@ -35,6 +35,8 @@ export const httpApi: Api = {
   setLocation: (pairId, location) => request(`/api/pairs/${encodeURIComponent(pairId)}`, json('PATCH', { location })),
   saveSide: (pairId, side, input) =>
     request(`/api/pairs/${encodeURIComponent(pairId)}/sides/${side}`, json('PUT', input)),
+  saveTonight: (pairId, side, input) =>
+    request(`/api/pairs/${encodeURIComponent(pairId)}/sides/${side}/tonight`, json('PUT', input)),
   startTruce: (pairId) => request(`/api/pairs/${encodeURIComponent(pairId)}/truces`, json('POST')),
   demo: (kind, replay) => request('/api/demo', json('POST', { kind, ...(replay ? { replay: true } : {}) })),
   getTruce: (id) => request(`/api/truces/${encodeURIComponent(id)}`),

@@ -285,6 +285,11 @@
 .side__steps {
   flex: 0 1 16rem;
 }
+/* "Change my favourites too": a ghost link whose label lines up with the text above it. */
+.side__redo {
+  justify-self: start;
+  margin-left: calc(-1 * var(--s-3));
+}
 .side__intro + .notice,
 .side .notice + .notice {
   margin-top: var(--s-5);
@@ -364,9 +369,25 @@
     display: none;
   }
 }
+/* Tonight's questions alone: the weights across, then the note beside foods. */
+.side__tonight {
+  margin-top: var(--s-6);
+  display: grid;
+  gap: var(--s-4);
+}
+.side__tonight > .card {
+  margin-top: 0;
+}
 @media (min-width: 64em) {
-  .side__pickers {
+  .side__pickers,
+  .side__tonight {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .side__tonight > .side__weights {
+    grid-column: 1 / -1;
+  }
+  .side__tonight > .brief {
+    grid-column: span 2;
   }
 }
 

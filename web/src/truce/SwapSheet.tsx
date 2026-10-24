@@ -44,18 +44,15 @@ function AskForm({ ask, view, swaps, truceId, onClose, onReplan }: AskFormProps)
   const { members, names, letters, mine, items } = useTruceCtx();
   const [, navigate] = useLocation();
   const [side, setSide] = useState<Side | null>(mine);
-  const [reason, setReason] = useState<SwapReason | null>(null);
+  const [chosen, choose] = useState<SwapReason | null>(null);
   const call = useSwapCall(swaps);
   const item = ask.kind === 'swap' && view.bundle ? items[view.bundle[ask.slot]] : undefined;
 
   // A taste reason is off once someone has used their swap, or when nothing fair is left to put in for them.
-  const noRoom = (s: Side) => ask.kind === 'swap' && view.tasteRoom[s]?.[ask.slot] === false;
   const tasteUsed = side !== null && !view.canAsk[side];
-  const tasteStuck = side !== null && !tasteUsed && noRoom(side);
-  const choose = (s: Side) => {
-    setSide(s);
-    if (reason && !isFact(reason) && (!view.canAsk[s] || noRoom(s))) setReason(null);
-  };
+  const tasteStuck = side !== null && !tasteUsed && ask.kind === 'swap' && view.tasteRoom[side]?.[ask.slot] === false;
+  // A taste reason drops once it's off: another person chosen, or a refresh after the server answered `nothing_fair`.
+  const reason = chosen !== null && !isFact(chosen) && (tasteUsed || tasteStuck) ? null : chosen;
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -103,7 +100,7 @@ function AskForm({ ask, view, swaps, truceId, onClose, onReplan }: AskFormProps)
           <legend className="ask__legend">Who’s asking?</legend>
           <div className="ask__chips">
             {members.map((s) => (
-              <Chip key={s} pressed={side === s} onClick={() => choose(s)}>
+              <Chip key={s} pressed={side === s} onClick={() => setSide(s)}>
                 <Avatar side={s} letters={nameOf(letters, s)} size="sm" />
                 {nameOf(names, s)}
               </Chip>
@@ -117,7 +114,7 @@ function AskForm({ ask, view, swaps, truceId, onClose, onReplan }: AskFormProps)
           <legend className={mine === null ? 'ask__legend' : 'visually-hidden'}>Why?</legend>
           <div className="ask__chips">
             {REASONS[ask.slot].map((r) => (
-              <Chip key={r} pressed={reason === r} disabled={!isFact(r) && (tasteUsed || tasteStuck)} onClick={() => setReason(r)}>
+              <Chip key={r} pressed={reason === r} disabled={!isFact(r) && (tasteUsed || tasteStuck)} onClick={() => choose(r)}>
                 {reasonLabel(ask.slot, r)}
               </Chip>
             ))}
@@ -129,14 +126,17 @@ function AskForm({ ask, view, swaps, truceId, onClose, onReplan }: AskFormProps)
             </p>
           )}
           {tasteStuck && (
-            <div className="ask__note icon-line icon-line--text small muted">
-              <Icon name="ban" size={16} />
-              <span>
-                Nothing left on tonight’s list would be fair to {other ? nameOf(names, other) : 'everyone else'} in its place.{' '}
-                <Button size="sm" variant="ghost" icon="retry" onClick={onReplan}>
-                  Plan tonight again
-                </Button>
-              </span>
+            <div className="ask__note ask__stuck">
+              <p className="icon-line icon-line--text small muted">
+                <Icon name="ban" size={16} />
+                <span>
+                  Nothing left on tonight’s list would be fair to {other ? nameOf(names, other) : 'everyone else'} in place of the {SLOT_NOUN[ask.slot]}. Planning
+                  tonight again can still change it.
+                </span>
+              </p>
+              <Button size="sm" variant="outline" icon={KIND_ICON.replan} onClick={onReplan}>
+                Plan tonight again
+              </Button>
             </div>
           )}
         </fieldset>
@@ -153,7 +153,8 @@ function AskForm({ ask, view, swaps, truceId, onClose, onReplan }: AskFormProps)
         )}
       </p>
 
-      {call.error && <ErrorNotice error={call.error} title="Couldn’t send the request" />}
+      {/* A `nothing_fair` refusal reads as the note above once the refresh lands. */}
+      {call.error && !(call.error.code === 'nothing_fair' && tasteStuck) && <ErrorNotice error={call.error} title="Couldn’t send the request" />}
 
       <div className="ask__actions">
         <Button variant="ghost" icon="x" onClick={onClose}>

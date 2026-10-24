@@ -31,7 +31,15 @@ type Search =
 /** What the list offers, foods first: one index runs over both groups, for the arrow keys. */
 type Option = { id: string; food: Food; hit?: undefined } | { id: string; hit: SearchHit; food?: undefined };
 
-const COPY: Record<Slot, { title: string; noun: string; prompt: string; hint: string; examples: string[] }> = {
+interface Copy {
+  title: string;
+  noun: string;
+  prompt: string;
+  hint: string;
+  examples: string[];
+}
+
+const COPY: Record<Slot, Copy> = {
   film: {
     title: 'Films',
     noun: 'a film',
@@ -55,6 +63,15 @@ const COPY: Record<Slot, { title: string; noun: string; prompt: string; hint: st
   },
 };
 
+/** A restaurant search that offers foods alone: tonight's cravings, with the favourite places already saved. */
+const FOODS_COPY: Copy = {
+  title: 'Foods',
+  noun: 'a food',
+  prompt: 'A dish or a cuisine',
+  hint: 'A dish or a cuisine you’re in the mood for. Optional.',
+  examples: ['Lasagna', 'Sushi', 'Ramen'],
+};
+
 interface SeedPickerProps {
   slot: Slot;
   picks: Picked[];
@@ -62,11 +79,13 @@ interface SeedPickerProps {
   onRemove: (id: string) => void;
   /** Restaurants only: the pair's city, so the search keeps to places there. */
   near?: string | null;
+  /** Restaurants only: offer the foods a search names and leave its places out. */
+  foodsOnly?: boolean;
 }
 
 /** Search Qloo for one slot, confirm a match, keep it as a pick. A combobox with a listbox of real entities (and, for restaurants, foods). */
-export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPickerProps) {
-  const copy = COPY[slot];
+export function SeedPicker({ slot, picks, onAdd, onRemove, near = null, foodsOnly = false }: SeedPickerProps) {
+  const copy = foodsOnly ? FOODS_COPY : COPY[slot];
   const uid = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
@@ -112,7 +131,7 @@ export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPi
   }, [settled, slot, near]);
 
   const typing = query.trim().length >= 2 && query.trim() !== settled;
-  const hits = search.state === 'done' ? search.hits : [];
+  const hits = search.state === 'done' && !foodsOnly ? search.hits : [];
   const foods = search.state === 'done' ? (search.foods ?? []) : [];
   const options: Option[] = [...foods.map((food) => ({ id: foodId(food), food })), ...hits.map((hit) => ({ id: hit.id, hit }))];
   const showList = open && query.trim().length >= 2;
@@ -183,15 +202,15 @@ export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPi
     );
   };
 
-  // Foods and places are grouped only when there are foods; otherwise the list reads as before.
-  const grouped = foods.length > 0;
+  // Foods and places are grouped only when both can show; otherwise the list reads as before.
+  const grouped = foods.length > 0 && !foodsOnly;
   const groupId = (name: string) => `${listId}-${name}`;
 
   return (
     <section className="card picker" aria-labelledby={headingId}>
       <header className="picker__head">
         <h2 id={headingId} className="picker__title">
-          <Icon name={SLOT_ICON[slot]} size={20} />
+          <Icon name={foodsOnly ? 'food' : SLOT_ICON[slot]} size={20} />
           {copy.title}
         </h2>
         <span className={cx('picker__count', picks.length > 0 && 'is-some')}>
@@ -287,9 +306,11 @@ export function SeedPicker({ slot, picks, onAdd, onRemove, near = null }: SeedPi
           {search.state === 'done' && options.length === 0 && !typing && (
             <p className="combo__empty small">
               <Icon name="info" size={16} />
-              {search.near
-                ? `No match for “${settled}” near ${search.near}. Try fewer words.`
-                : `No match for “${settled}”. Try the original title, or fewer words.`}
+              {foodsOnly
+                ? `No food matches “${settled}”. Try a dish or a cuisine, like ramen or Italian.`
+                : search.near
+                  ? `No match for “${settled}” near ${search.near}. Try fewer words.`
+                  : `No match for “${settled}”. Try the original title, or fewer words.`}
             </p>
           )}
           {search.state === 'error' && (

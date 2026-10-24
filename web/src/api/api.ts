@@ -15,6 +15,7 @@ import type {
   StreamEvent,
   SwapInput,
   SwapsView,
+  TonightInput,
   TruceView,
   VoteInput,
 } from '@contract';
@@ -67,6 +68,8 @@ export interface Api {
   getPair(id: string): Promise<PairView>;
   setLocation(pairId: string, location: string): Promise<PairView>;
   saveSide(pairId: string, side: Side, input: SideInput): Promise<SideSaved>;
+  /** A new evening's answers (what matters most, foods, the brief); the saved favourites stay. */
+  saveTonight(pairId: string, side: Side, input: TonightInput): Promise<SideSaved>;
   startTruce(pairId: string): Promise<{ truceId: string }>;
   /** A ready-made group: an instant replay of a recorded run with `replay`, else live (the server may still replay when busy). */
   demo(kind: DemoInput['kind'], replay?: boolean): Promise<DemoStarted>;
