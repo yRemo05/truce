@@ -31,7 +31,8 @@ export class QlooError extends Error {
 }
 
 export interface QlooClient {
-  get(path: string, params: Params): Promise<unknown>;
+  /** `info`, when given, learns whether the private cache answered. */
+  get(path: string, params: Params, info?: { cached?: boolean }): Promise<unknown>;
   quota(): Quota;
 }
 
@@ -113,9 +114,10 @@ export function createQlooClient(opts: ClientOptions): QlooClient {
 
   return {
     quota: () => ({ ...quota }),
-    async get(path, params) {
+    async get(path, params, info) {
       const key = requestKey(path, params);
       const cached = opts.cache?.get(key);
+      if (info) info.cached = cached !== undefined;
       if (cached !== undefined) return JSON.parse(cached);
 
       const url = new URL(key, opts.baseUrl);

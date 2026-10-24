@@ -8,7 +8,7 @@
  */
 import type Anthropic from '@anthropic-ai/sdk';
 import { groundBrief, readBrief, type InterpretedBrief } from '../agents/brief';
-import type { DemoInput, Food, PairInput, Seed, SideInput } from '../contract';
+import type { DemoInput, Food, PairInput, Seed, SideInput, StreamEvent } from '../contract';
 import type { QlooClient } from '../qloo/client';
 import { findFoods, locate, searchEntities } from '../qloo/queries';
 import type { TruceResult } from '../truce/negotiate';
@@ -149,7 +149,7 @@ export function createDemos(qloo: QlooClient, anthropic: Anthropic | null) {
       const group = DEMOS[kind];
       const { seeds, foods, briefs } = await resolve(kind);
       const pairId = newId();
-      store.createPair(pairId, group.pair);
+      store.createPair(pairId, group.pair, kind);
       const members = membersOf(group.people.length);
       members.forEach((side, i) => {
         const p = group.people[i]!;
@@ -175,5 +175,45 @@ export function createDemos(qloo: QlooClient, anthropic: Anthropic | null) {
       });
       return pairId;
     },
+
+    /**
+     * An instant replay: the latest clean live run of this demo, copied into a
+     * fresh group of its own (people, earlier evenings, the truce with its
+     * receipts), so whoever opens it can swap and check in without touching
+     * anyone else's. Its evening moves to today where it happens. Null until a
+     * live run has finished.
+     */
+    replay(store: Store, kind: DemoInput['kind']): { pairId: string; truceId: string } | null {
+      const sourceId = store.showcaseOf(kind);
+      const source = sourceId ? store.truce(sourceId) : null;
+      const from = source ? store.pair(source.pairId) : null;
+      if (!source || !from) return null;
+      const pairId = newId();
+      store.createPair(pairId, { mode: from.mode, names: from.members.map((s) => from.names[s]!), location: from.location }, kind);
+      const sides = store.sides(from.id);
+      for (const s of from.members) {
+        const side = sides[s];
+        if (!side) continue;
+        store.saveSide(pairId, s, side.input, side.brief);
+        store.setLearned(pairId, s, side.learned);
+      }
+      for (const t of store.trucesOf(from.id).filter((x) => x.earlier && x.result && x.evening)) {
+        store.createEarlier(newId(), pairId, t.alpha, t.opener, t.result!, t.evening!, t.createdAt);
+      }
+      const truceId = newId();
+      store.copyTruce(truceId, pairId, source, source.events.map(movedToToday), store.receiptsOf(source.id));
+      return { pairId, truceId };
+    },
+  };
+}
+
+/** The pool's evening, moved to today's date and weekday where it happens. */
+function movedToToday(e: StreamEvent): StreamEvent {
+  if (e.type !== 'pool') return e;
+  const now = new Date();
+  const part = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-CA', { timeZone: e.tonight.timeZone, ...o }).format(now);
+  return {
+    ...e,
+    tonight: { ...e.tonight, date: part({ year: 'numeric', month: '2-digit', day: '2-digit' }), weekday: part({ weekday: 'long' }).toLowerCase() },
   };
 }

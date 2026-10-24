@@ -14,8 +14,9 @@
  *   PATCH /api/pairs/:id       { location }     → PairView   (fix the place after "no restaurants found")
  *   PUT  /api/pairs/:id/sides/:side  SideInput  → SideSaved  (with the brief as the agent understood it)
  *   POST /api/pairs/:id/truces                  → { truceId }   (409 until everyone is ready)
- *   POST /api/demo             body DemoInput   → { pairId, truceId }   (a ready-made group, truce started)
+ *   POST /api/demo             body DemoInput   → DemoStarted   (a ready-made group: a live truce, or an instant replay)
  *   GET  /api/truces/:id                        → TruceView
+ *   GET  /api/truces/:id/receipts               → ReceiptsView   (every Qloo call the truce made)
  *   GET  /api/truces/:id/stream[?from=n]        → server-sent events, one StreamEvent per `data:` line,
  *                                                 each with `id:` = its index in the truce's log. Replays
  *                                                 from `from` (or from Last-Event-ID + 1, or from 0) and
@@ -33,9 +34,11 @@
 import type { Mode } from './agents/brain';
 import type { Rating } from './truce/ledger';
 import type { TruceEvent } from './truce/negotiate';
+/** One Qloo call a truce made, as its receipts show it; the responses themselves aren't kept. */
+import type { QlooCall } from './qloo/trace';
 import type { PerSide, Side, Slot } from './truce/types';
 
-export type { Mode, PerSide, Rating, Side, Slot, TruceEvent };
+export type { Mode, PerSide, QlooCall, Rating, Side, Slot, TruceEvent };
 export type { TruceResult, SlotEvidence, StrikeCode } from './truce/negotiate';
 
 export interface SearchHit {
@@ -287,6 +290,28 @@ export interface TruceView {
   replacedBy: string | null;
   /** The truce this one planned again, if it is a replan. */
   replaces: string | null;
+  /**
+   * An instant replay: a copy of a recorded live run, moved to today, which
+   * the viewer can swap and check in on like their own. Null for a live truce.
+   */
+  replay: { recordedAt: string } | null;
+}
+
+export interface ReceiptsView {
+  /** In the order they were made. Empty for truces from before receipts were kept. */
+  calls: QlooCall[];
+  totals: { calls: number; cached: number; ms: number };
+  /**
+   * One request and what came back: the first person's restaurant scores,
+   * the top three with Qloo's affinity and the favourites behind it.
+   * Null while the truce runs, or if it stopped before scoring.
+   */
+  example: {
+    side: Side;
+    slot: Slot;
+    call: QlooCall;
+    top: { name: string; affinity: number; because: string[] }[];
+  } | null;
 }
 
 export interface CheckinInput {
@@ -413,6 +438,19 @@ export interface SwapsView {
 export interface DemoInput {
   /** "couple": Maya and Deniz in Manhattan. "friends": three friends in Istanbul. */
   kind: 'couple' | 'friends';
+  /**
+   * True: a recorded run, replayed at once instead of a live one (about a
+   * minute). The server also replays when it can't start a live truce now;
+   * with no recording yet, it runs live.
+   */
+  replay?: boolean;
+}
+
+export interface DemoStarted {
+  pairId: string;
+  truceId: string;
+  /** Whether this is an instant replay rather than a live run. */
+  replay: boolean;
 }
 
 export interface ApiError {

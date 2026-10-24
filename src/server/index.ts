@@ -26,7 +26,17 @@ const anthropicKey = process.env.ANTHROPIC_API_KEY?.trim();
 const anthropic = anthropicKey ? new Anthropic({ apiKey: anthropicKey }) : null;
 if (!anthropic) console.warn('ANTHROPIC_API_KEY is not set: agents run on rules only.');
 
-const runner = createRunner({ store, qloo, anthropic, dailyCap: Number(env('DAILY_TRUCE_CAP', '250')) });
+const runner = createRunner({
+  store,
+  qloo,
+  anthropic,
+  dailyCap: Number(env('DAILY_TRUCE_CAP', '250')),
+  limits: {
+    concurrency: Number(env('TRUCE_CONCURRENCY', '6')),
+    dailyTotal: Number(env('TRUCE_DAILY_TOTAL', '500')),
+    qlooReserve: Number(env('QLOO_RESERVE', '1500')),
+  },
+});
 const app = createApp({ store, qloo, runner, anthropic, webDir: env('WEB_DIR', 'web/dist') });
 
 const port = Number(env('PORT', '8787'));

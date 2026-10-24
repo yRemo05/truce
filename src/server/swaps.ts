@@ -228,7 +228,14 @@ export function createSwaps(deps: SwapsDeps) {
     for (let t: string | null = truce.id, hops = 0; t && hops < 20; t = store.replacedOf(t), hops++) {
       for (const id of swappedAway(store.swapsOf(t))) exclude.add(id);
     }
-    const id = runner.start(pair.id, { exclude: [...exclude], replaces: truce.id });
+    let id: string;
+    try {
+      id = runner.start(pair.id, { exclude: [...exclude], replaces: truce.id });
+    } catch (err) {
+      // Couldn't start (the server is at a limit): tonight stays as it is, and the request doesn't hang open.
+      store.resolveSwap(swap.id, 'kept');
+      throw err;
+    }
     store.resolveSwap(swap.id, 'replanned', { newTruce: id });
     log(`truce ${truce.id}: replanned as ${id}`);
   }
@@ -378,6 +385,7 @@ export function createSwaps(deps: SwapsDeps) {
           throw new UserFacingError("You've already asked to plan tonight again.", 409, 'swap_used');
         }
         if (store.runningTruceOf(pair.id)) throw new UserFacingError('A new truce is already being planned for this group.', 409, 'locked');
+        if (runner.capacity()) throw new UserFacingError('Truce is too busy to plan again right now. Try again in a minute.', 503, 'capacity');
         const atOnce = replanNow(swaps, bundle);
         store.createSwap({
           id,

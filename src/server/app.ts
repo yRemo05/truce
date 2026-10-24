@@ -23,6 +23,8 @@ import type {
   StreamEvent,
   SwapsView,
   TruceView,
+  DemoStarted,
+  ReceiptsView,
 } from '../contract';
 import { QlooError, type QlooClient } from '../qloo/client';
 import { FOOD_FAMILIES, locate, searchEntities, type Locality } from '../qloo/queries';
@@ -79,7 +81,7 @@ const checkinInput = z.object({
   went: z.boolean(),
   ratings: z.object({ film: rating.optional(), restaurant: rating.optional(), music: rating.optional() }),
 });
-const demoInput = z.object({ kind: z.enum(['couple', 'friends']).default('couple') });
+const demoInput = z.object({ kind: z.enum(['couple', 'friends']).default('couple'), replay: z.boolean().optional() });
 const swapInput = z.discriminatedUnion('kind', [
   z
     .object({ kind: z.literal('swap'), side, slot, reason: z.enum(['unavailable', 'seen', 'not_feeling']) })
@@ -136,7 +138,14 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     return fail(c, 500, 'server_error', 'Something went wrong on our side.');
   });
 
-  app.get('/api/health', (c) => c.json({ ok: true }));
+  // How busy the server is and how close to its limits; nothing secret.
+  app.get('/api/health', (c) =>
+    c.json({
+      ok: true,
+      ...runner.status(),
+      replays: { couple: store.showcaseOf('couple') !== null, friends: store.showcaseOf('friends') !== null },
+    }),
+  );
 
   // Place names resolved to a Qloo locality, kept for the process's life. A
   // place Qloo doesn't know is kept as null; a failed lookup is not kept.
@@ -302,9 +311,30 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     const blocked = limited(c, 'demo');
     if (blocked) return blocked;
     const raw = await c.req.text();
-    const { kind } = demoInput.parse(raw ? JSON.parse(raw) : {});
+    const { kind, replay } = demoInput.parse(raw ? JSON.parse(raw) : {});
+    // A recorded run when asked for, or when a live one can't start now; live when there's no recording yet.
+    const full = runner.capacity();
+    if (replay || full) {
+      const copy = demos.replay(store, kind);
+      if (copy) return c.json<DemoStarted>({ ...copy, replay: true }, 201);
+    }
     const pairId = await demos.create(store, kind);
-    return c.json({ pairId, truceId: runner.start(pairId) }, 201);
+    return c.json<DemoStarted>({ pairId, truceId: runner.start(pairId), replay: false }, 201);
+  });
+
+  app.get('/api/truces/:id/receipts', (c) => {
+    const truce = store.truce(c.req.param('id'));
+    if (!truce) return fail(c, 404, 'not_found', 'This truce does not exist.');
+    const receipts = runner.receipts(truce.id) ?? { calls: [], example: null };
+    return c.json<ReceiptsView>({
+      calls: receipts.calls,
+      totals: {
+        calls: receipts.calls.length,
+        cached: receipts.calls.filter((x) => x.cached).length,
+        ms: receipts.calls.reduce((t, x) => t + x.ms, 0),
+      },
+      example: receipts.example,
+    });
   });
 
   app.get('/api/truces/:id', (c) => {
@@ -329,6 +359,7 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
       events,
       replacedBy: truce.replacedBy,
       replaces: store.replacedOf(truce.id),
+      replay: truce.replayOf ? { recordedAt: store.truce(truce.replayOf)?.createdAt ?? truce.createdAt } : null,
     });
   });
 

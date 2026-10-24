@@ -2,7 +2,9 @@
 FROM node:22-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# better-sqlite3 ships prebuilt binaries; its install script would try (and
+# fail) to compile, and nothing else here needs one.
+RUN npm ci --ignore-scripts
 COPY web/package.json web/package-lock.json web/
 RUN cd web && npm ci
 COPY . .

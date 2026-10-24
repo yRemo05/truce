@@ -16,7 +16,7 @@ import type { QlooCache } from '../qloo/client';
 import type { TruceResult } from '../truce/negotiate';
 import { membersOf, type PerSide, type Side, type Slot } from '../truce/types';
 
-const VERSION = 3;
+const VERSION = 4;
 
 /** The last event of a truce cut off by a restart, so every reader sees it end. */
 export const INTERRUPTED: StreamEvent = {
@@ -32,6 +32,7 @@ create table if not exists pairs (
   mode text not null check (mode in ('couple', 'bff')),
   names text not null,
   location text not null,
+  demo text check (demo in ('couple', 'friends')),
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 create table if not exists sides (
@@ -56,7 +57,9 @@ create table if not exists truces (
   earlier integer not null default 0,
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   finished_at text,
-  replaced_by text
+  replaced_by text,
+  receipts text,
+  replay_of text
 );
 create index if not exists truces_by_pair on truces (pair_id, created_at);
 create table if not exists checkins (
@@ -129,12 +132,32 @@ function migrateFrom2(db: Database.Database) {
   db.exec('alter table truces add column replaced_by text');
 }
 
+/**
+ * Columns added after a table first shipped, created on databases that lack
+ * them: a swap's cancel reason (3), a demo group's kind, a truce's Qloo
+ * receipts and the recorded truce an instant replay copies (4).
+ */
+const LATE_COLUMNS: [table: string, column: string, type: string][] = [
+  ['swaps', 'cancel_reason', "text check (cancel_reason in ('withdrawn', 'superseded'))"],
+  ['pairs', 'demo', "text check (demo in ('couple', 'friends'))"],
+  ['truces', 'receipts', 'text'],
+  ['truces', 'replay_of', 'text'],
+];
+function addLateColumns(db: Database.Database) {
+  for (const [table, column, type] of LATE_COLUMNS) {
+    const has = (db.prepare(`select 1 from pragma_table_info('${table}') where name = ?`).get(column) as unknown) !== undefined;
+    if (!has) db.exec(`alter table ${table} add column ${column} ${type}`);
+  }
+}
+
 export interface PairRow {
   id: string;
   mode: Mode;
   members: Side[];
   names: PerSide<string>;
   location: string;
+  /** Which ready-made demo group this is, if one. */
+  demo: 'couple' | 'friends' | null;
   createdAt: string;
 }
 
@@ -155,6 +178,8 @@ export interface TruceRow {
   finishedAt: string | null;
   /** The truce that planned this evening again; the ledger then counts that one instead. */
   replacedBy: string | null;
+  /** An instant replay's recorded truce: this one is a copy of it, not a run. */
+  replayOf: string | null;
 }
 
 export type SwapItem = { id: string; name: string };
@@ -205,14 +230,11 @@ export function openStore(dataDir: string) {
   const hasReplaced = (db.prepare("select 1 from pragma_table_info('truces') where name = 'replaced_by'").get() as unknown) !== undefined;
   if (hasTruces && !hasReplaced) migrateFrom2(db);
   db.exec(SCHEMA);
-  // Early version 3 databases have swaps without a cancel reason.
-  if ((db.prepare("select 1 from pragma_table_info('swaps') where name = 'cancel_reason'").get() as unknown) === undefined) {
-    db.exec("alter table swaps add column cancel_reason text check (cancel_reason in ('withdrawn', 'superseded'))");
-  }
+  addLateColumns(db);
   db.pragma(`user_version = ${VERSION}`);
 
   const q = {
-    insertPair: db.prepare('insert into pairs (id, mode, names, location) values (?, ?, ?, ?)'),
+    insertPair: db.prepare('insert into pairs (id, mode, names, location, demo) values (?, ?, ?, ?, ?)'),
     pair: db.prepare('select * from pairs where id = ?'),
     setLocation: db.prepare('update pairs set location = ? where id = ?'),
     upsertSide: db.prepare(
@@ -240,6 +262,23 @@ export function openStore(dataDir: string) {
     ),
     running: db.prepare("select id, events from truces where status = 'running'"),
     trucesSince: db.prepare("select count(*) as n from truces where brain = 'claude' and created_at >= ?"),
+    // Truces that ran (or are running): not made-up history, not instant replays.
+    startedSince: db.prepare('select count(*) as n from truces where earlier = 0 and replay_of is null and created_at >= ?'),
+    setReceipts: db.prepare('update truces set receipts = ? where id = ?'),
+    receiptsOf: db.prepare('select receipts from truces where id = ?'),
+    // The recorded truce a demo replays: the latest clean one of that demo, a deal before a ruling.
+    showcase: db.prepare(
+      `select t.id from truces t join pairs p on p.id = t.pair_id
+       where p.demo = ? and t.status = 'done' and t.earlier = 0 and t.replay_of is null and t.replaced_by is null
+         and t.brain = 'claude' and t.receipts is not null
+         and not exists (select 1 from swaps s where s.truce_id = t.id)
+         and not exists (select 1 from checkins c where c.truce_id = t.id)
+       order by json_extract(t.result, '$.how') = 'agreed' desc, t.created_at desc limit 1`,
+    ),
+    insertCopy: db.prepare(
+      `insert into truces (id, pair_id, status, brain, alpha, opener, events, result, evening, receipts, replay_of, finished_at)
+       values (?, ?, 'done', ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
+    ),
     upsertCheckin: db.prepare(
       `insert into checkins (truce_id, side, went, ratings) values (?, ?, ?, ?)
        on conflict (truce_id, side) do update set went = excluded.went, ratings = excluded.ratings,
@@ -281,6 +320,7 @@ export function openStore(dataDir: string) {
       members,
       names: Object.fromEntries(members.map((s, i) => [s, list[i]])),
       location: r.location,
+      demo: r.demo ?? null,
       createdAt: r.created_at,
     };
   };
@@ -298,6 +338,7 @@ export function openStore(dataDir: string) {
     createdAt: r.created_at,
     finishedAt: r.finished_at,
     replacedBy: r.replaced_by ?? null,
+    replayOf: r.replay_of ?? null,
   });
   const toSwap = (r: any): SwapRow => ({
     id: r.id,
@@ -338,9 +379,36 @@ export function openStore(dataDir: string) {
 
   return {
     close: () => db.close(),
-    createPair(id: string, input: PairInput) {
-      q.insertPair.run(id, input.mode, JSON.stringify(input.names), input.location);
+    createPair(id: string, input: PairInput, demo: PairRow['demo'] = null) {
+      q.insertPair.run(id, input.mode, JSON.stringify(input.names), input.location, demo);
     },
+    /** The Qloo calls a truce made, for its receipts; stored once it ends. */
+    saveReceipts(id: string, receipts: unknown) {
+      q.setReceipts.run(JSON.stringify(receipts), id);
+    },
+    receiptsOf: (id: string): unknown | null => {
+      const r = q.receiptsOf.get(id) as { receipts: string | null } | undefined;
+      return r?.receipts ? JSON.parse(r.receipts) : null;
+    },
+    /** The recorded truce an instant replay of this demo copies, or null before one exists. */
+    showcaseOf: (demo: 'couple' | 'friends'): string | null => (q.showcase.get(demo) as { id: string } | undefined)?.id ?? null,
+    /** A finished truce copied into another group, as an instant replay of `of`. */
+    copyTruce(id: string, pairId: string, of: TruceRow, events: StreamEvent[], receipts: unknown) {
+      q.insertCopy.run(
+        id,
+        pairId,
+        of.brain,
+        JSON.stringify(of.alpha),
+        of.opener,
+        JSON.stringify(events),
+        JSON.stringify(of.result),
+        JSON.stringify(of.evening),
+        receipts === null ? null : JSON.stringify(receipts),
+        of.id,
+      );
+    },
+    /** Truces that ran since a UTC instant: not history, not replays. */
+    startedSince: (iso: string): number => (q.startedSince.get(iso) as { n: number }).n,
     pair: (id: string): PairRow | null => {
       const r = q.pair.get(id);
       return r ? toPair(r) : null;

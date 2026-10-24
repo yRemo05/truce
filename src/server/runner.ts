@@ -25,6 +25,7 @@ import { findHotspot, scout, type Hotspot } from '../agents/scout';
 import type { CardItem, CheckinInput, CheckinResult, LedgerView, Seed, SideInput, StreamErrorCode, StreamEvent } from '../contract';
 import type { QlooClient } from '../qloo/client';
 import { locate, tasteWords } from '../qloo/queries';
+import { traced, type CallPhase, type QlooCall } from '../qloo/trace';
 import {
   alphaFromBalance,
   experienced,
@@ -209,24 +210,106 @@ export interface RunnerDeps {
   anthropic: Anthropic | null;
   /** Model-run truces allowed per UTC day before the rule-based agents take over. */
   dailyCap: number;
+  /** What a public demo may spend, beyond the model cap (defaults below). */
+  limits?: Partial<Limits>;
   log?: (msg: string) => void;
+}
+
+export interface Limits {
+  /** Truces planning at once. */
+  concurrency: number;
+  /** Truces started per UTC day, model-run or not: each one spends Qloo calls. */
+  dailyTotal: number;
+  /** Qloo calls kept back each month: below this many left, no new truces start. */
+  qlooReserve: number;
+}
+const DEFAULT_LIMITS: Limits = { concurrency: 6, dailyTotal: 500, qlooReserve: 1500 };
+
+/** Why a truce can't start right now; recorded demos still play. */
+export type Capacity = 'busy' | 'daily' | 'quota';
+const CAPACITY: Record<Capacity, string> = {
+  busy: 'Truce is planning a lot of evenings right now. Try again in a minute, or watch a recorded demo.',
+  daily: "Truce has planned today's share of evenings. Try again tomorrow, or watch a recorded demo.",
+  quota: "Truce has used this month's Qloo allowance. Recorded demos still work.",
+};
+
+/** A truce's receipts: every Qloo call it made, and one request with what came back. */
+export interface Receipts {
+  calls: QlooCall[];
+  example: ReceiptExample | null;
+}
+export interface ReceiptExample {
+  side: Side;
+  slot: Slot;
+  call: QlooCall;
+  /** The best three for that person, with Qloo's affinity and the favourites behind it. */
+  top: { name: string; affinity: number; because: string[] }[];
+}
+
+/**
+ * The receipt worth showing: the first person's restaurant scores, the call
+ * that asked for them, and which of their favourites drove the top three.
+ */
+function exampleOf(pool: Pool, people: PerSide<PersonSeeds>, seedNames: Record<string, string>, calls: readonly QlooCall[]): ReceiptExample | null {
+  const side = pool.members[0]!;
+  const slot: Slot = 'restaurant';
+  const signal = signalOf(at(people, side)).join(',');
+  const call = calls.find(
+    (c) =>
+      c.phase === 'scoring' &&
+      c.params['filter.type'] === 'urn:entity:place' &&
+      c.params['filter.results.entities'] !== undefined &&
+      signal.startsWith(c.params['signal.interests.entities'] ?? '\0'),
+  );
+  if (!call) return null;
+  const affinity = at(pool.affinity, side)[slot];
+  const drivers = at(pool.drivers, side)[slot];
+  const top = [...pool.items[slot]]
+    .filter((i) => affinity[i.id] !== undefined)
+    .sort((x, y) => affinity[y.id]! - affinity[x.id]!)
+    .slice(0, 3)
+    .map((i) => ({
+      name: i.name,
+      affinity: affinity[i.id]!,
+      because: (drivers[i.id] ?? [])
+        .filter((d) => seedNames[d.seedId])
+        .sort((x, y) => y.share - x.share)
+        .slice(0, 2)
+        .map((d) => `${seedNames[d.seedId]} (${Math.round(d.share * 100)}%)`),
+    }));
+  return { side, slot, call, top };
 }
 
 interface Live {
   events: StreamEvent[];
   listeners: Set<(e: StreamEvent) => void>;
+  calls: QlooCall[];
 }
 
 export function createRunner(deps: RunnerDeps) {
   const { store, qloo, anthropic } = deps;
   const log = deps.log ?? ((m: string) => console.log(m));
+  const limits: Limits = { ...DEFAULT_LIMITS, ...deps.limits };
   const live = new Map<string, Live>();
   const rules = new RuleBrain();
 
+  /** Whether a public demo can afford another truce now, or why not. */
+  function capacity(): Capacity | null {
+    if (live.size >= limits.concurrency) return 'busy';
+    if (store.startedSince(startOfUtcDay()) >= limits.dailyTotal) return 'daily';
+    const left = qloo.quota().monthRemaining;
+    if (left !== null && left < limits.qlooReserve) return 'quota';
+    return null;
+  }
+
   async function run(truceId: string, pair: PairRow, alpha: PerSide<number>, opener: Side, brain: 'claude' | 'rules', exclude: readonly string[]) {
     const { members } = pair;
-    const state: Live = { events: [], listeners: new Set() };
+    const state: Live = { events: [], listeners: new Set(), calls: [] };
     live.set(truceId, state);
+    // Every Qloo call this truce makes goes on its receipts.
+    let phase: CallPhase = 'gathering';
+    const q = traced(qloo, () => phase, (call) => state.calls.push(call));
+    let example: ReceiptExample | null = null;
     const push = (e: StreamEvent) => {
       state.events.push(e);
       store.saveEvents(truceId, state.events);
@@ -256,7 +339,7 @@ export function createRunner(deps: RunnerDeps) {
       // A replan leaves out what the group swapped away from the evening it replaces.
       constraints.excludeEntities = [...new Set([...constraints.excludeEntities, ...exclude])];
 
-      const locality = await locate(qloo, pair.location);
+      const locality = await locate(q, pair.location);
       if (!locality) {
         throw new UserFacingError(
           `Qloo doesn't know "${pair.location}". Try a city or neighbourhood name like "Manhattan" or "Istanbul".`,
@@ -272,8 +355,8 @@ export function createRunner(deps: RunnerDeps) {
       };
 
       const [candidates, portraits] = await Promise.all([
-        gatherCandidates(qloo, members, people, options),
-        Promise.all(members.map(async (s) => [s, await tasteWords(qloo, signalOf(at(people, s))).catch(() => [])] as const)).then(
+        gatherCandidates(q, members, people, options),
+        Promise.all(members.map(async (s) => [s, await tasteWords(q, signalOf(at(people, s))).catch(() => [])] as const)).then(
           (list) => Object.fromEntries(list) as PerSide<string[]>,
         ),
       ]);
@@ -304,6 +387,7 @@ export function createRunner(deps: RunnerDeps) {
 
       if (useClaude) {
         push({ type: 'status', phase: 'scouting', brain });
+        phase = 'scouting';
         let hotspot: Promise<Hotspot | null> | null = null;
         const taken = new Set<string>();
         // Shared by the agents: an add only goes through while its slot has room, so every find announced reaches the table.
@@ -312,7 +396,7 @@ export function createRunner(deps: RunnerDeps) {
           members.map((side) =>
             scout(
               {
-                qloo,
+                qloo: q,
                 anthropic: anthropic!,
                 mode: pair.mode,
                 members,
@@ -326,7 +410,7 @@ export function createRunner(deps: RunnerDeps) {
                 weights: perSide(members, (s) => normalizeWeights(at(sides, s).input.weights)),
                 candidates,
                 hotspot: () =>
-                  (hotspot ??= findHotspot(qloo, [...new Set(members.flatMap((s) => signalOf(at(people, s))))], options.place).catch(() => null)),
+                  (hotspot ??= findHotspot(q, [...new Set(members.flatMap((s) => signalOf(at(people, s))))], options.place).catch(() => null)),
                 taken,
                 room,
                 emit: push,
@@ -341,7 +425,9 @@ export function createRunner(deps: RunnerDeps) {
         }
       }
 
-      const pool = await scorePool(qloo, members, people, candidates satisfies Candidates);
+      phase = 'scoring';
+      const pool = await scorePool(q, members, people, candidates satisfies Candidates);
+      example = exampleOf(pool, people, seedNames, state.calls);
       push({ type: 'pool', items: cardsOf(pool, seedNames, tonight), indifferent: pool.indifferent, tonight });
       push({ type: 'status', phase: 'negotiating', brain });
 
@@ -390,6 +476,7 @@ export function createRunner(deps: RunnerDeps) {
         retryable: !fixable,
       });
     } finally {
+      store.saveReceipts(truceId, { calls: state.calls, example } satisfies Receipts);
       log(
         `truce ${truceId} ${brain} ${members.length}p ${((Date.now() - started) / 1000).toFixed(1)}s, ${usage.length} model calls, ≈$${costOf(usage).toFixed(4)}, qloo quota left ${qloo.quota().monthRemaining ?? '?'}`,
       );
@@ -411,6 +498,8 @@ export function createRunner(deps: RunnerDeps) {
       if (!pair) throw new UserFacingError('This truce link does not exist.', 404, 'not_found');
       const sides = store.sides(pairId);
       if (pair.members.some((s) => !sides[s])) throw new UserFacingError('Everyone needs to finish their picks first.', 409, 'not_ready');
+      const full = capacity();
+      if (full) throw new UserFacingError(CAPACITY[full], 503, 'capacity');
       const id = newId();
       if (opts.replaces) store.setReplacedBy(opts.replaces, id);
       try {
@@ -477,6 +566,28 @@ export function createRunner(deps: RunnerDeps) {
       state.listeners.add(onEvent);
       return { past: [...state.events], stop: () => state.listeners.delete(onEvent) };
     },
+
+    capacity,
+
+    /** A truce's receipts: the calls so far while it runs, the stored ones after. */
+    receipts(truceId: string): Receipts | null {
+      const state = live.get(truceId);
+      if (state) return { calls: [...state.calls], example: null };
+      return store.receiptsOf(truceId) as Receipts | null;
+    },
+
+    /** How busy and how close to its limits the server is, for /api/health. */
+    status() {
+      const quota = qloo.quota();
+      return {
+        running: live.size,
+        startedToday: store.startedSince(startOfUtcDay()),
+        modelRunToday: store.claudeTrucesSince(startOfUtcDay()),
+        limits: { ...limits, modelDaily: deps.dailyCap },
+        qloo: { monthRemaining: quota.monthRemaining, monthLimit: quota.monthLimit },
+        capacity: capacity(),
+      };
+    },
   };
 }
 
@@ -490,7 +601,7 @@ export class UserFacingError extends Error {
   constructor(
     message: string,
     readonly status = 422,
-    readonly code: StreamErrorCode | 'not_ready' | 'not_found' | SwapErrorCode = 'internal',
+    readonly code: StreamErrorCode | 'not_ready' | 'not_found' | 'capacity' | SwapErrorCode = 'internal',
   ) {
     super(message);
   }

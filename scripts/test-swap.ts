@@ -89,6 +89,7 @@ const store = openStore(dir);
 let clock = Date.parse('2026-10-22T20:00:00Z'); // 16:00 in New York, on the evening's date
 const started: { pairId: string; exclude: readonly string[]; replaces?: string }[] = [];
 const runner = {
+  capacity: () => null,
   start(pairId: string, opts: { exclude?: readonly string[]; replaces?: string } = {}) {
     const id = `replan-${started.length + 1}`;
     started.push({ pairId, exclude: opts.exclude ?? [], replaces: opts.replaces });
@@ -151,10 +152,10 @@ function finish(truceId: string, talked: Bundle[] = []) {
   };
   store.finishTruce(truceId, result, { film: 'F2 name', restaurant: 'R1 name', music: 'M1 name' });
 }
-/** created_at has millisecond precision: wait one, so a later truce is later. */
+/** created_at comes from the system clock, which on Windows can tick only every ~16 ms: wait past that, so a later truce is later. */
 const tick = () => {
   const t = Date.now();
-  while (Date.now() <= t + 1);
+  while (Date.now() <= t + 20);
 };
 const refused = (fn: () => unknown, code: string) => {
   try {
