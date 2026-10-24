@@ -4,7 +4,7 @@
 
 Truce plans a shared evening (a film, a restaurant and music) for a couple or a group of up to four friends. Each person names a few things they love and tells their own AI agent about tonight in plain words ("something cosy, no horror, I've seen Dune, nothing pricey"). Each agent is grounded in [Qloo](https://www.qloo.com)'s taste graph: it scouts Qloo for options that could work for everyone, then the agents negotiate until they all say yes to one evening. A referee written in plain code keeps the negotiation honest. The plan comes back ready to act on: opening hours for tonight, a map, IMDb and Spotify links, a calendar event. A **fairness ledger** remembers who gave ground, including how the evening actually went, and gives that person's agent more pull next time.
 
-**Live demo:** _link to come_ ("Couple demo" or "Friends demo" starts a real negotiation in one tap)
+**Live demo:** https://truce-production.up.railway.app ("Couple demo" or "Friends demo" opens a recorded negotiation at once; "Run it live" starts a real one, about a minute)
 
 ---
 
