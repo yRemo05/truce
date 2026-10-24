@@ -1,10 +1,12 @@
 import type { CardItem, LinkKind, Slot } from '@contract';
 import type { CSSProperties, ReactNode } from 'react';
 import { cx, Icon, Thumb, type IconName } from '@/ui';
+import { isBooking } from '@/lib/plan';
 import { SLOT_ICON, SLOT_LABEL } from '@/lib/truce';
 import { Hours } from './Hours';
 import { ScoreRow } from './ScoreRow';
 import { Serves } from './Serves';
+import { Venue } from './Venue';
 
 /** The first few items of a comma-separated Qloo list. */
 const firstOf = (list: string | undefined, n = 2) =>
@@ -30,21 +32,43 @@ const LINK_ICON: Record<LinkKind, IconName> = {
   website: 'link',
   menu: 'restaurant',
   phone: 'phone',
+  resy: 'booking',
+  opentable: 'booking',
 };
 
-/** Where to act on a pick: watch, listen, find, book. */
+/** Who takes the booking, for the primary button's second word. */
+const BOOKER: Partial<Record<LinkKind, string>> = { resy: 'Resy', opentable: 'OpenTable' };
+
+/**
+ * Where to act on a pick: watch, listen, find, book. A restaurant's first
+ * booking link leads, as the row's one primary action: "Book a table".
+ */
 function Links({ item }: { item: CardItem }) {
   if (!item.links.length) return null;
+  const lead = item.links.find((l) => isBooking(l.kind));
   return (
     <ul className="act-links" aria-label={`Links for ${item.name}`}>
-      {item.links.map((l) => (
-        <li key={l.url}>
-          <a className="btn btn--outline btn--sm" href={l.url} {...(l.kind === 'phone' ? {} : { target: '_blank', rel: 'noopener noreferrer' })}>
-            <Icon name={LINK_ICON[l.kind]} size={16} />
-            <span className="btn__label">{l.label}</span>
-          </a>
-        </li>
-      ))}
+      {item.links.map((l) => {
+        const primary = l === lead;
+        return (
+          <li key={l.url}>
+            <a
+              className={cx('btn btn--sm', primary ? 'btn--primary' : 'btn--outline')}
+              href={l.url}
+              {...(l.kind === 'phone' ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+            >
+              <Icon name={LINK_ICON[l.kind]} size={16} />
+              {primary ? (
+                <span className="btn__label">
+                  Book a table <span className="btn__meta">· {BOOKER[l.kind]}</span>
+                </span>
+              ) : (
+                <span className="btn__label">{l.label}</span>
+              )}
+            </a>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -100,6 +124,7 @@ export function PlanRow({ item, status, action, explain, className, style }: Pla
       <div className="plan-row__what">
         <h3 className="plan-row__name">{item.name}</h3>
         {detail && <p className="small muted">{detail}</p>}
+        <Venue item={item} />
         <ScoreRow scores={item.scores} explain={explain} />
         <Serves item={item} />
       </div>

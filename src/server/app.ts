@@ -360,6 +360,7 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
       replacedBy: truce.replacedBy,
       replaces: store.replacedOf(truce.id),
       replay: truce.replayOf ? { recordedAt: store.truce(truce.replayOf)?.createdAt ?? truce.createdAt } : null,
+      demo: pair.demo,
     });
   });
 

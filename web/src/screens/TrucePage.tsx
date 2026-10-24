@@ -6,7 +6,9 @@
  *   primary   — Decision: the evening to act on (links, hours, calendar), how it was reached, scores,
  *               the ledger for next time, the check-in for afterwards
  *   secondary — Research: where and when, how Qloo reads each person, each agent's scouting,
- *               every option with where it came from
+ *               every option with where it came from, the Qloo receipts (every call, one opened up)
+ *   secondary — an instant replay: a slim banner on every tab (recorded when, moved to tonight,
+ *               yours to swap), with Run it live; a live demo that stops offers a recorded run
  *   secondary — the tabs with a short count each, a dot for unseen news; turn progress line;
  *               reconnecting state; skip ahead; jump to the latest move
  *   rare      — a stopped truce: the full notice on its tab, a banner on the others
@@ -28,12 +30,15 @@
  * sliders (rule-based), bridge/search (origin), film/restaurant/music (slots),
  * pin/calendar (where and when), wifi-off (reconnecting), fast-forward (skip
  * ahead), arrow-down (latest), hourglass (no decision yet), heart (check-in),
- * exchange / retry (a swap or a replan waiting for votes, an evening planned again).
+ * exchange / retry (a swap or a replan waiting for votes, an evening planned again), play (a
+ * recorded run).
  */
 import type { Side } from '@contract';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { Badge, Button, ButtonLink, cx, ErrorNotice, Icon, InfoTip, Notice, Page, PairNames, Spinner } from '@/ui';
+import { useDemo, wasBusyReplay, type DemoKind } from '@/lib/demo';
+import { dayMonth } from '@/lib/format';
 import { EXPLAIN } from '@/lib/glossary';
 import { mySide } from '@/lib/mine';
 import { agentOf, groupNames, monograms, nameOf } from '@/lib/people';
@@ -102,6 +107,32 @@ function PhaseBadge({ state, link }: { state: TruceState; link: LinkState }) {
         </Badge>
       );
   }
+}
+
+/**
+ * An instant replay, on every tab: a recorded run moved to tonight, yours to
+ * swap and check in on, with the way to a live run of the same demo. When the
+ * server replayed because it was busy, it says so first.
+ */
+function ReplayBanner({ truceId, kind, recordedAt }: { truceId: string; kind: DemoKind; recordedAt: string }) {
+  const live = useDemo();
+  const busy = wasBusyReplay(truceId);
+  return (
+    <>
+      <Notice
+        icon="play"
+        title={busy ? 'Truce is busy right now, so this is a recorded run.' : undefined}
+        action={
+          <Button size="sm" iconEnd="arrow-right" busy={live.busy} onClick={() => void live.run(kind, false)}>
+            Run it live
+          </Button>
+        }
+      >
+        A recorded run from {dayMonth(recordedAt)}, moved to tonight. Swaps and check-ins are yours.
+      </Notice>
+      {live.error && <ErrorNotice error={live.error} title="The live run didn't start" />}
+    </>
+  );
 }
 
 /** The agent behind a line of the talks; null for the referee's notes. */
@@ -273,11 +304,14 @@ export function TrucePage({ truceId }: { truceId: string }) {
   const replacedBy = swaps.view ? swaps.view.replacedBy : meta.replacedBy;
   const stoppedIn = state.error ? errorTab(state) : null;
   // On its own tab the full notice, with the way forward: under the talks it interrupted, else on top.
+  // A demo truce; a live one that stops offers a recorded run instead.
+  const { demo } = meta;
   const stopped = state.error && stoppedIn === tab && (
     <div ref={stoppedRef}>
-      <Stopped error={state.error} pairId={meta.pairId} location={meta.location} />
+      <Stopped error={state.error} pairId={meta.pairId} location={meta.location} demo={meta.replay ? null : demo} />
     </div>
   );
+  const running = state.phase !== 'done' && state.phase !== 'failed';
 
   return (
     <TruceContext.Provider value={ctx}>
@@ -370,6 +404,8 @@ export function TrucePage({ truceId }: { truceId: string }) {
           />
         )}
 
+        {meta.replay && demo && <ReplayBanner truceId={truceId} kind={demo} recordedAt={meta.replay.recordedAt} />}
+
         {openSwap && tab !== 'decision' && <VoteBanner swap={openSwap} onOpen={() => choose('decision')} />}
 
         {state.brain === 'rules' && (
@@ -382,7 +418,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
         <div ref={panelRef} id="phase-panel" role="tabpanel" aria-labelledby={`phase-tab-${tab}`} className="truce__panel">
           {tab !== 'discussion' && stopped}
 
-          {tab === 'research' && <Research state={state} plan={swaps.view?.bundle ?? state.result?.bundle ?? null} />}
+          {tab === 'research' && <Research state={state} plan={swaps.view?.bundle ?? state.result?.bundle ?? null} truceId={truceId} running={running} />}
 
           {tab === 'discussion' && (
             <div className="phase phase--discussion">
@@ -417,6 +453,7 @@ export function TrucePage({ truceId }: { truceId: string }) {
               state={state}
               truceId={truceId}
               pairId={meta.pairId}
+              demoKind={demo ?? (meta.mode === 'couple' ? 'couple' : 'friends')}
               checkedIn={meta.checkedIn}
               stamp={!archive && state.sawLive}
               swaps={swaps}

@@ -2,22 +2,26 @@
  * Landing (/).
  *
  * Inventory, by priority:
- *   primary   — Couple demo: one tap to a live negotiation (POST /api/demo {kind})
+ *   primary   — Couple demo: one tap to a finished truce, an instant replay of a recorded run
+ *               (POST /api/demo {kind, replay: true})
  *   secondary — Friends demo (three people), Start your own (→ /new)
+ *   rare      — run a demo live instead (about a minute): one quiet line under the buttons
  *   info      — what Truce does, in plain words; a real message from a truce; three steps
  *
- * Viewport budget: at 1440×900 the headline, the two buttons and the sample
- * message sit above the fold; the steps follow. At 390×844 the headline and
- * all three buttons fit.
- * Grid: 12 columns — copy in 1–6, the sample message in 7–12. Phone: one column.
+ * Viewport budget: at 1440×900 the headline, the buttons, the live line and the sample message sit
+ * above the fold, with the steps; the page fits the window. At 390×844 the headline and all three
+ * buttons fit.
+ * Grid: the full window with a modest gutter, 12 columns — copy in 1–6 (its
+ * measure capped), the sample message floating at the right edge of 7–12.
+ * Phone: one column.
+ * Surface: the faceted photo behind everything. The steps are frosted glass
+ * (a live blur on wider screens, nearly solid on a phone); the floating
+ * sample's bubble is fake glass, a pre-blurred copy of the photo (ui/Frost),
+ * so its float costs no blur per frame.
  * Icons: heart / users (the two demos), plus (start), users / exchange / check (the three steps).
  */
-import type { DemoInput } from '@contract';
-import { useState } from 'react';
-import { useLocation } from 'wouter';
-import { api } from '@/api';
-import { Button, ButtonLink, ErrorNotice, Icon, Page, type IconName } from '@/ui';
-import { useAction } from '@/lib/useAction';
+import { Button, ButtonLink, ErrorNotice, Frost, Icon, Page, type IconName } from '@/ui';
+import { useDemo } from '@/lib/demo';
 import { TruceContext } from '@/truce/context';
 import { MoveCard } from '@/truce/Moves';
 import { specimenCtx, specimenMove } from '@/truce/specimen';
@@ -29,16 +33,10 @@ const STEPS: { icon: IconName; title: string; text: string }[] = [
 ];
 
 export function Landing() {
-  const [, navigate] = useLocation();
-  const [kind, setKind] = useState<DemoInput['kind']>('couple');
-  const demo = useAction(async (k: DemoInput['kind']) => {
-    setKind(k);
-    const { truceId } = await api.demo(k);
-    navigate(`/t/${truceId}`);
-  });
+  const demo = useDemo();
 
   return (
-    <Page title={null} className="landing">
+    <Page title={null} className="landing" wide backdrop>
       <section className="landing__hero grid" aria-labelledby="hero-title">
         <div className="landing__copy">
           <h1 id="hero-title" className="h1">
@@ -49,25 +47,39 @@ export function Landing() {
             negotiates until everyone says yes. For a couple or up to four friends.
           </p>
           <div className="landing__actions">
-            <Button variant="primary" icon="heart" busy={demo.busy && kind === 'couple'} disabled={demo.busy} onClick={() => void demo.run('couple')}>
+            <Button variant="primary" icon="heart" busy={demo.busyFor('couple', true)} disabled={demo.busy} onClick={() => void demo.run('couple', true)}>
               Couple demo
             </Button>
-            <Button variant="secondary" icon="users" busy={demo.busy && kind === 'friends'} disabled={demo.busy} onClick={() => void demo.run('friends')}>
+            <Button variant="secondary" icon="users" busy={demo.busyFor('friends', true)} disabled={demo.busy} onClick={() => void demo.run('friends', true)}>
               Friends demo
             </Button>
             <ButtonLink variant="ghost" icon="plus" href="/new">
               Start your own
             </ButtonLink>
           </div>
-          <p className="small muted">Maya and Deniz in Manhattan, or three friends in Istanbul. Each demo takes about a minute.</p>
+          <div className="landing__note">
+            <p className="small muted">Maya and Deniz in Manhattan, or three friends in Istanbul, recorded so they open at once.</p>
+            <p className="landing__live small muted">
+              <span>Run it live (about a minute):</span>
+              <span className="landing__live-buttons">
+                <Button size="sm" variant="ghost" icon="heart" busy={demo.busyFor('couple', false)} disabled={demo.busy} aria-label="Run the couple demo live" onClick={() => void demo.run('couple', false)}>
+                  Couple
+                </Button>
+                <Button size="sm" variant="ghost" icon="users" busy={demo.busyFor('friends', false)} disabled={demo.busy} aria-label="Run the friends demo live" onClick={() => void demo.run('friends', false)}>
+                  Friends
+                </Button>
+              </span>
+            </p>
+          </div>
           {demo.error && <ErrorNotice error={demo.error} title="The demo didn't start" />}
         </div>
 
-        <div className="landing__sample chat" aria-label="An example message from a truce">
+        <figure className="landing__sample float" aria-label="An example message from a truce">
+          <Frost />
           <TruceContext.Provider value={specimenCtx}>
             <MoveCard move={specimenMove} live={false} />
           </TruceContext.Provider>
-        </div>
+        </figure>
       </section>
 
       <section className="landing__how" aria-labelledby="how-title">
@@ -76,7 +88,7 @@ export function Landing() {
         </h2>
         <ol className="steps">
           {STEPS.map((s, i) => (
-            <li key={s.title} className="card step">
+            <li key={s.title} className="card glass step">
               <span className="step__icon" aria-hidden="true">
                 <Icon name={s.icon} size={20} />
               </span>

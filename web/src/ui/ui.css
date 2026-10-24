@@ -80,6 +80,11 @@
   padding: var(--s-1) var(--s-3);
   gap: 0.375rem;
 }
+/* A quieter second word inside a label: "Book a table · OpenTable". */
+.btn__meta {
+  font-weight: 450;
+  opacity: 0.78;
+}
 
 /* ---------- Badge ---------- */
 .badge {
@@ -594,6 +599,119 @@
   padding-inline: 0.5rem;
 }
 
+/* ---------- Card, and glass for any surface on the backdrop ---------- */
+.card {
+  min-width: 0;
+  padding: var(--card-pad);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+}
+/* Frosted: the photo blurs through a translucent fill, edged by a faint hairline. After .card, so it wins. */
+.glass {
+  border-color: var(--glass-edge);
+  background: var(--glass);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+}
+
+/* ---------- Backdrop: the faceted photo behind a page (Page backdrop) ---------- */
+/*
+ * Landscape screens get the whole photo; portrait ones a full-resolution strip
+ * around the bright crease. The teal-black scrim is heaviest where the text
+ * sits: over the top on one column, down the left on two.
+ */
+.page--backdrop {
+  isolation: isolate;
+  --muted-foreground: var(--muted-foreground-photo);
+  /* The scrim and the photo's crop, shared by the backdrop and its pre-blurred copy (Frost) so they line up. */
+  --scrim: 5 24 21;
+  --scrim-fill: linear-gradient(rgb(var(--scrim) / 0.67), rgb(var(--scrim) / 0.61) 45%, rgb(var(--scrim) / 0.4) 70%);
+  --photo-at: 55% 35%;
+}
+@media (orientation: portrait) {
+  .page--backdrop {
+    --photo-at: 50% 30%;
+  }
+}
+@media (min-width: 64em) {
+  .page--backdrop {
+    --scrim-fill: linear-gradient(to right, rgb(var(--scrim) / 0.64) 40%, rgb(var(--scrim) / 0.35) 75%);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .page--backdrop {
+    --scrim-fill: linear-gradient(rgb(var(--scrim) / 0.8), rgb(var(--scrim) / 0.8));
+  }
+}
+.backdrop {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: 100lvh;
+  background: url('../assets/backdrop-wide.webp') var(--photo-at) / cover no-repeat;
+  background-image: image-set(url('../assets/backdrop-wide.avif') type('image/avif'), url('../assets/backdrop-wide.webp') type('image/webp'));
+  pointer-events: none;
+}
+.backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--scrim-fill);
+}
+@media (orientation: portrait) {
+  .backdrop {
+    background-image: image-set(url('../assets/backdrop-tall.avif') type('image/avif'), url('../assets/backdrop-tall.webp') type('image/webp'));
+  }
+}
+
+/*
+ * Frost (ui/Frost.tsx): fake glass for something moving on the backdrop. The
+ * image is the backdrop's own size and crop, blurred in advance, under the
+ * same scrim; JS moves it to line up. Its own layer, so lining it up while
+ * scrolling repaints nothing. Under its parent's content (z-index −1 in the
+ * parent's stacking context); the parent's own fill (--frost-fill) goes over it.
+ */
+.frost {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.frost__image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background-image:
+    var(--scrim-fill),
+    image-set(url('../assets/frost-wide.avif') type('image/avif'), url('../assets/frost-wide.webp') type('image/webp'));
+  background-position: 0 0, var(--photo-at);
+  background-size: 100% 100%, cover;
+  background-repeat: no-repeat;
+  will-change: translate;
+}
+@media (orientation: portrait) {
+  .frost__image {
+    background-image:
+      var(--scrim-fill),
+      image-set(url('../assets/frost-tall.avif') type('image/avif'), url('../assets/frost-tall.webp') type('image/webp'));
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .frost {
+    display: none;
+  }
+}
+.page--backdrop .topbar {
+  background: transparent;
+  border-bottom-color: var(--glass-edge);
+}
+.page--backdrop .footer {
+  border-top-color: var(--glass-edge);
+}
+
 /* ---------- Top bar ---------- */
 .topbar {
   position: relative;
@@ -654,6 +772,20 @@
   justify-content: space-between;
   gap: var(--s-2) var(--s-6);
   padding-block: var(--s-5);
+}
+.footer__credits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s-2);
+}
+.footer a {
+  color: var(--foreground);
+  text-decoration-color: rgb(233 236 236 / 0.35);
+  text-underline-offset: 0.2em;
+  transition: text-decoration-color var(--dur-fast) var(--ease-out);
+}
+.footer a:hover {
+  text-decoration-color: currentColor;
 }
 
 /* ---------- Copy link ---------- */

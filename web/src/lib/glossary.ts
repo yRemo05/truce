@@ -27,4 +27,6 @@ export const EXPLAIN = {
   swap:
     'Anyone can ask to change one item of the evening. If it can’t happen, it swaps at once; if it’s a matter of taste, the group votes. Each of you has one taste swap per evening.',
   floor: 'The least each person may end up with, set by the fair evening. A swap never takes anyone below it.',
+  receipts: 'Every call Truce made to Qloo for this evening. The key never leaves the server, and no personal data is sent.',
+  affinity: 'Qloo’s measure of how well an option fits someone’s favourites, from 0 to 1. Truce turns it into the 0–100 fit scores.',
 } as const;

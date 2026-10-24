@@ -8,6 +8,7 @@ import { Because } from './Because';
 import { useTruceCtx } from './context';
 import { Hours } from './Hours';
 import { Serves } from './Serves';
+import { Venue } from './Venue';
 
 /** The facts worth showing, in this order. */
 const FACT_LABEL: Record<string, string> = {
@@ -65,7 +66,8 @@ const Row = memo(function Row({ item, mark }: { item: CardItem; mark: Mark }) {
   const [open, setOpen] = useState(false);
   const moreId = useId();
   const sub = subLine(item);
-  const facts = Object.keys(FACT_LABEL).flatMap((k) => (item.facts[k] ? [[k, item.facts[k]] as const] : []));
+  // A rating already on the row's venue line isn't repeated in the details.
+  const facts = Object.keys(FACT_LABEL).flatMap((k) => (item.facts[k] && !(k === 'rating' && item.venue?.rating) ? [[k, item.facts[k]] as const] : []));
   return (
     <li className={cx('pool-row', mark && 'is-marked')}>
       <div className="pool-row__top">
@@ -85,6 +87,7 @@ const Row = memo(function Row({ item, mark }: { item: CardItem; mark: Mark }) {
             )}
           </div>
           <Serves item={item} />
+          <Venue item={item} compact />
         </div>
         <button
           type="button"

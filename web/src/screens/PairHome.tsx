@@ -16,7 +16,8 @@
  * someone is still picking, a truce runs or check-ins are due.
  * Icons: check / pencil (status), arrow-right, copy (link), play (start), eye
  * (watch), heart (check-in), scale (ledger), calendar (history), pin,
- * exchange / retry (a swap or replan waiting for votes).
+ * exchange / retry (a swap or replan waiting for votes), play (a recorded demo, when Truce is too
+ * busy to start one live).
  */
 import type { PairView } from '@contract';
 import { useEffect, useState } from 'react';
@@ -38,6 +39,7 @@ import {
   SectionHeader,
   Skeleton,
 } from '@/ui';
+import { useDemo } from '@/lib/demo';
 import { isPassMode, withPass } from '@/lib/flow';
 import { EXPLAIN } from '@/lib/glossary';
 import { dayMonth } from '@/lib/format';
@@ -54,6 +56,7 @@ import { NotFound } from './NotFound';
 
 function Tonight({ pair, letters, running, pass }: { pair: PairView; letters: Names; running: string | null; pass: boolean }) {
   const start = useStartTruce(pair.id);
+  const demo = useDemo();
   const waiting = pair.members.filter((s) => !pair.ready[s]);
   const all = waiting.length === 0;
 
@@ -125,7 +128,21 @@ function Tonight({ pair, letters, running, pass }: { pair: PairView; letters: Na
           </>
         )}
       </div>
-      {start.error && <ErrorNotice error={start.error} title="The truce didn't start" />}
+      {start.error && (
+        <ErrorNotice
+          error={start.error}
+          title="The truce didn't start"
+          action={
+            // Too busy for a new live truce: a recorded demo opens at once instead.
+            start.error.code === 'capacity' && (
+              <Button size="sm" icon="play" busy={demo.busy} onClick={() => void demo.run(pair.mode === 'couple' ? 'couple' : 'friends', true)}>
+                Watch a recorded demo
+              </Button>
+            )
+          }
+        />
+      )}
+      {demo.error && <ErrorNotice error={demo.error} title="The recorded demo didn't open" />}
     </section>
   );
 }

@@ -7,6 +7,7 @@ export { Chip } from './Chip';
 export { cx } from './cx';
 export { ErrorNotice } from './ErrorNotice';
 export { Footer } from './Footer';
+export { Frost } from './Frost';
 export { Icon, IconSprite, type IconName } from './Icon';
 export { InfoTip } from './InfoTip';
 export { LedgerMeter, pullSentence } from './LedgerMeter';

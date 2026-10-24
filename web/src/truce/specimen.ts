@@ -23,6 +23,7 @@ const card = (id: string, slot: CardItem['slot'], name: string, disambiguation: 
   hours: null,
   address: null,
   serves: {},
+  venue: null,
 });
 
 const items = [

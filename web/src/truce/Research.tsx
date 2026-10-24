@@ -7,6 +7,7 @@ import { agentOf, listNames, nameOf, possessive } from '@/lib/people';
 import { findsOf, type Bundle, type ScoutStep, type TruceState } from '@/lib/truce';
 import { useTruceCtx } from './context';
 import { PoolPanel, PoolSkeleton } from './PoolPanel';
+import { Receipts } from './Receipts';
 
 const NOUN: Record<Slot, string> = { film: 'films', restaurant: 'restaurants', music: 'artists' };
 
@@ -230,10 +231,13 @@ function Scouts({ state }: { state: TruceState }) {
 
 /**
  * Research: everything before the talks. Where and when, how Qloo reads each
- * person, what each agent scouted, and every option with where it came from.
+ * person, what each agent scouted, every option with where it came from, and
+ * the receipts for every Qloo call. On a wide screen the receipts sit under
+ * the scouting, beside the options; on a phone they come last.
+ *
+ * `plan` is the evening as it stands after any swaps, once decided.
  */
-/** `plan` is the evening as it stands after any swaps, once decided. */
-export function Research({ state, plan }: { state: TruceState; plan: Bundle | null }) {
+export function Research({ state, plan, truceId, running }: { state: TruceState; plan: Bundle | null; truceId: string; running: boolean }) {
   const { location } = useTruceCtx();
   const tonight = state.tonight;
   return (
@@ -260,6 +264,9 @@ export function Research({ state, plan }: { state: TruceState; plan: Bundle | nu
         ) : (
           !state.error && <PoolSkeleton />
         )}
+      </div>
+      <div className="research__receipts">
+        <Receipts truceId={truceId} phase={state.phase} running={running} />
       </div>
     </div>
   );

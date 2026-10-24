@@ -3,8 +3,10 @@ import type {
   CheckinInput,
   CheckinResult,
   DemoInput,
+  DemoStarted,
   PairInput,
   PairView,
+  ReceiptsView,
   SearchResult,
   Side,
   SideInput,
@@ -66,8 +68,11 @@ export interface Api {
   setLocation(pairId: string, location: string): Promise<PairView>;
   saveSide(pairId: string, side: Side, input: SideInput): Promise<SideSaved>;
   startTruce(pairId: string): Promise<{ truceId: string }>;
-  demo(kind: DemoInput['kind']): Promise<{ pairId: string; truceId: string }>;
+  /** A ready-made group: an instant replay of a recorded run with `replay`, else live (the server may still replay when busy). */
+  demo(kind: DemoInput['kind'], replay?: boolean): Promise<DemoStarted>;
   getTruce(id: string): Promise<TruceView>;
+  /** Every Qloo call the truce made, and one of them opened up. */
+  receipts(truceId: string): Promise<ReceiptsView>;
   checkin(truceId: string, side: Side, input: CheckinInput): Promise<CheckinResult>;
   /** Where to download the evening as a calendar event. */
   calendarUrl(truceId: string): Promise<string>;

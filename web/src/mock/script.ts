@@ -226,9 +226,26 @@ function linksFor(slot: Slot, name: string, address: string | null, nyc: boolean
     ];
   if (slot === 'music') return [{ kind: 'spotify', label: 'Spotify', url: `https://open.spotify.com/search/${enc(name)}` }];
   const links: Link[] = [{ kind: 'maps', label: 'Map', url: `https://www.google.com/maps/search/?api=1&query=${enc([name, address].filter(Boolean).join(', '))}` }];
+  // Booking comes first, as on the server: most Manhattan places book on OpenTable, a few on Resy.
+  if (nyc) {
+    if (hashOf(name) % 4 === 0) links.unshift({ kind: 'resy', label: 'Book on Resy', url: `https://resy.com/cities/new-york-ny/search?query=${enc(name)}` });
+    else links.unshift({ kind: 'opentable', label: 'Book on OpenTable', url: `https://www.opentable.com/s?term=${enc(name)}` });
+  }
   // 555-01xx numbers are reserved for fiction.
   if (nyc) links.push({ kind: 'phone', label: 'Call', url: `tel:+1212555${String(100 + (hashOf(name) % 100)).padStart(4, '0')}` });
   return links;
+}
+
+/** A restaurant's standing, invented: Manhattan places mostly have a Tripadvisor rating, Istanbul ones fewer facts. */
+function venueFor(name: string, nyc: boolean, size: number): CardItem['venue'] {
+  const h = hashOf(`venue:${name}`);
+  if (!nyc) return h % 3 === 0 ? { rating: { value: 4 + (h % 8) / 10, count: null, source: null }, michelin: false, fitsGroup: null } : null;
+  const resy = hashOf(name) % 4 === 0;
+  return {
+    rating: { value: 4 + (h % 9) / 10, count: 300 + (h % 14_000), source: resy ? 'Resy' : 'Tripadvisor' },
+    michelin: h % 5 === 0,
+    fitsGroup: resy ? size <= 4 : null,
+  };
 }
 
 const HOURS = ['17:00–23:30', '12:00–00:00', '18:00–01:00', '11:30–23:00'];
@@ -417,6 +434,7 @@ export function buildTimeline(input: TimelineInput): { timeline: Timed[]; result
       hours: restaurant ? hoursFor(e.name) : null,
       address,
       serves: row.slot === 'restaurant' ? serves : {},
+      venue: restaurant ? venueFor(e.name, city === 'manhattan', n) : null,
     };
   };
   const rows = [...base, ...scouted];

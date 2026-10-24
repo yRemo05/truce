@@ -18,16 +18,19 @@ interface PageProps {
   stickyBar?: boolean;
   /** Span the window with a modest gutter instead of the centred column (the truce page). */
   wide?: boolean;
+  /** The faceted photo behind the page, under a dark scrim (the landing). The bar and footer go clear; cards on it take `glass`. */
+  backdrop?: boolean;
   skipLabel?: string;
   className?: string;
   children: ReactNode;
 }
 
 /** The shell every screen shares: bar, main landmark, footer credit. */
-export function Page({ title, context, actions, below, stickyBar, wide, skipLabel = 'Skip to content', className, children }: PageProps) {
+export function Page({ title, context, actions, below, stickyBar, wide, backdrop, skipLabel = 'Skip to content', className, children }: PageProps) {
   useTitle(title);
   return (
-    <div className={cx('page', wide && 'page--wide')}>
+    <div className={cx('page', wide && 'page--wide', backdrop && 'page--backdrop')}>
+      {backdrop && <div className="backdrop" aria-hidden="true" />}
       <a className="skip-link" href="#main">
         {skipLabel}
       </a>

@@ -26,10 +26,12 @@ import { api } from '@/api';
 import { Badge, Button, ButtonLink, cx, ErrorNotice, Icon, InfoTip, LedgerMeter, PairNames, ScoreMeter, SectionHeader, Skeleton, type IconName } from '@/ui';
 import { eveningLabel } from '@/lib/format';
 import { EXPLAIN } from '@/lib/glossary';
-import { agentOf, nameOf, possessive } from '@/lib/people';
+import { agentOf, groupNames, nameOf, possessive } from '@/lib/people';
+import { planText } from '@/lib/plan';
 import { absolute, canShare, copyText, shareLink } from '@/lib/share';
 import { openOf, outcomeLine, wasSwapped } from '@/lib/swaps';
 import { gaveGround, isLastCall, SLOT_NOUN, SLOTS, type FeedEntry, type TruceState } from '@/lib/truce';
+import { useDemo, type DemoKind } from '@/lib/demo';
 import { useStartTruce } from '@/lib/useAction';
 import { useFlash } from '@/lib/useFlash';
 import type { Swaps } from '@/lib/useSwaps';
@@ -52,20 +54,25 @@ const LOCKED: Partial<Record<SwapLock, { icon: IconName; text: string }>> = {
   superseded: { icon: 'calendar', text: 'The group has planned a newer evening since, so this one stays as it was.' },
 };
 
-function ShareButton({ text }: { text: string }) {
+/**
+ * The plan as plain text (every pick, the restaurant's address, hours and
+ * booking, the links), on the share sheet with the plan's address; without
+ * one, copied with the address at the end.
+ */
+function ShareButton({ plan }: { plan: (url: string | null) => string }) {
   const [state, setState] = useFlash<'idle' | 'copied' | 'failed'>('idle');
   const share = async () => {
     const url = absolute(window.location.pathname);
-    if (canShare() && (await shareLink({ title: 'Our plan for tonight', text, url }))) return;
-    setState((await copyText(url)) ? 'copied' : 'failed');
+    if (canShare() && (await shareLink({ title: 'Our plan for tonight', text: plan(null), url }))) return;
+    setState((await copyText(plan(url))) ? 'copied' : 'failed');
   };
   return (
     <>
       <Button variant="outline" icon={state === 'copied' ? 'check' : 'share'} onClick={share}>
-        {state === 'copied' ? 'Link copied' : state === 'failed' ? 'Copy the address bar' : 'Share'}
+        {state === 'copied' ? 'Plan copied' : state === 'failed' ? 'Copy the address bar' : 'Share'}
       </Button>
       <span className="visually-hidden" role="status">
-        {state === 'copied' ? 'Link copied.' : state === 'failed' ? 'Copying failed. Copy the address from the address bar.' : ''}
+        {state === 'copied' ? 'The plan is copied, with its links.' : state === 'failed' ? 'Copying failed. Copy the address from the address bar.' : ''}
       </span>
     </>
   );
@@ -94,6 +101,8 @@ interface EveningProps {
   state: TruceState;
   truceId: string;
   pairId: string;
+  /** The recorded demo to offer when Truce is too busy for a new live truce. */
+  demoKind: DemoKind;
   stamp: boolean;
   swaps: Swaps;
   /** Who the ledger favours next time, with the evening as it stands. */
@@ -102,9 +111,10 @@ interface EveningProps {
 }
 
 /** The evening: one row per item to act on, each with its Swap, and what to do next. */
-function EveningCard({ state, truceId, pairId, stamp, swaps, owed, onAsk }: EveningProps) {
+function EveningCard({ state, truceId, pairId, demoKind, stamp, swaps, owed, onAsk }: EveningProps) {
   const { names, members, location } = useTruceCtx();
   const again = useStartTruce(pairId);
+  const recorded = useDemo();
   const { view, loadError } = swaps;
   const result = state.result!;
   const bundle = view?.bundle ?? result.bundle;
@@ -194,7 +204,7 @@ function EveningCard({ state, truceId, pairId, stamp, swaps, owed, onAsk }: Even
           </Button>
         )}
         {tonight && <CalendarLink truceId={truceId} version={SLOTS.map((s) => bundle[s]).join()} />}
-        <ShareButton text={`Our plan for tonight: ${items.map((i) => i.name).join(', ')}.`} />
+        <ShareButton plan={(url) => planText({ who: groupNames(names, members), tonight, location, items, url })} />
         <ButtonLink variant="ghost" icon="home" href={`/p/${pairId}`}>
           Group page
         </ButtonLink>
@@ -204,7 +214,21 @@ function EveningCard({ state, truceId, pairId, stamp, swaps, owed, onAsk }: Even
           ? 'Something can’t happen, or doesn’t feel right? Swap that one item, or plan tonight again.'
           : `New truce runs again with the same favourites${owed ? `, and ${agentOf(nameOf(names, owed))} gets a bit more say` : ''}.`}
       </p>
-      {again.error && <ErrorNotice error={again.error} title="Couldn't start another truce" />}
+      {again.error && (
+        <ErrorNotice
+          error={again.error}
+          title="Couldn't start another truce"
+          action={
+            // Too busy for a new live truce: a recorded demo opens at once instead.
+            again.error.code === 'capacity' && (
+              <Button size="sm" icon="play" busy={recorded.busy} onClick={() => void recorded.run(demoKind, true)}>
+                Watch a recorded demo
+              </Button>
+            )
+          }
+        />
+      )}
+      {recorded.error && <ErrorNotice error={recorded.error} title="The recorded demo didn't open" />}
     </section>
   );
 }
@@ -289,6 +313,8 @@ interface DecisionProps {
   state: TruceState;
   truceId: string;
   pairId: string;
+  /** The recorded demo to offer when Truce is too busy for a new live truce. */
+  demoKind: DemoKind;
   checkedIn: PerSide<boolean>;
   /** The decision just arrived live: animate it in. */
   stamp: boolean;
@@ -302,7 +328,7 @@ interface DecisionProps {
  * swaps, how it was reached and changed since, where the ledger leans next
  * time, and the check-in for afterwards.
  */
-export function Decision({ state, truceId, pairId, checkedIn, stamp, swaps, onFollow }: DecisionProps) {
+export function Decision({ state, truceId, pairId, demoKind, checkedIn, stamp, swaps, onFollow }: DecisionProps) {
   const { names, letters, members } = useTruceCtx();
   const [ask, setAsk] = useState<Ask | null>(null);
   if (!state.result) {
@@ -334,7 +360,7 @@ export function Decision({ state, truceId, pairId, checkedIn, stamp, swaps, onFo
       </p>
       <div className="decision__main">
         {open && <VoteCard key={open.id} swap={open} swaps={swaps} truceId={truceId} />}
-        <EveningCard state={state} truceId={truceId} pairId={pairId} stamp={stamp} swaps={swaps} owed={ledger?.owed ?? null} onAsk={setAsk} />
+        <EveningCard state={state} truceId={truceId} pairId={pairId} demoKind={demoKind} stamp={stamp} swaps={swaps} owed={ledger?.owed ?? null} onAsk={setAsk} />
       </div>
       <div className="decision__side">
         <HowCard state={state} stamp={stamp} view={view} onAsk={setAsk} />

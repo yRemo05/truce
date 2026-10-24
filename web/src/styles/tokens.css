@@ -20,6 +20,8 @@
   --accent: #4a5d5a;
   --muted: #1a2524;
   --muted-foreground: #93a5a4;
+  /* A step lighter over the photo backdrop, so it keeps AA on the brightest facet. */
+  --muted-foreground-photo: #afbebd;
   --destructive: #f27984;
   --destructive-foreground: #0e1312;
   --warning: #e5c07b;
@@ -79,6 +81,20 @@
 
   --shadow-pop: 0 10px 30px -10px rgb(0 0 0 / 0.6), 0 0 0 1px var(--border);
 
+  /*
+   * Glass (.glass in ui.css): a live blur only on wider screens that can do
+   * it; on a phone (or without blur) nearly solid, the photo barely tinting
+   * through. Anything that moves uses fake glass instead (Frost in ui.css):
+   * a pre-blurred photo under `--frost-fill`, never a live blur.
+   */
+  --glass: rgb(21 27 26 / 0.86);
+  --glass-filter: none;
+  --frost-fill: rgb(21 27 26 / 0.5);
+  --glass-edge: rgb(233 236 236 / 0.1);
+  --glass-shadow: inset 0 1px 0 rgb(233 236 236 / 0.06), 0 24px 48px -28px rgb(0 0 0 / 0.7);
+
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur-fast: 120ms;
   --dur: 200ms;
@@ -88,6 +104,23 @@
   :root {
     --gutter: 1.5rem;
     --card-pad: 1.5rem;
+  }
+}
+
+/* A modest live blur from 600px up: static cards only, so it's redrawn on scroll, never per frame. */
+@media (min-width: 37.5em) {
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    :root {
+      --glass: rgb(21 27 26 / 0.5);
+      --glass-filter: blur(16px) saturate(1.25);
+    }
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root {
+    --glass: var(--card);
+    --glass-filter: none;
+    --frost-fill: var(--card);
   }
 }
 

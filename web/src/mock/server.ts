@@ -66,6 +66,8 @@ interface MockPair {
   location: string;
   sides: PerSide<MockSide>;
   earlier: Earlier[];
+  /** Which demo group this is; absent for a group people made. */
+  demo?: DemoInput['kind'];
 }
 
 interface MockTruce {
@@ -87,6 +89,8 @@ interface MockTruce {
   /** The truce that planned this evening again, and the one this one plans again. */
   replacedBy?: string | null;
   replaces?: string | null;
+  /** An instant replay of a demo, and when its "recording" was made. */
+  replay?: { recordedAt: string };
 }
 
 interface Db {
@@ -415,6 +419,7 @@ function demoPair(kind: DemoInput['kind']): MockPair {
     members,
     names: perSide(members, (s) => group.pair.names[members.indexOf(s)]!),
     location: group.pair.location,
+    demo: kind,
     sides: perSide(members, (s) => {
       const p = group.people[members.indexOf(s)]!;
       const foods = (p.foods ?? []).map(foodByName);
@@ -687,12 +692,26 @@ export const mockApi: Api = {
     return { truceId: start(read(), pairId) };
   },
 
-  async demo(kind) {
-    await wait(900);
+  async demo(kind, replay = false) {
+    await wait(replay ? 300 : 900);
     const db = read();
     const pair = demoPair(kind);
     db.pairs[pair.id] = pair;
-    return { pairId: pair.id, truceId: start(db, pair.id) };
+    const truceId = start(db, pair.id);
+    // A replay: the same script, started long enough ago to be over, as a recording of yesterday's run.
+    if (replay) {
+      const t = db.truces[truceId]!;
+      t.createdAt = Date.now() - endOf(t) - 1000;
+      t.replay = { recordedAt: new Date(Date.now() - 86_400_000).toISOString() };
+      write(db);
+    }
+    return { pairId: pair.id, truceId, replay };
+  },
+
+  // The mock keeps no Qloo calls: its truces show no receipts, like a truce from before they were kept.
+  async receipts() {
+    await wait(150);
+    return { calls: [], totals: { calls: 0, cached: 0, ms: 0 }, example: null };
   },
 
   async getTruce(id) {
@@ -715,6 +734,8 @@ export const mockApi: Api = {
       events: t.timeline.filter((x) => x.at <= elapsed).map((x) => x.event),
       replacedBy: t.replacedBy ?? null,
       replaces: t.replaces ?? null,
+      replay: t.replay ?? null,
+      demo: pair.demo ?? null,
     } satisfies TruceView;
   },
 

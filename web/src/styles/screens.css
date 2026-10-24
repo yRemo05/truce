@@ -10,14 +10,6 @@
   padding-block: var(--s-7) var(--s-10);
 }
 
-.card {
-  min-width: 0;
-  padding: var(--card-pad);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: var(--card);
-}
-
 /* ---------- Landing ---------- */
 .landing__hero {
   row-gap: var(--s-8);
@@ -32,11 +24,53 @@
   display: grid;
   gap: var(--s-5);
   justify-items: start;
+  max-width: 42rem;
+}
+/*
+ * The sample message: just the bubble, floating on the photo. Its own
+ * container, capped below the chat's 40rem break, keeps the picks a list.
+ * It floats, so its glass is fake (Frost): the pre-blurred photo under the
+ * bubble's translucent fill, edged by a hairline. No live blur.
+ */
+.landing__sample {
+  --bubble-in: var(--frost-fill);
+  position: relative;
+  isolation: isolate;
+  container-type: inline-size;
+  width: min(100%, 38rem);
+}
+/* Under the bubble only: past the avatar column (1.375rem + the row's gap), squared where the tail meets it. */
+.landing__sample .frost {
+  inset: 0 0 0 calc(1.375rem + var(--s-2));
+  border-radius: var(--radius-lg);
+  border-top-left-radius: 0;
+}
+.landing__sample .bubble {
+  flex: 1;
+  max-width: none;
+  box-shadow:
+    inset 0 0 0 1px var(--glass-edge),
+    var(--glass-shadow);
 }
 .landing__actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-3);
+}
+.landing__note {
+  display: grid;
+  gap: var(--s-1);
+}
+/* "Run it live (about a minute): Couple · Friends", the ghost buttons' padding hanging into the gutter. */
+.landing__live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--s-1);
+}
+.landing__live-buttons {
+  display: inline-flex;
+  gap: var(--s-1);
 }
 .landing__how {
   margin-top: var(--s-10);
@@ -72,14 +106,18 @@
   }
 }
 @media (min-width: 64em) {
+  /* Centred in the window, so a tall screen shows the photo evenly above and below. */
   .landing {
-    padding-top: var(--s-10);
+    display: grid;
+    align-content: center;
+    padding-block: var(--s-9);
   }
   .landing__copy {
     grid-column: 1 / span 6;
   }
   .landing__sample {
     grid-column: 7 / span 6;
+    justify-self: end;
   }
 }
 

@@ -306,6 +306,8 @@ export interface TruceView {
    * the viewer can swap and check in on like their own. Null for a live truce.
    */
   replay: { recordedAt: string } | null;
+  /** Which ready-made demo group this is, live or replayed; null for a group people made. */
+  demo: 'couple' | 'friends' | null;
 }
 
 export interface ReceiptsView {
