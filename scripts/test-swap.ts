@@ -102,7 +102,7 @@ const swaps = createSwaps({ store, runner, now: () => clock, log: () => {} });
 
 const card = (slot: Slot, id: string): CardItem => ({
   id, slot, name: `${id} name`, disambiguation: null, imageUrl: null, blurb: null, facts: {},
-  scores: { a: SCORES[slot][id]![0], b: SCORES[slot][id]![1] }, origins: ['joint'], because: {}, scout: null, serves: {},
+  scores: { a: SCORES[slot][id]![0], b: SCORES[slot][id]![1] }, origins: ['joint'], because: {}, scout: null, serves: {}, venue: null,
   links: [], hours: null, address: null,
 });
 const side: SideInput = { seeds: { film: [{ id: 'S', name: 'Seed' }], restaurant: [], music: [] }, weights: { film: 1, restaurant: 1, music: 1 } };

@@ -49,6 +49,19 @@ export interface Entity {
   website: string | null;
   menuUrl: string | null;
   phone: string | null;
+  /** Places: ratings, a Michelin Guide listing and booking pages, when Qloo knows them. */
+  venue: Venue | null;
+}
+
+export interface Venue {
+  /** Out of 5, best-known first: Tripadvisor and Resy with their review counts, then Qloo's business rating. */
+  ratings: { source: 'Tripadvisor' | 'Resy' | null; value: number; count: number | null }[];
+  michelin: boolean;
+  /** Booking pages as Qloo gives them (links.ts keeps only http(s) ones). */
+  opentable: string | null;
+  resy: string | null;
+  /** The party sizes Resy takes bookings for. */
+  party: { min: number; max: number } | null;
 }
 
 export interface Period {
@@ -315,6 +328,46 @@ function externalOf(...sources: unknown[]): { ids: Record<string, string>; googl
   return { ids, googlePlaceId };
 }
 
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/**
+ * A place's ratings, Michelin listing and booking pages, from either external
+ * shape (Insights arrays at the top level, Search objects under properties).
+ * Seen live in Manhattan: every place had a business rating, most had
+ * Tripadvisor and OpenTable, a few Resy (with party sizes) and Michelin.
+ */
+function venueOf(businessRating: unknown, ...sources: unknown[]): Venue | null {
+  const first = (service: string): Record<string, unknown> | null => {
+    for (const source of sources) {
+      if (!source || typeof source !== 'object') continue;
+      const value = (source as Record<string, unknown>)[service];
+      const item = Array.isArray(value) ? value[0] : value;
+      if (item && typeof item === 'object') return item as Record<string, unknown>;
+    }
+    return null;
+  };
+  const ta = first('tripadvisor');
+  const resy = first('resy');
+  const ot = first('opentable');
+  const ratings: Venue['ratings'] = [];
+  for (const [source, item] of [['Tripadvisor', ta], ['Resy', resy]] as const) {
+    const value = num(item?.rating);
+    if (value !== null && value > 0 && value <= 5) ratings.push({ source, value: Math.round(value * 10) / 10, count: num(item?.rating_count) });
+  }
+  const business = num(businessRating);
+  if (business !== null && business > 0 && business <= 5) ratings.push({ source: null, value: Math.round(business * 10) / 10, count: null });
+  const min = num(resy?.min_party_size);
+  const max = num(resy?.max_party_size);
+  const venue: Venue = {
+    ratings,
+    michelin: first('michelin') !== null,
+    opentable: text(ot?.url),
+    resy: text(resy?.url),
+    party: min !== null && max !== null && max >= min ? { min, max } : null,
+  };
+  return venue.ratings.length || venue.michelin || venue.opentable || venue.resy ? venue : null;
+}
+
 /** A restaurant's cuisine as a short label ("Italian"), from its genre tags. */
 const CUISINE_TAG = 'urn:tag:genre:place:restaurant:';
 
@@ -325,12 +378,17 @@ function baseEntity(
   const p = raw.properties;
   const external = externalOf('external' in raw ? raw.external : undefined, p?.external);
   const facts = factsOf(kind, p);
+  const venue = kind === 'place' ? venueOf(p?.business_rating, 'external' in raw ? raw.external : undefined, p?.external) : null;
   if (kind === 'place') {
     // Prefer a cuisine ("Korean") over a format ("Fine dining restaurant", "Wine bar").
     const tags = (raw.tags ?? []).filter((t) => (t.id ?? t.tag_id ?? '').startsWith(CUISINE_TAG) && t.name);
     const isFormat = (name: string) => /restaurant|\bbar\b|takeout|cafe|shop/i.test(name);
     const cuisine = tags.find((t) => !isFormat(t.name!)) ?? tags[0];
     if (cuisine?.name) facts.cuisineType = cuisine.name;
+    // Facts the agents can cite: "4.5 on Tripadvisor (13,365 reviews)", "In the Michelin Guide".
+    const top = venue?.ratings[0];
+    if (top) facts.rating = `${top.value} ${top.source ? `on ${top.source}` : 'rating'}${top.count ? ` (${top.count.toLocaleString('en-US')} reviews)` : ''}`;
+    if (venue?.michelin) facts.michelin = 'In the Michelin Guide';
   }
   return {
     id: raw.entity_id,
@@ -356,6 +414,7 @@ function baseEntity(
     website: text(p?.website),
     menuUrl: text(p?.menu_url),
     phone: text(p?.phone),
+    venue,
   };
 }
 

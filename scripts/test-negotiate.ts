@@ -34,7 +34,7 @@ function item(id: string, slot: Slot): PoolItem {
     id, name: id, kind: slot === 'film' ? 'movie' : slot === 'music' ? 'artist' : 'place',
     disambiguation: null, popularity: null, imageUrl: null, year: null, blurb: null, tags: [],
     facts: {}, location: null, address: null, priceLevel: null, hours: null, isClosed: false,
-    external: {}, googlePlaceId: null, website: null, menuUrl: null, phone: null,
+    external: {}, googlePlaceId: null, website: null, menuUrl: null, phone: null, venue: null,
     origins: ['joint'], serves: [], scoutedBy: null, scoutWhy: null,
   };
 }

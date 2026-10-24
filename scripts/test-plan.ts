@@ -8,7 +8,7 @@
 import type { CardItem } from '../src/contract';
 import { fromInsights, fromSearch, insightsEntitySchema, searchEntitySchema } from '../src/qloo/schemas';
 import { eveningIcs, zonedHourToUtc } from '../src/server/calendar';
-import { constraintsOf, vetoLabels } from '../src/server/runner';
+import { constraintsOf, venueView, vetoLabels } from '../src/server/runner';
 import { linksOf } from '../src/truce/links';
 import { FOOD_WEIGHT, NO_CONSTRAINTS, admissible, servedFoods, toPoolItem, withFoods } from '../src/truce/pool';
 import { hoursTonight, tonightAt } from '../src/truce/tonight';
@@ -102,7 +102,7 @@ check('calendar: 19:00 in New York (EDT) is 23:00 UTC', zonedHourToUtc('2026-10-
 check('calendar: across a DST change (New York, EST)', zonedHourToUtc('2026-11-20', 19, 'America/New_York').toISOString() === '2026-11-21T00:00:00.000Z');
 const card = (name: string, slot: CardItem['slot'], extra: Partial<CardItem> = {}): CardItem => ({
   id: name, slot, name, disambiguation: null, imageUrl: null, blurb: null, facts: {}, scores: {}, origins: [], because: {},
-  scout: null, serves: {}, links: [], hours: null, address: null, ...extra,
+  scout: null, serves: {}, venue: null, links: [], hours: null, address: null, ...extra,
 });
 const ics = eveningIcs({
   truceId: 'T1',
@@ -167,6 +167,41 @@ check('group vetoes: labels read plainly and once', vetoLabels(['a', 'b', 'c'], 
   check('foods: no foods named, Qloo alone decides', withFoods(qloo, ids, { seeds: { film: [], restaurant: [], music: [] } }, serves) === qloo);
   const flat = withFoods({ utilities: { found: 0.5, plain: 0.5 }, indifferent: true }, ids, { seeds: { film: [], restaurant: [], music: [] }, foods: [lasagna] }, serves);
   check('foods: someone Qloo finds indifferent still prefers their food', !flat.indifferent && flat.utilities.found! > flat.utilities.plain!);
+}
+
+// --- Venues: ratings, Michelin and booking pages, in the shapes Qloo returns ----------------
+{
+  const booked = fromInsights(
+    insightsEntitySchema.parse({
+      entity_id: '00000000-0000-0000-0000-000000000009',
+      name: 'Test Room',
+      subtype: 'urn:entity:place',
+      properties: { business_rating: 4.400000095367432 },
+      external: {
+        tripadvisor: [{ id: 'd1', rating: 4.5, rating_count: 13365 }],
+        opentable: [{ id: '1', url: 'https://www.opentable.com/restaurant/profile/1' }],
+        resy: [{ id: '2', url: 'https://resy.com/cities/x/venues/test', rating: 4.38, rating_count: 828, min_party_size: 1, max_party_size: 4 }],
+        michelin: [{ id: '3', stars: null }],
+      },
+    }),
+  );
+  check('venue: Tripadvisor first, then Resy, then the business rating', booked.venue?.ratings.map((r) => `${r.source}:${r.value}`).join() === 'Tripadvisor:4.5,Resy:4.4,null:4.4');
+  check('venue: Michelin and party sizes', booked.venue?.michelin === true && booked.venue.party?.max === 4);
+  check('venue: facts the agents can cite', booked.facts.rating === '4.5 on Tripadvisor (13,365 reviews)' && booked.facts.michelin === 'In the Michelin Guide');
+  const links = linksOf(booked, 'restaurant');
+  check('venue: booking links come first, Resy then OpenTable', links[0]?.kind === 'resy' && links[1]?.kind === 'opentable');
+  check('venue: a group of 4 fits, a group of 5 would not', venueView(booked.venue, 4)?.fitsGroup === true && venueView(booked.venue, 5)?.fitsGroup === false);
+  const sneaky = fromInsights(
+    insightsEntitySchema.parse({
+      entity_id: '00000000-0000-0000-0000-000000000010',
+      name: 'Sneaky',
+      subtype: 'urn:entity:place',
+      external: { resy: [{ url: 'javascript:alert(1)' }], opentable: [{ url: 'https://ok.example/x' }] },
+    }),
+  );
+  check('venue: a booking page that is not http(s) is dropped', !linksOf(sneaky, 'restaurant').some((l) => l.kind === 'resy'));
+  check('venue: a place with nothing known has no venue', place.venue === null || place.venue.ratings.length > 0 || place.venue.michelin);
+  check('venue: films have none', film.venue === null);
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nall passed');

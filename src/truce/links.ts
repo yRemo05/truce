@@ -48,6 +48,11 @@ export function linksOf(entity: Entity, slot: Slot): Link[] {
     if (menu && menu !== website) links.push({ kind: 'menu', label: 'Menu', url: menu });
     const phone = phoneNumber(entity.phone);
     if (phone) links.push({ kind: 'phone', label: 'Call', url: `tel:${phone}` });
+    // Booking pages, first: a table is what a plan for tonight needs most.
+    const resy = webUrl(entity.venue?.resy ?? null);
+    const opentable = webUrl(entity.venue?.opentable ?? null);
+    if (opentable) links.unshift({ kind: 'opentable', label: 'Book on OpenTable', url: opentable });
+    if (resy) links.unshift({ kind: 'resy', label: 'Book on Resy', url: resy });
   }
   return links;
 }

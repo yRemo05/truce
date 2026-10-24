@@ -175,7 +175,16 @@ export interface PairView {
   } | null;
 }
 
-export type LinkKind = 'imdb' | 'letterboxd' | 'netflix' | 'spotify' | 'maps' | 'website' | 'menu' | 'phone';
+export type LinkKind = 'imdb' | 'letterboxd' | 'netflix' | 'spotify' | 'maps' | 'website' | 'menu' | 'phone' | 'resy' | 'opentable';
+
+/** A restaurant's standing, from Qloo's outside data: what the plan card can show as badges. */
+export interface VenueView {
+  /** The best-known rating out of 5: Tripadvisor or Resy with its review count, else Qloo's business rating (source null). */
+  rating: { value: number; count: number | null; source: 'Tripadvisor' | 'Resy' | null } | null;
+  michelin: boolean;
+  /** Whether Resy takes bookings for a party this group's size; null when Qloo doesn't say. */
+  fitsGroup: boolean | null;
+}
 
 /** Somewhere to act on a pick: watch, listen, find, book. Always http(s) or tel:. */
 export interface Link {
@@ -205,6 +214,8 @@ export interface CardItem {
   scout: { side: Side; why: string } | null;
   /** Restaurants only: the foods each person named that it serves ({ a: ["Lasagna"] }). Empty otherwise. */
   serves: PerSide<string[]>;
+  /** Restaurants only, when Qloo knows any of it: rating, Michelin Guide, whether it takes a party this size. */
+  venue: VenueView | null;
   links: Link[];
   /** Restaurants only: today's opening hours where they are ("17:00–01:00"), and whether they cover the evening. */
   hours: { today: string | null; openTonight: boolean | null } | null;

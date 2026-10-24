@@ -22,7 +22,8 @@ import { agentBriefOf, type InterpretedBrief } from '../agents/brief';
 import { RuleBrain, type AgentBrain } from '../agents/brain';
 import { ClaudeBrain, type UsageReport } from '../agents/claude-brain';
 import { findHotspot, scout, type Hotspot } from '../agents/scout';
-import type { CardItem, CheckinInput, CheckinResult, LedgerView, Seed, SideInput, StreamErrorCode, StreamEvent } from '../contract';
+import type { CardItem, CheckinInput, CheckinResult, LedgerView, Seed, SideInput, StreamErrorCode, StreamEvent, VenueView } from '../contract';
+import type { Venue } from '../qloo/schemas';
 import type { QlooClient } from '../qloo/client';
 import { locate, tasteWords } from '../qloo/queries';
 import { traced, type CallPhase, type QlooCall } from '../qloo/trace';
@@ -138,6 +139,17 @@ function eveningFromEvents(t: TruceRow): Record<Slot, string> {
   ) as Record<Slot, string>;
 }
 
+/** A restaurant's badges: its best-known rating, a Michelin listing, and whether Resy takes a party this size. */
+export function venueView(venue: Venue | null, people: number): VenueView | null {
+  if (!venue) return null;
+  const rating = venue.ratings[0] ?? null;
+  return {
+    rating,
+    michelin: venue.michelin,
+    fitsGroup: venue.party ? people >= venue.party.min && people <= venue.party.max : null,
+  };
+}
+
 export function cardsOf(pool: Pool, seedNames: Record<string, string>, tonight: Tonight): Record<Slot, CardItem[]> {
   const menus = perSide(pool.members, (s) => menuFor(pool, s, seedNames));
   return Object.fromEntries(
@@ -158,6 +170,7 @@ export function cardsOf(pool: Pool, seedNames: Record<string, string>, tonight: 
           because: perSide(pool.members, (s) => of(s).because),
           scout: item.scoutedBy ? { side: item.scoutedBy, why: item.scoutWhy ?? '' } : null,
           serves: slot === 'restaurant' ? perSide(pool.members, (s) => pool.serves[s]?.[item.id] ?? []) : {},
+          venue: slot === 'restaurant' ? venueView(item.venue, pool.members.length) : null,
           links: linksOf(item, slot),
           hours: slot === 'restaurant' ? hoursTonight(item.hours, tonight.weekday) : null,
           address: item.address,

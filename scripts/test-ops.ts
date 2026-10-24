@@ -71,7 +71,7 @@ const demos = createDemos(stubQloo, null);
 
 const card = (slot: Slot, id: string): CardItem => ({
   id, slot, name: `${id} name`, disambiguation: null, imageUrl: null, blurb: null, facts: {}, scores: { a: 50, b: 50 },
-  origins: ['joint'], because: {}, scout: null, serves: {}, links: [], hours: null, address: null,
+  origins: ['joint'], because: {}, scout: null, serves: {}, venue: null, links: [], hours: null, address: null,
 });
 const side: SideInput = { seeds: { film: [{ id: 'S', name: 'Seed' }], restaurant: [], music: [] }, weights: { film: 1, restaurant: 1, music: 1 } };
 const result = (how: TruceResult['how']): TruceResult => ({
