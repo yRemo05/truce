@@ -7,6 +7,8 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { csrf } from 'hono/csrf';
+import { HTTPException } from 'hono/http-exception';
 import { streamSSE } from 'hono/streaming';
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
@@ -30,15 +32,17 @@ import { QlooError, type QlooClient } from '../qloo/client';
 import { FOOD_FAMILIES, locate, searchEntities, type Locality } from '../qloo/queries';
 import { KIND_OF_SLOT, MAX_PEOPLE, MIN_PEOPLE, SIDES, SLOTS, perSide, type Side, type Slot } from '../truce/types';
 import { eveningIcs } from './calendar';
-import { INTERRUPTED, type Store } from './db';
+import { INTERRUPTED, type SideRow, type Store } from './db';
 import { createDemos } from './demo';
-import { clientOf, createLimiter, type Action } from './limits';
-import { costOf, newId, pairLedger, UserFacingError, type Runner } from './runner';
+import { clientOf, createDaily, createLimiter, type Action } from './limits';
+import { costOf, newId, pairLedger, readyOf, tonightDueOf, UserFacingError, type Runner } from './runner';
 import { createSwaps } from './swaps';
 
 const slot = z.enum(SLOTS);
 const side = z.enum(SIDES);
-const name = z.string().trim().min(1).max(24);
+// People's words go into other people's screens and agents: no control or invisible formatting characters.
+const plain = (max: number) => z.string().trim().min(1).max(max).regex(/^[^\p{Cc}\p{Cf}]+$/u, 'Use plain text, please.');
+const name = plain(24);
 const location = z.string().trim().min(2).max(60);
 
 const pairInput = z
@@ -52,7 +56,7 @@ const pairInput = z
 
 const seed = z.object({
   id: z.string().regex(/^[0-9A-Fa-f-]{36}$/, 'not a Qloo entity id'),
-  name: z.string().trim().min(1).max(120),
+  name: plain(120),
 });
 // A food's tags go into Qloo queries as filters, so only food tags pass.
 const foodTag = z
@@ -61,20 +65,21 @@ const foodTag = z
   .regex(/^urn:tag:[a-z0-9_:.-]+$/, 'not a Qloo tag')
   .refine((id) => FOOD_FAMILIES.some((f) => id.startsWith(f)), 'not a food tag');
 const food = z.object({
-  name: z.string().trim().min(1).max(60),
+  name: plain(60),
   tags: z.array(foodTag).min(1).max(6),
   kind: z.enum(['cuisine', 'dish']),
 });
-const sideInput = z
-  .object({
-    seeds: z.object({ film: z.array(seed).max(3), restaurant: z.array(seed).max(3), music: z.array(seed).max(3) }),
-    weights: z.object({ film: z.number().min(0).max(100), restaurant: z.number().min(0).max(100), music: z.number().min(0).max(100) }),
-    foods: z.array(food).max(3).optional(),
-    brief: z.string().trim().max(BRIEF_MAX).optional(),
-  })
+const sideFields = z.object({
+  seeds: z.object({ film: z.array(seed).max(3), restaurant: z.array(seed).max(3), music: z.array(seed).max(3) }),
+  weights: z.object({ film: z.number().min(0).max(100), restaurant: z.number().min(0).max(100), music: z.number().min(0).max(100) }),
+  foods: z.array(food).max(3).optional(),
+  brief: z.string().trim().max(BRIEF_MAX).optional(),
+});
+const sideInput = sideFields
   // Qloo needs a film, artist or place to read someone's taste from; a food alone isn't one.
   .refine((v) => SLOTS.some((s) => v.seeds[s].length > 0), 'Pick at least one film, artist or restaurant you love.')
   .refine((v) => v.seeds.restaurant.length + (v.foods?.length ?? 0) <= 3, 'Up to three restaurants and foods together.');
+const tonightInput = sideFields.omit({ seeds: true });
 
 const rating = z.enum(['loved', 'fine', 'not_for_me']);
 const checkinInput = z.object({
@@ -94,6 +99,28 @@ const cancelInput = z.object({ side });
 /** Search hits below this popularity percentile are listed after the rest. */
 const OBSCURE = 0.2;
 
+/** Qloo calls (cache misses) search and briefs may make per UTC day, all clients together. */
+const SIDE_QLOO_DAILY = 3000;
+/** Model calls search (reading a food) and briefs may make per UTC day. */
+const SIDE_MODEL_DAILY = 2000;
+/** Instant replays per UTC day, all clients together (each copies about 80 KB), and how long their copies stay. */
+const REPLAYS_DAILY = 3000;
+const REPLAY_DAYS = 3;
+
+/** The page loads only its own scripts; images come from Qloo's CDNs, fonts from Google. */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' https: data: blob:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+].join('; ');
+
 export interface AppDeps {
   store: Store;
   qloo: QlooClient;
@@ -109,28 +136,73 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
   demos.warm();
   const swaps = createSwaps({ store, runner });
   swaps.resume();
+  // Instant-replay copies are a visitor's to play with for a few days, then they go, so they can't fill the disk.
+  const prune = () => {
+    const gone = store.pruneReplays(new Date(Date.now() - REPLAY_DAYS * 86_400_000).toISOString());
+    if (gone) console.log(`pruned ${gone} replayed demo groups`);
+  };
+  prune();
+  setInterval(prune, 60 * 60_000).unref();
+  const replaysToday = createDaily(REPLAYS_DAILY);
 
   const fail = (c: Context, status: number, code: string, message: string, retryAfterSeconds?: number) =>
     c.json<ApiError>({ error: { code, message, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) } }, status as 400);
 
-  const limited = (c: Context, action: Action) => {
+  const demoLocked = (c: Context) => fail(c, 403, 'demo', 'The demo’s people keep their picks. Make your own group to choose yours.');
+
+  /** Rate-limits one client on each of `actions`; the first one over its limit answers 429. */
+  const limited = (c: Context, ...actions: Action[]) => {
     const client = clientOf(c.req.header('x-forwarded-for'), 'local');
-    const wait = limiter.hit(action, client);
-    return wait ? fail(c, 429, 'rate_limited', 'Slow down a little and try again shortly.', wait) : null;
+    for (const action of actions) {
+      const wait = limiter.hit(action, client);
+      if (wait) return fail(c, 429, 'rate_limited', 'Slow down a little and try again shortly.', wait);
+    }
+    return null;
   };
 
+  // Search and briefs spend outside truces: a daily budget of each, and Qloo
+  // keeps twice the truces' reserve back from them, so they can't starve a truce.
+  const qlooSide = createDaily(SIDE_QLOO_DAILY);
+  const modelSide = createDaily(SIDE_MODEL_DAILY);
+  const sideQloo: QlooClient = {
+    quota: () => qloo.quota(),
+    async get(path, params, info) {
+      const left = qloo.quota().monthRemaining;
+      if (qlooSide.left() <= 0 || (left !== null && left < 2 * runner.status().limits.qlooReserve)) {
+        throw new UserFacingError('Search is resting for today. Recorded demos still work.', 503, 'capacity');
+      }
+      const seen: { cached?: boolean } = info ?? {};
+      const body = await qloo.get(path, params, seen);
+      if (!seen.cached) qlooSide.add();
+      return body;
+    },
+  };
+  /** The model for search and briefs, while today's budget lasts; without it, both fall back to plain words. */
+  const sideModel = () => (modelSide.left() > 0 ? anthropic : null);
+
+  // A page on another site can't make a visitor's browser post here (a form or text/plain post skips CORS).
+  // Behind Railway's proxy the request URL says http, so the origin is matched by host.
+  app.use('/api/*', csrf({ origin: (origin, c) => URL.canParse(origin) && new URL(origin).host === c.req.header('host') }));
   app.use('/api/*', bodyLimit({ maxSize: 16 * 1024, onError: (c) => fail(c, 413, 'too_large', 'That request is too large.') }));
   app.use('*', async (c, next) => {
     await next();
     c.header('X-Content-Type-Options', 'nosniff');
     c.header('Referrer-Policy', 'same-origin');
-    // The page is always revalidated, so a deploy reaches open tabs on their next load.
-    if (c.res.headers.get('Content-Type')?.startsWith('text/html')) c.header('Cache-Control', 'no-cache');
+    c.header('X-Frame-Options', 'DENY');
+    c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    if (c.res.headers.get('Content-Type')?.startsWith('text/html')) {
+      c.header('Content-Security-Policy', CSP);
+      // The page is always revalidated, so a deploy reaches open tabs on their next load.
+      c.header('Cache-Control', 'no-cache');
+    }
   });
 
   app.onError((err, c) => {
     if (err instanceof UserFacingError) return fail(c, err.status, err.code, err.message);
     if (err instanceof z.ZodError) return fail(c, 400, 'invalid', err.issues[0]?.message ?? 'Invalid request.');
+    if (err instanceof SyntaxError) return fail(c, 400, 'invalid', 'That request isn’t valid JSON.');
+    // Hono's own refusals (a cross-site post, say) keep their status.
+    if (err instanceof HTTPException && err.status < 500) return fail(c, err.status, 'forbidden', 'That request isn’t allowed.');
     if (err instanceof QlooError && (err.status === 429 || err.retryable)) {
       return fail(c, 503, 'qloo_busy', 'Qloo is busy right now. Try again in a moment.');
     }
@@ -155,7 +227,7 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     let found = localities.get(key);
     if (!found) {
       if (localities.size >= 500) localities.clear();
-      found = locate(qloo, place).catch((err) => {
+      found = locate(sideQloo, place).catch((err) => {
         localities.delete(key);
         console.warn(`locating "${place}" failed: ${(err as Error).message}`);
         return null;
@@ -166,7 +238,7 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
   };
 
   app.get('/api/search', async (c) => {
-    const blocked = limited(c, 'search');
+    const blocked = limited(c, 'search', 'searchDay');
     if (blocked) return blocked;
     const { slot: s, q, near } = z
       .object({ slot, q: z.string().trim().min(1).max(80), near: location.optional() })
@@ -179,9 +251,12 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     // popularity 0) would crowd out the one people mean, so they go last.
     // A restaurant search also looks for foods: "Lazanya" is a dish, not a place.
     const [found, foods] = await Promise.all([
-      searchEntities(qloo, q, KIND_OF_SLOT[s], 8, area ?? undefined),
+      searchEntities(sideQloo, q, KIND_OF_SLOT[s], 8, area ?? undefined),
       s === 'restaurant'
-        ? foodsFor(qloo, anthropic, q, (u) => console.log(`food name read, ≈$${costOf([usageOf(u)]).toFixed(5)}`)).catch((err) => {
+        ? foodsFor(sideQloo, sideModel(), q, (u) => {
+            modelSide.add();
+            console.log(`food name read, ≈$${costOf([usageOf(u)]).toFixed(5)}`);
+          }).catch((err) => {
             console.warn(`foods for "${q}" failed: ${(err as Error).message}`);
             return [];
           })
@@ -227,7 +302,9 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
       members: pair.members,
       names: pair.names,
       location: pair.location,
-      ready: perSide(pair.members, (s) => Boolean(sides[s])),
+      ready: readyOf(store, pair, sides),
+      tonightDue: tonightDueOf(store, pair, sides),
+      demo: pair.demo,
       ledger: pairLedger(store, pair),
       lastTruceId: last?.id ?? null,
       lastTruce: last
@@ -262,45 +339,74 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     if (blocked) return blocked;
     const pair = store.pair(c.req.param('id'));
     if (!pair) return fail(c, 404, 'not_found', 'This truce link does not exist.');
+    if (pair.demo) return demoLocked(c);
     const body = z.object({ location }).parse(await c.req.json());
     store.setLocation(pair.id, body.location);
     return c.json<PairView>(pairView(pair.id)!);
   });
 
-  /** Reads and grounds a brief; null without a model. A failed reading keeps the words for the agent. */
-  async function interpret(text: string, place: string): Promise<InterpretedBrief | null> {
-    if (!anthropic) return null;
+  /**
+   * Reads and grounds a brief; null without a model. A failed reading (or
+   * one past today's budget) keeps the words for the agent. The same words
+   * as last time keep last time's reading, at no cost.
+   */
+  async function interpret(text: string, place: string, before?: SideRow): Promise<InterpretedBrief | null> {
+    if (before?.brief && before.input.brief === text) return before.brief;
+    const model = sideModel();
+    if (!model) return anthropic ? wordsOnly(text) : null;
     try {
       let usage: Anthropic.Usage | null = null;
-      const intent = await readBrief(anthropic, text, (u) => (usage = u));
-      const brief = await groundBrief(qloo, text, intent, await localityOf(place));
+      modelSide.add();
+      const intent = await readBrief(model, text, (u) => (usage = u));
+      const brief = await groundBrief(sideQloo, text, intent, await localityOf(place));
       if (usage) console.log(`brief read, ≈$${costOf([usageOf(usage)]).toFixed(5)}`);
       return brief;
     } catch (err) {
       console.warn(`reading a brief failed: ${(err as Error).message}`);
-      return {
-        view: { text, wishes: [], vetoes: [], note: null, unmatched: [] },
-        rules: { wishTags: { film: [], restaurant: [], music: [] }, excludeTags: { film: [], restaurant: [], music: [] }, excludeEntities: [], maxPrice: null },
-      };
+      return wordsOnly(text);
     }
   }
+  const wordsOnly = (text: string): InterpretedBrief => ({
+    view: { text, wishes: [], vetoes: [], note: null, unmatched: [] },
+    rules: { wishTags: { film: [], restaurant: [], music: [] }, excludeTags: { film: [], restaurant: [], music: [] }, excludeEntities: [], maxPrice: null },
+  });
 
   app.put('/api/pairs/:id/sides/:side', async (c) => {
     const blocked = limited(c, 'side');
     if (blocked) return blocked;
     const pair = store.pair(c.req.param('id'));
     if (!pair) return fail(c, 404, 'not_found', 'This truce link does not exist.');
+    if (pair.demo) return demoLocked(c);
     const s = memberOf(pair.id, c.req.param('side'));
     const input = sideInput.parse(await c.req.json());
     const text = input.brief?.trim() || undefined;
-    const brief = text ? await interpret(text, pair.location) : null;
+    const brief = text ? await interpret(text, pair.location, store.sides(pair.id)[s]) : null;
     store.saveSide(pair.id, s, { ...input, brief: text }, brief);
-    const sides = store.sides(pair.id);
-    return c.json<SideSaved>({ ready: perSide(pair.members, (x) => Boolean(sides[x])), brief: brief?.view ?? null });
+    return c.json<SideSaved>({ ready: readyOf(store, pair, store.sides(pair.id)), brief: brief?.view ?? null });
+  });
+
+  app.put('/api/pairs/:id/sides/:side/tonight', async (c) => {
+    const blocked = limited(c, 'side');
+    if (blocked) return blocked;
+    const pair = store.pair(c.req.param('id'));
+    if (!pair) return fail(c, 404, 'not_found', 'This truce link does not exist.');
+    if (pair.demo) return demoLocked(c);
+    const s = memberOf(pair.id, c.req.param('side'));
+    const saved = store.sides(pair.id)[s];
+    if (!saved) return fail(c, 409, 'not_ready', 'Pick your favourites first.');
+    const input = tonightInput.parse(await c.req.json());
+    if (saved.input.seeds.restaurant.length + (input.foods?.length ?? 0) > 3) {
+      return fail(c, 400, 'invalid', 'Up to three restaurants and foods together.');
+    }
+    const text = input.brief?.trim() || undefined;
+    const brief = text ? await interpret(text, pair.location, saved) : null;
+    // Favourites stay; tonight's answers are replaced, an empty one included.
+    store.saveSide(pair.id, s, { seeds: saved.input.seeds, weights: input.weights, ...(input.foods?.length ? { foods: input.foods } : {}), brief: text }, brief);
+    return c.json<SideSaved>({ ready: readyOf(store, pair, store.sides(pair.id)), brief: brief?.view ?? null });
   });
 
   app.post('/api/pairs/:id/truces', (c) => {
-    const blocked = limited(c, 'truce');
+    const blocked = limited(c, 'truce', 'truceDay');
     if (blocked) return blocked;
     const pair = store.pair(c.req.param('id'));
     if (!pair) return fail(c, 404, 'not_found', 'This truce link does not exist.');
@@ -315,11 +421,20 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     // A recorded run when asked for, or when a live one can't start now; live when there's no recording yet.
     const full = runner.capacity();
     if (replay || full) {
+      if (replaysToday.left() <= 0) return fail(c, 503, 'capacity', 'The demo is resting for today. Try again tomorrow.');
       const copy = demos.replay(store, kind);
-      if (copy) return c.json<DemoStarted>({ ...copy, replay: true }, 201);
+      if (copy) {
+        replaysToday.add();
+        return c.json<DemoStarted>({ ...copy, replay: true }, 201);
+      }
     }
+    const daily = limited(c, 'truceDay');
+    if (daily) return daily;
     const pairId = await demos.create(store, kind);
-    return c.json<DemoStarted>({ pairId, truceId: runner.start(pairId), replay: false }, 201);
+    const truceId = runner.start(pairId);
+    // Only a live demo run, on the demo's own picks, may become the recording others replay.
+    store.markShowcase(truceId);
+    return c.json<DemoStarted>({ pairId, truceId, replay: false }, 201);
   });
 
   app.get('/api/truces/:id/receipts', (c) => {
@@ -418,6 +533,8 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
   });
 
   app.get('/api/truces/:id/stream', (c) => {
+    const blocked = limited(c, 'stream');
+    if (blocked) return blocked;
     const id = c.req.param('id');
     const truce = store.truce(id);
     if (!truce) return fail(c, 404, 'not_found', 'This truce does not exist.');
@@ -448,7 +565,11 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
         if (last !== 'ledger' && last !== 'error') await send(INTERRUPTED);
         return;
       }
-      stream.onAbort(() => following.stop());
+      // Wakes the loop too, so it ends and its ping stops with the connection.
+      stream.onAbort(() => {
+        following.stop();
+        wake?.();
+      });
       const ping = setInterval(() => void stream.write(': ping\n\n'), 15_000);
       try {
         for (const e of following.past) await send(e);

@@ -14,7 +14,8 @@ import { createQlooClient, type QlooCache, type QlooClient } from '../src/qloo/c
 import { describeCall, traced, type QlooCall } from '../src/qloo/trace';
 import { openStore } from '../src/server/db';
 import { createDemos } from '../src/server/demo';
-import { createRunner } from '../src/server/runner';
+import { clientOf, createDaily } from '../src/server/limits';
+import { createRunner, readyOf, tonightDueOf } from '../src/server/runner';
 import type { TruceResult } from '../src/truce/negotiate';
 import { SLOTS, type Slot } from '../src/truce/types';
 
@@ -83,7 +84,7 @@ const result = (how: TruceResult['how']): TruceResult => ({
 });
 let n = 0;
 /** A finished live demo run, recorded, with one made-up earlier evening. */
-function recorded(how: TruceResult['how'], opts: { receipts?: boolean } = {}): string {
+function recorded(how: TruceResult['how'], opts: { receipts?: boolean; live?: boolean } = {}): string {
   n++;
   const pairId = `pair-${n}`;
   const truceId = `truce-${n}`;
@@ -92,6 +93,7 @@ function recorded(how: TruceResult['how'], opts: { receipts?: boolean } = {}): s
   store.saveSide(pairId, 'b', side, null);
   store.createEarlier(`earlier-${n}`, pairId, { a: 0.5, b: 0.5 }, 'a', result('agreed'), { film: 'Old', restaurant: 'Old', music: 'Old' }, '2026-10-01T00:00:00.000Z');
   store.createTruce(truceId, pairId, 'claude', { a: 0.5, b: 0.5 }, 'b');
+  if (opts.live !== false) store.markShowcase(truceId);
   const events: StreamEvent[] = [
     {
       type: 'pool',
@@ -118,6 +120,9 @@ const agreed = recorded('agreed');
 tick();
 recorded('ruled');
 check('replay: a deal is preferred over a later ruling', store.showcaseOf('couple') === agreed);
+tick();
+recorded('agreed', { live: false });
+check('replay: a demo group\'s truce that wasn\'t a live demo run (someone\'s own picks) is never the recording', store.showcaseOf('couple') === agreed);
 
 {
   const copy = demos.replay(store, 'couple')!;
@@ -130,7 +135,49 @@ check('replay: a deal is preferred over a later ruling', store.showcaseOf('coupl
   check('replay: the evening moves to today where it happens', pool.tonight.date === today && pool.tonight.weekday === weekday);
   check('replay: the receipts come along', (store.receiptsOf(copy.truceId) as { calls: unknown[] }).calls.length === 1);
   check('replay: a copy is never itself picked as the recording', store.showcaseOf('couple') === agreed);
-  check('replay: copies don\'t count as truces started', store.startedSince('2000-01-01T00:00:00.000Z') === 3);
+  check('replay: copies don\'t count as truces started', store.startedSince('2000-01-01T00:00:00.000Z') === 4);
+  check('replay: … nor against the daily model cap', store.claudeTrucesSince('2000-01-01T00:00:00.000Z') === 4);
+  check('prune: copies younger than the cutoff stay', store.pruneReplays('2000-01-01T00:00:00.000Z') === 0 && store.pair(copy.pairId) !== null);
+  check('prune: older copies go, whole groups', store.pruneReplays('2999-01-01T00:00:00.000Z') === 1 && store.pair(copy.pairId) === null && store.truce(copy.truceId) === null);
+  check('prune: the recording itself stays', store.truce(agreed) !== null && store.showcaseOf('couple') === agreed);
+}
+
+{
+  // A new evening asks tonight's questions again; a demo group keeps its answers.
+  store.createPair('own', { mode: 'couple', names: ['Ömer', 'Ceren'], location: 'Istanbul' });
+  store.saveSide('own', 'a', side, null);
+  store.saveSide('own', 'b', side, null);
+  const pair = store.pair('own')!;
+  check('tonight: nothing due before the first evening', !tonightDueOf(store, pair, store.sides('own')).a && readyOf(store, pair, store.sides('own')).b === true);
+  tick();
+  store.createTruce('own-1', 'own', 'rules', { a: 0.5, b: 0.5 }, 'a');
+  store.finishTruce('own-1', result('agreed'), { film: 'F1 name', restaurant: 'R1 name', music: 'M1 name' });
+  tick();
+  check('tonight: due for everyone once the group has had an evening', tonightDueOf(store, pair, store.sides('own')).a === true && readyOf(store, pair, store.sides('own')).a === false);
+  store.saveSide('own', 'a', side, null);
+  check('tonight: answering again makes that person ready', readyOf(store, pair, store.sides('own')).a === true && readyOf(store, pair, store.sides('own')).b === false);
+  let code = '';
+  try {
+    createRunner({ store, qloo: stubQloo, anthropic: null, dailyCap: 0, log: () => {} }).start('own');
+  } catch (err) {
+    code = (err as { code?: string }).code ?? '';
+  }
+  check('tonight: a new evening won\'t start until everyone has answered', code === 'not_ready');
+  const demoPair = store.pair('pair-2')!;
+  check('tonight: a demo group never asks again', !Object.values(tonightDueOf(store, demoPair, store.sides('pair-2'))).some(Boolean));
+}
+
+{
+  check('client: an IPv4 address is itself', clientOf('203.0.113.7, 10.0.0.1', 'x') === '203.0.113.7');
+  check('client: an IPv6 address counts by its /64', clientOf('2001:db8:1:2:3:4:5:6', 'x') === '2001:db8:1:2' && clientOf('2001:db8:1:2:ffff::1', 'x') === '2001:db8:1:2');
+  check('client: anything else shares the fallback', clientOf('not-an-ip', 'x') === 'x' && clientOf(undefined, 'x') === 'x');
+  let t = Date.parse('2026-10-24T23:59:00Z');
+  const daily = createDaily(2, () => t);
+  daily.add();
+  daily.add();
+  const spent = daily.left() === 0;
+  t += 2 * 60_000;
+  check('daily: a budget runs out, and starts again the next UTC day', spent && daily.left() === 2);
 }
 
 {

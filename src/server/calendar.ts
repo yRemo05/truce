@@ -37,7 +37,7 @@ export function zonedHourToUtc(date: string, hour: number, timeZone: string): Da
 const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
 /** Escapes a TEXT value: backslash, semicolon, comma and newlines. */
-const escapeText = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+const escapeText = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r\n|\r|\n/g, '\\n');
 
 /** Folds a content line at 74 characters, continuation lines starting with a space. */
 function fold(line: string): string {

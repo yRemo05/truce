@@ -318,7 +318,9 @@ export async function negotiate(
     try {
       raw = await withTimeout(brain.move(view), timeout);
     } catch (err) {
-      emit({ type: 'rejected', turn, side, code: 'agent_failed', reason: `agent failed: ${(err as Error).message}` });
+      // The log is public: the detail (a provider's error can name the account) goes to the server log only.
+      console.warn(`turn ${turn}, ${side}: agent failed: ${(err as Error).message}`);
+      emit({ type: 'rejected', turn, side, code: 'agent_failed', reason: 'agent failed' });
     }
     let checked: Checked = raw ? checkMove(view, raw) : { ok: false, code: 'agent_failed', reason: 'no move' };
     // The words that go with the counter actually played, when the agent wrote them per counter.

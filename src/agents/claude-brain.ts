@@ -28,6 +28,8 @@ import {
 } from './brain';
 
 export const AGENT_MODEL = 'claude-haiku-5-5';
+/** The longest message an agent's turn may post, in characters. */
+const MESSAGE_MAX = 600;
 
 /**
  * The move format, with each slot's item codes as an enum so a counter can
@@ -319,7 +321,8 @@ export class ClaudeBrain implements AgentBrain {
     if (response.stop_reason === 'refusal') throw new Error('the model declined this turn');
     const move = response.parsed_output;
     if (!move) throw new Error(`no parsable move (stop: ${response.stop_reason})`);
-    const mend = (text: string) => mendVoice(text.trim(), [view.nickname, ...view.others.map((o) => o.nickname)]);
+    // Clipped, so a runaway reply can't flood the chat everyone reads.
+    const mend = (text: string) => mendVoice(text.trim().slice(0, MESSAGE_MAX), [view.nickname, ...view.others.map((o) => o.nickname)]);
     return {
       action: move.action,
       counters: move.counters.slice(0, 3).map((c) => ({ ...c, message: mend(c.message) })),

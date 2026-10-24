@@ -20,6 +20,8 @@ import type { AgentBrief } from './brain';
 import { AGENT_MODEL } from './claude-brain';
 
 export const BRIEF_MAX = 280;
+/** Most wishes, avoids and skips one brief grounds in Qloo (one call each); the rest are kept as words. */
+export const GROUNDED_MAX = 8;
 
 /** The tag families a taste word may land in, per slot, best first (id prefixes). */
 const WISH_FAMILIES: Record<Slot, string[]> = {
@@ -117,20 +119,27 @@ export async function groundBrief(qloo: QlooClient, text: string, intent: BriefI
     maxPrice: null,
   };
 
+  // Each one grounded is a Qloo call: at most GROUNDED_MAX for a brief, wishes first.
+  const wishList = intent.wishes.slice(0, 6);
+  const avoidList = intent.avoids.slice(0, Math.min(6, GROUNDED_MAX - wishList.length));
+  const skipList = intent.skips.slice(0, Math.min(6, GROUNDED_MAX - wishList.length - avoidList.length));
+  for (const left of [...intent.wishes.slice(wishList.length), ...intent.avoids.slice(avoidList.length), ...intent.skips.slice(skipList.length)]) {
+    unmatched.push(left.said);
+  }
   await Promise.all([
-    ...intent.wishes.slice(0, 6).map(async (w) => {
+    ...wishList.map(async (w) => {
       const tag = await tasteTag(qloo, w.word, w.slot);
       if (!tag) return unmatched.push(w.said);
       wishes.push({ slot: w.slot, said: w.said, matched: tag.name, kind: 'taste' });
       rules.wishTags[w.slot].push(tag.id);
     }),
-    ...intent.avoids.slice(0, 6).map(async (a) => {
+    ...avoidList.map(async (a) => {
       const tags = await vetoTags(qloo, a.word, a.slot);
       if (!tags.length) return unmatched.push(a.said);
       vetoes.push({ slot: a.slot, said: a.said, matched: tags[0]!.name, kind: 'taste' });
       rules.excludeTags[a.slot].push(...tags.map((t) => t.id));
     }),
-    ...intent.skips.slice(0, 6).map(async (s) => {
+    ...skipList.map(async (s) => {
       const kind = KIND_OF_SLOT[s.slot];
       const [hit] = await searchEntities(qloo, s.title, kind, 1, kind === 'place' && near ? near : undefined);
       if (!hit) return unmatched.push(s.said);

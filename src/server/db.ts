@@ -16,7 +16,7 @@ import type { QlooCache } from '../qloo/client';
 import type { TruceResult } from '../truce/negotiate';
 import { membersOf, type PerSide, type Side, type Slot } from '../truce/types';
 
-const VERSION = 4;
+const VERSION = 5;
 
 /** The last event of a truce cut off by a restart, so every reader sees it end. */
 export const INTERRUPTED: StreamEvent = {
@@ -135,19 +135,40 @@ function migrateFrom2(db: Database.Database) {
 /**
  * Columns added after a table first shipped, created on databases that lack
  * them: a swap's cancel reason (3), a demo group's kind, a truce's Qloo
- * receipts and the recorded truce an instant replay copies (4).
+ * receipts and the recorded truce an instant replay copies (4), and whether a
+ * truce is a live demo run that replays may copy (5).
  */
 const LATE_COLUMNS: [table: string, column: string, type: string][] = [
   ['swaps', 'cancel_reason', "text check (cancel_reason in ('withdrawn', 'superseded'))"],
   ['pairs', 'demo', "text check (demo in ('couple', 'friends'))"],
   ['truces', 'receipts', 'text'],
   ['truces', 'replay_of', 'text'],
+  ['truces', 'showcase', 'integer not null default 0'],
 ];
 function addLateColumns(db: Database.Database) {
   for (const [table, column, type] of LATE_COLUMNS) {
     const has = (db.prepare(`select 1 from pragma_table_info('${table}') where name = ?`).get(column) as unknown) !== undefined;
-    if (!has) db.exec(`alter table ${table} add column ${column} ${type}`);
+    if (has) continue;
+    db.exec(`alter table ${table} add column ${column} ${type}`);
+    // Before the flag, every model-run truce of a demo group was a live demo run.
+    if (column === 'showcase') {
+      db.exec(`update truces set showcase = 1 where earlier = 0 and replay_of is null and brain = 'claude'
+        and pair_id in (select id from pairs where demo is not null)`);
+    }
   }
+}
+
+/** Cached Qloo answers kept: younger than this, and at most this many (the newest). */
+const CACHE_DAYS = 30;
+const CACHE_ROWS = 6000;
+
+/** One person's saved side: favourites and tonight's answers, what was read from their brief, and what their check-ins taught. */
+export interface SideRow {
+  input: SideInput;
+  brief: InterpretedBrief | null;
+  learned: Learned;
+  /** When they last saved it, for telling a new evening's answers from an old one's. */
+  updatedAt: string;
 }
 
 export interface PairRow {
@@ -232,6 +253,7 @@ export function openStore(dataDir: string) {
   db.exec(SCHEMA);
   addLateColumns(db);
   db.pragma(`user_version = ${VERSION}`);
+  let cacheWrites = 0;
 
   const q = {
     insertPair: db.prepare('insert into pairs (id, mode, names, location, demo) values (?, ?, ?, ?, ?)'),
@@ -242,7 +264,7 @@ export function openStore(dataDir: string) {
        on conflict (pair_id, side) do update set input = excluded.input, brief = excluded.brief,
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
     ),
-    sides: db.prepare('select side, input, brief, learned from sides where pair_id = ?'),
+    sides: db.prepare('select side, input, brief, learned, updated_at from sides where pair_id = ?'),
     setLearned: db.prepare('update sides set learned = ? where pair_id = ? and side = ?'),
     insertTruce: db.prepare('insert into truces (id, pair_id, status, brain, alpha, opener) values (?, ?, ?, ?, ?, ?)'),
     insertEarlier: db.prepare(
@@ -261,7 +283,17 @@ export function openStore(dataDir: string) {
       "update truces set status = 'failed', finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') where id = ?",
     ),
     running: db.prepare("select id, events from truces where status = 'running'"),
-    trucesSince: db.prepare("select count(*) as n from truces where brain = 'claude' and created_at >= ?"),
+    // Model-run truces that ran: an instant replay's copy keeps its recording's brain but ran nothing.
+    trucesSince: db.prepare("select count(*) as n from truces where brain = 'claude' and earlier = 0 and replay_of is null and created_at >= ?"),
+    markShowcase: db.prepare('update truces set showcase = 1 where id = ?'),
+    pruneReplays: db.prepare(
+      `delete from pairs where demo is not null and created_at < ?
+         and id in (select pair_id from truces where replay_of is not null)`,
+    ),
+    cacheOld: db.prepare('delete from qloo_cache where created_at < ?'),
+    cacheTrim: db.prepare(
+      'delete from qloo_cache where key in (select key from qloo_cache order by created_at desc limit -1 offset ?)',
+    ),
     // Truces that ran (or are running): not made-up history, not instant replays.
     startedSince: db.prepare('select count(*) as n from truces where earlier = 0 and replay_of is null and created_at >= ?'),
     setReceipts: db.prepare('update truces set receipts = ? where id = ?'),
@@ -269,7 +301,7 @@ export function openStore(dataDir: string) {
     // The recorded truce a demo replays: the latest clean one of that demo, a deal before a ruling.
     showcase: db.prepare(
       `select t.id from truces t join pairs p on p.id = t.pair_id
-       where p.demo = ? and t.status = 'done' and t.earlier = 0 and t.replay_of is null and t.replaced_by is null
+       where p.demo = ? and t.showcase = 1 and t.status = 'done' and t.earlier = 0 and t.replay_of is null and t.replaced_by is null
          and t.brain = 'claude' and t.receipts is not null
          and not exists (select 1 from swaps s where s.truce_id = t.id)
          and not exists (select 1 from checkins c where c.truce_id = t.id)
@@ -390,6 +422,12 @@ export function openStore(dataDir: string) {
       const r = q.receiptsOf.get(id) as { receipts: string | null } | undefined;
       return r?.receipts ? JSON.parse(r.receipts) : null;
     },
+    /** Marks a live demo run: once done, cleanly, it may become the recording replays copy. */
+    markShowcase(id: string) {
+      q.markShowcase.run(id);
+    },
+    /** Deletes instant-replay copies (whole groups) made before a UTC instant; returns how many groups went. */
+    pruneReplays: (beforeIso: string): number => q.pruneReplays.run(beforeIso).changes,
     /** The recorded truce an instant replay of this demo copies, or null before one exists. */
     showcaseOf: (demo: 'couple' | 'friends'): string | null => (q.showcase.get(demo) as { id: string } | undefined)?.id ?? null,
     /** A finished truce copied into another group, as an instant replay of `of`. */
@@ -419,13 +457,14 @@ export function openStore(dataDir: string) {
     saveSide(pairId: string, side: Side, input: SideInput, brief: InterpretedBrief | null) {
       q.upsertSide.run(pairId, side, JSON.stringify(input), brief ? JSON.stringify(brief) : null);
     },
-    sides(pairId: string): PerSide<{ input: SideInput; brief: InterpretedBrief | null; learned: Learned }> {
-      const out: PerSide<{ input: SideInput; brief: InterpretedBrief | null; learned: Learned }> = {};
-      for (const r of q.sides.all(pairId) as { side: Side; input: string; brief: string | null; learned: string }[]) {
+    sides(pairId: string): PerSide<SideRow> {
+      const out: PerSide<SideRow> = {};
+      for (const r of q.sides.all(pairId) as { side: Side; input: string; brief: string | null; learned: string; updated_at: string }[]) {
         out[r.side] = {
           input: JSON.parse(r.input),
           brief: r.brief ? JSON.parse(r.brief) : null,
           learned: { ...emptyLearned(), ...JSON.parse(r.learned) },
+          updatedAt: r.updated_at,
         };
       }
       return out;
@@ -533,7 +572,14 @@ export function openStore(dataDir: string) {
     claudeTrucesSince: (iso: string): number => (q.trucesSince.get(iso) as { n: number }).n,
     qlooCache: {
       get: (key: string) => (q.cacheGet.get(key) as { body: string } | undefined)?.body,
-      set: (key: string, body: string) => void q.cacheSet.run(key, body),
+      set: (key: string, body: string) => {
+        q.cacheSet.run(key, body);
+        // Every so often: drop old answers, then keep only the newest, so the cache can't fill the disk.
+        if (++cacheWrites % 200 === 0) {
+          q.cacheOld.run(new Date(Date.now() - CACHE_DAYS * 86_400_000).toISOString());
+          q.cacheTrim.run(CACHE_ROWS);
+        }
+      },
     } satisfies QlooCache,
   };
 }
