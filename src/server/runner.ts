@@ -50,7 +50,7 @@ import {
 import { hoursTonight, tonightAt, type Tonight } from '../truce/tonight';
 import { SLOTS, at, perSide, type Bundle, type PerSide, type Side, type Slot } from '../truce/types';
 import { normalizeWeights } from '../truce/utility';
-import type { CheckinRow, Learned, PairRow, Store, SwapRow, TruceRow } from './db';
+import type { CheckinRow, Learned, PairRow, SideRow, Store, SwapRow, TruceRow } from './db';
 
 export const newId = () => randomBytes(9).toString('base64url');
 
@@ -511,6 +511,10 @@ export function createRunner(deps: RunnerDeps) {
       if (!pair) throw new UserFacingError('This truce link does not exist.', 404, 'not_found');
       const sides = store.sides(pairId);
       if (pair.members.some((s) => !sides[s])) throw new UserFacingError('Everyone needs to finish their picks first.', 409, 'not_ready');
+      // A new evening asks tonight's questions again; a replan is the same evening.
+      if (!opts.replaces && pair.members.some((s) => at(tonightDueOf(store, pair, sides), s))) {
+        throw new UserFacingError("Everyone answers tonight's questions first.", 409, 'not_ready');
+      }
       const full = capacity();
       if (full) throw new UserFacingError(CAPACITY[full], 503, 'capacity');
       const id = newId();
@@ -607,7 +611,27 @@ export function createRunner(deps: RunnerDeps) {
 export type Runner = ReturnType<typeof createRunner>;
 
 /** Why a swap request or vote was refused (409). */
-export type SwapErrorCode = 'locked' | 'swap_open' | 'swap_used' | 'too_many' | 'not_voter';
+/**
+ * Per person: whether tonight's questions (what matters most, foods, the
+ * brief) are due again. They are once the group has had an evening since that
+ * person last saved: a craving from the last date isn't tonight's. Favourites
+ * stay. The ready-made demo groups keep their people's answers.
+ */
+export function tonightDueOf(store: Store, pair: PairRow, sides: PerSide<SideRow>): PerSide<boolean> {
+  const last = store.trucesOf(pair.id).filter((t) => !t.earlier && t.status !== 'failed').at(-1);
+  return perSide(pair.members, (s) => {
+    const saved = sides[s];
+    return Boolean(!pair.demo && last && saved && saved.updatedAt <= last.createdAt);
+  });
+}
+
+/** Per person: favourites saved and tonight's answers current. */
+export function readyOf(store: Store, pair: PairRow, sides: PerSide<SideRow>): PerSide<boolean> {
+  const due = tonightDueOf(store, pair, sides);
+  return perSide(pair.members, (s) => Boolean(sides[s]) && !at(due, s));
+}
+
+export type SwapErrorCode = 'locked' | 'swap_open' | 'swap_used' | 'too_many' | 'not_voter' | 'nothing_fair';
 
 /** An error whose message is safe and useful to show the person. */
 export class UserFacingError extends Error {

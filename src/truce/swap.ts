@@ -1,7 +1,9 @@
 /**
  * Swaps: changing one item of a decided evening without undoing its fairness.
  *
- * Someone asks for a slot to change, and every request goes to the group: a
+ * Someone asks for a slot to change. If the referee has nothing fair to put
+ * in, they're told at once (and offered a replan) instead of a vote that
+ * can't change anything. Otherwise every request goes to the group: a
  * strict majority, the asker included, must be OK with an alternative they
  * don't see beforehand. A fact (the place is booked, the film can't be
  * watched) is voted on too, so "it can't happen" can't stand in for a taste
@@ -86,6 +88,11 @@ const nash = (e: Evening, u: PerSide<number>) => e.members.reduce((v, s) => v + 
  * (`mustChange`) and no candidate keeps everyone above their minimum, the
  * fairest one left is taken anyway: keeping the item isn't possible, and the
  * ledger makes it up to whoever loses.
+ *
+ * On a taste swap the `asker`'s own minimum doesn't count: giving the item up
+ * is their choice, and what it costs them goes to the ledger as ground given.
+ * Their scores still weigh in the fairness, and the new item has to fit them
+ * at all (a score above zero), or the swap would give them nothing.
  */
 export function fairAlternative(
   e: Evening,
@@ -93,6 +100,7 @@ export function fairAlternative(
   slot: Slot,
   removed: ReadonlySet<string>,
   mustChange: boolean,
+  asker: Side | null = null,
 ): Alternative | null {
   const options = e.items[slot]
     .filter((id) => id !== bundle[slot] && !removed.has(id))
@@ -102,9 +110,9 @@ export function fairAlternative(
       return { id, u, value: nash(e, u), talked: e.talked[slot].has(id) };
     });
   const byFairness = (x: (typeof options)[number], y: (typeof options)[number]) => y.value - x.value;
-  const fair = options
-    .filter((o) => e.members.every((s) => at(o.u, s) >= minimumOf(e, s) - 1e-9))
-    .sort((x, y) => Number(y.talked) - Number(x.talked) || byFairness(x, y));
+  const keeps = (o: (typeof options)[number], s: Side) =>
+    !mustChange && s === asker ? (at(e.utilities, s)[slot][o.id] ?? 0) > 0 : at(o.u, s) >= minimumOf(e, s) - 1e-9;
+  const fair = options.filter((o) => e.members.every((s) => keeps(o, s))).sort((x, y) => Number(y.talked) - Number(x.talked) || byFairness(x, y));
   if (fair[0]) return { id: fair[0].id, u: fair[0].u, belowMinimum: false };
   if (!mustChange) return null;
   const any = [...options].sort(byFairness)[0];

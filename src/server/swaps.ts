@@ -102,6 +102,10 @@ export function swappedAway(swaps: readonly SwapRow[]): string[] {
   ];
 }
 
+/** Whether a taste swap of `slot` asked by `asker` has anything fair to swap in. */
+const tasteRoomFor = (e: Evening, bundle: Bundle, swaps: readonly SwapRow[], slot: Slot, asker: Side) =>
+  fairAlternative(e, bundle, slot, new Set(swappedAway(swaps)), false, asker) !== null;
+
 /**
  * Whether a replan may go ahead without a vote: the last settled swap was an
  * item that can't happen (a fact) with nothing left to put in its place, and
@@ -193,7 +197,7 @@ export function createSwaps(deps: SwapsDeps) {
     const r = truce.result!;
     const slot = swap.slot!;
     const removed = new Set(swappedAway(store.swapsOf(truce.id)));
-    const alternative = fairAlternative(e, r.bundle, slot, removed, isFact(swap.reason!));
+    const alternative = fairAlternative(e, r.bundle, slot, removed, isFact(swap.reason!), swap.side);
     if (!alternative) {
       if (store.resolveSwap(swap.id, 'no_alternative', { scores: swap.scores })) learnDislike(swap, pair);
       return;
@@ -265,7 +269,7 @@ export function createSwaps(deps: SwapsDeps) {
     const bundle = truce.result!.bundle;
     const fact = swap.kind === 'swap' && isFact(swap.reason!);
     const alternative =
-      swap.kind === 'swap' ? fairAlternative(e, bundle, swap.slot!, new Set(swappedAway(store.swapsOf(truce.id))), fact) : null;
+      swap.kind === 'swap' ? fairAlternative(e, bundle, swap.slot!, new Set(swappedAway(store.swapsOf(truce.id))), fact, swap.side) : null;
     const votes = { ...swap.votes };
     for (const s of e.members) {
       if (votes[s]) continue;
@@ -325,6 +329,9 @@ export function createSwaps(deps: SwapsDeps) {
         pair.members,
         (s) => swaps.filter((x) => x.kind === 'swap' && x.side === s && x.status !== 'cancelled' && x.reason && !isFact(x.reason)).length < TASTE_SWAPS_PER_PERSON,
       ),
+      tasteRoom: perSide(pair.members, (s) =>
+        Object.fromEntries(SLOTS.map((slot) => [slot, Boolean(e && decided && tasteRoomFor(e, decided, swaps, slot, s))])) as Record<Slot, boolean>,
+      ),
       needed: majority(pair.members.length),
       voteMinutes: Math.round(voteMs / 60_000),
       replanNow: replanNow(swaps, decided),
@@ -366,6 +373,14 @@ export function createSwaps(deps: SwapsDeps) {
             "You've used your swap for tonight. Something that can't happen (booked, closed, can't watch it) can still go to the group.",
             409,
             'swap_used',
+          );
+        }
+        // A vote that can't change anything isn't worth anyone's time, nor the asker's swap.
+        if (!fact && !tasteRoomFor(e, bundle, swaps, input.slot, input.side)) {
+          throw new UserFacingError(
+            `Nothing left on tonight's list would be fair to everyone else in place of the ${SLOT_WORD[input.slot]}. Plan tonight again instead.`,
+            409,
+            'nothing_fair',
           );
         }
         // A fact goes to the vote too; once it passes, the item has to change (see swapIn).

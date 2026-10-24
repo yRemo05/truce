@@ -376,7 +376,7 @@ export function Decision({ state, truceId, pairId, demoKind, checkedIn, stamp, s
           className={cx(stamp && 'enter')}
         />
       </div>
-      <SwapSheet ask={ask} swaps={swaps} truceId={truceId} onClose={() => setAsk(null)} />
+      <SwapSheet ask={ask} swaps={swaps} truceId={truceId} onClose={() => setAsk(null)} onReplan={() => setAsk({ kind: 'replan' })} />
     </div>
   );
 }

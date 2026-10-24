@@ -17,14 +17,16 @@ interface SwapSheetProps {
   swaps: Swaps;
   truceId: string;
   onClose: () => void;
+  /** Switches the sheet to planning tonight again, when a swap has nothing fair to put in. */
+  onReplan: () => void;
 }
 
 /** "Why swap the film?" or "Plan tonight again?": who's asking, why, and in one line what happens next. */
-export function SwapSheet({ ask, swaps, truceId, onClose }: SwapSheetProps) {
+export function SwapSheet({ ask, swaps, truceId, onClose, onReplan }: SwapSheetProps) {
   const title = ask?.kind === 'swap' ? `Why swap the ${SLOT_NOUN[ask.slot]}?` : 'Plan tonight again?';
   return (
     <Sheet open={ask !== null} onClose={onClose} title={title} icon={KIND_ICON[ask?.kind ?? 'swap']}>
-      {ask && swaps.view && <AskForm ask={ask} view={swaps.view} swaps={swaps} truceId={truceId} onClose={onClose} />}
+      {ask && swaps.view && <AskForm key={ask.kind} ask={ask} view={swaps.view} swaps={swaps} truceId={truceId} onClose={onClose} onReplan={onReplan} />}
     </Sheet>
   );
 }
@@ -35,9 +37,10 @@ interface AskFormProps {
   swaps: Swaps;
   truceId: string;
   onClose: () => void;
+  onReplan: () => void;
 }
 
-function AskForm({ ask, view, swaps, truceId, onClose }: AskFormProps) {
+function AskForm({ ask, view, swaps, truceId, onClose, onReplan }: AskFormProps) {
   const { members, names, letters, mine, items } = useTruceCtx();
   const [, navigate] = useLocation();
   const [side, setSide] = useState<Side | null>(mine);
@@ -45,11 +48,13 @@ function AskForm({ ask, view, swaps, truceId, onClose }: AskFormProps) {
   const call = useSwapCall(swaps);
   const item = ask.kind === 'swap' && view.bundle ? items[view.bundle[ask.slot]] : undefined;
 
+  // A taste reason is off once someone has used their swap, or when nothing fair is left to put in for them.
+  const noRoom = (s: Side) => ask.kind === 'swap' && view.tasteRoom[s]?.[ask.slot] === false;
   const tasteUsed = side !== null && !view.canAsk[side];
-  // Choosing someone who has used their taste swap takes back a taste reason.
+  const tasteStuck = side !== null && !tasteUsed && noRoom(side);
   const choose = (s: Side) => {
     setSide(s);
-    if (reason && !isFact(reason) && !view.canAsk[s]) setReason(null);
+    if (reason && !isFact(reason) && (!view.canAsk[s] || noRoom(s))) setReason(null);
   };
 
   const submit = async (e: FormEvent) => {
@@ -112,7 +117,7 @@ function AskForm({ ask, view, swaps, truceId, onClose }: AskFormProps) {
           <legend className={mine === null ? 'ask__legend' : 'visually-hidden'}>Why?</legend>
           <div className="ask__chips">
             {REASONS[ask.slot].map((r) => (
-              <Chip key={r} pressed={reason === r} disabled={!isFact(r) && tasteUsed} onClick={() => setReason(r)}>
+              <Chip key={r} pressed={reason === r} disabled={!isFact(r) && (tasteUsed || tasteStuck)} onClick={() => setReason(r)}>
                 {reasonLabel(ask.slot, r)}
               </Chip>
             ))}
@@ -122,6 +127,17 @@ function AskForm({ ask, view, swaps, truceId, onClose }: AskFormProps) {
               <Icon name="ban" size={16} />
               <span>{usedLine(side, mine, names)} Something that can’t happen can still go to {other ? nameOf(names, other) : 'the group'}.</span>
             </p>
+          )}
+          {tasteStuck && (
+            <div className="ask__note icon-line icon-line--text small muted">
+              <Icon name="ban" size={16} />
+              <span>
+                Nothing left on tonight’s list would be fair to {other ? nameOf(names, other) : 'everyone else'} in its place.{' '}
+                <Button size="sm" variant="ghost" icon="retry" onClick={onReplan}>
+                  Plan tonight again
+                </Button>
+              </span>
+            </div>
           )}
         </fieldset>
       )}

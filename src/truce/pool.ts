@@ -42,8 +42,13 @@ export interface FoodPick {
  * one that doesn't, and Qloo orders the places within each group.
  */
 export const FOOD_WEIGHT = 0.6;
-/** Places kept per food named. */
-const PER_FOOD = 3;
+/**
+ * Places kept per food named. Five, so someone who asked for a food still
+ * has a few places serving it to fall back on when one is booked or swapped.
+ */
+const PER_FOOD = 5;
+/** Most room the food places add to the restaurant list, on top of `perSlot`. */
+const FOOD_ROOM = 6;
 
 /** What the group's briefs and check-ins rule out tonight. */
 export interface Constraints {
@@ -208,10 +213,17 @@ export async function gatherCandidates(
       Promise.all(forFood.map(({ side, food }) => ask(at(signal, side), PER_FOOD, food.tags))),
       Promise.all([...members.map((s) => ask(at(signal, s))), ask(joint)]),
     ]);
-    // A food is something the person asked for by name, so its places go first in the merge.
-    const origins: Origin[] = [...forFood.map((f) => f.side), ...members, 'joint'];
-    const all = [...foodLists, ...lists];
-    const merged = mergeLists(origins.map((o, i) => [o, all[i]!] as const), perSlot + Math.min(forFood.length, 3));
+    // A food is something the person asked for by name, so its places come on top of the usual list.
+    const merged = mergeLists(
+      forFood.map((f, i) => [f.side, foodLists[i]!] as const),
+      Math.min(forFood.length * PER_FOOD, FOOD_ROOM),
+    );
+    const usual: Origin[] = [...members, 'joint'];
+    for (const item of mergeLists(usual.map((o, i) => [o, lists[i]!] as const), perSlot)) {
+      const seen = merged.find((m) => m.id === item.id);
+      if (!seen) merged.push(item);
+      else for (const o of item.origins) if (!seen.origins.includes(o)) seen.origins.push(o);
+    }
     forFood.forEach(({ food }, i) => {
       for (const e of foodLists[i]!) {
         const item = merged.find((m) => m.id === e.id);

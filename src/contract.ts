@@ -13,6 +13,8 @@
  *   GET  /api/pairs/:id                         → PairView
  *   PATCH /api/pairs/:id       { location }     → PairView   (fix the place after "no restaurants found")
  *   PUT  /api/pairs/:id/sides/:side  SideInput  → SideSaved  (with the brief as the agent understood it)
+ *   PUT  /api/pairs/:id/sides/:side/tonight  TonightInput → SideSaved  (a new evening's answers; favourites stay)
+ *        Demo groups keep their people's picks: both PUTs and the PATCH answer 403 `demo`.
  *   POST /api/pairs/:id/truces                  → { truceId }   (409 until everyone is ready)
  *   POST /api/demo             body DemoInput   → DemoStarted   (a ready-made group: a live truce, or an instant replay)
  *   GET  /api/truces/:id                        → TruceView
@@ -126,6 +128,13 @@ export interface BriefView {
   unmatched: string[];
 }
 
+/**
+ * Tonight's answers alone, for a new evening once favourites are saved: what
+ * matters most, any foods, and the brief. Foods count toward the
+ * restaurant's three with the saved restaurant favourites.
+ */
+export type TonightInput = Pick<SideInput, 'weights' | 'foods' | 'brief'>;
+
 export interface SideSaved {
   ready: PerSide<boolean>;
   /** Null when no brief was given (or no model is configured to read one). */
@@ -163,7 +172,16 @@ export interface PairView {
   members: Side[];
   names: PerSide<string>;
   location: string;
+  /** Favourites saved and tonight's answers current: what starting a truce waits for. */
   ready: PerSide<boolean>;
+  /**
+   * Favourites saved, but the group has had an evening since: tonight's
+   * questions (what matters most, foods, the brief) are asked again, since a
+   * craving from last time isn't tonight's. Never true for a demo group.
+   */
+  tonightDue: PerSide<boolean>;
+  /** A ready-made demo group, whose people's picks can't be changed. */
+  demo: 'couple' | 'friends' | null;
   ledger: LedgerView;
   lastTruceId: string | null;
   lastTruce: {
@@ -441,6 +459,12 @@ export interface SwapsView {
   lock: SwapLock | null;
   /** Per person: whether they still have their taste swap for this evening. */
   canAsk: PerSide<boolean>;
+  /**
+   * Per person and slot: whether the referee has anything fair to put in if
+   * they ask to swap it as a matter of taste. False means a vote couldn't
+   * change anything, so the request is refused up front (plan again instead).
+   */
+  tasteRoom: PerSide<Record<Slot, boolean>>;
   /** Yes votes a vote needs in this group, the asker's included. */
   needed: number;
   /** How long a vote stays open before the agents answer for anyone silent, in minutes. */

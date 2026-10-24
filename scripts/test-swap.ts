@@ -69,6 +69,10 @@ check('tally: open while it still could pass', tally(['a', 'b', 'c', 'd'], { a: 
   const forced = fairAlternative(e, TONIGHT, 'film', none, true);
   check('referee: a film that can\'t happen still changes, to the fairest left (F1), flagged below a minimum', forced?.id === 'F1' && forced.belowMinimum);
   check('referee: nothing left at all is null', fairAlternative(e, TONIGHT, 'music', new Set(['M2']), true) === null);
+  check('referee: the asker\'s own minimum doesn\'t block their taste swap (Maya gives up F2 for F3; Deniz stays above his)', fairAlternative(e, TONIGHT, 'film', none, false, 'a')?.id === 'F3');
+  const mayaZero = { ...e, utilities: { ...e.utilities, a: { ...e.utilities.a!, restaurant: { R1: 0.5, R2: 0, R3: 0.3, R4: 0 } } } };
+  check('referee: … but the new item has to fit the asker at all', fairAlternative(mayaZero, TONIGHT, 'restaurant', new Set(['R3']), false, 'a') === null);
+  check('referee: others\' minimums still hold for the asker\'s swap (Deniz asks for the music; M2 sinks Maya)', fairAlternative(e, TONIGHT, 'music', none, false, 'b') === null);
 
   const alt = fairAlternative(e, TONIGHT, 'restaurant', none, false);
   check('agent: yes when the swap costs its person nothing', agentVote(e, 'swap', 'b', TONIGHT, alt).why === 'no_worse');
@@ -284,9 +288,12 @@ const refused = (fn: () => unknown, code: string) => {
   check('cancel: only the asker can withdraw', refused(() => swaps.cancel(truceId, v.swaps[0]!.id, 'b'), 'not_voter'));
   const c = swaps.cancel(truceId, v.swaps[0]!.id, 'a');
   check('cancel: withdrawn, and the taste swap is theirs again', c.swaps[0]!.status === 'cancelled' && c.swaps[0]!.cancelled === 'withdrawn' && c.canAsk.a === true && c.lock === null);
+  const before = swaps.view(truceId);
+  check('nothing fair: the view says so per person and slot', before.tasteRoom.b?.music === false && before.tasteRoom.a?.film === true);
+  check('nothing fair: refused up front, no vote opened', refused(() => swaps.ask(truceId, { kind: 'swap', side: 'b', slot: 'music', reason: 'not_feeling' }), 'nothing_fair'));
+  check('nothing fair: … and the swap is still theirs', swaps.view(truceId).canAsk.b === true && swaps.view(truceId).swaps.length === 1);
   const passed = swaps.vote(truceId, swaps.ask(truceId, { kind: 'swap', side: 'a', slot: 'film', reason: 'not_feeling' }).swaps[1]!.id, 'b', 'yes');
-  check('no alternative: the group is OK with it, but no film keeps both above their minimum', passed.swaps[1]!.status === 'no_alternative' && passed.bundle?.film === 'F2');
-  check('no alternative: a taste dead end needs a vote to replan', passed.replanNow === false);
+  check('asker: their own minimum doesn\'t block it; Maya gives up F2 for F3', passed.swaps[1]!.status === 'swapped' && passed.bundle?.film === 'F3');
 }
 
 {

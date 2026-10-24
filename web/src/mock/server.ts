@@ -581,6 +581,8 @@ function swapsView(db: Db, t: MockTruce): SwapsView {
     swaps: swapsOf(t),
     lock: lockOf(db, t, pair),
     canAsk: perSide(t.members, (s) => canAskOf(t, s)),
+    // The mock's referee always finds something to put in.
+    tasteRoom: perSide(t.members, () => ({ film: true, restaurant: true, music: true })),
     needed: neededOf(t),
     voteMinutes: VOTE_MS / 60_000,
     replanNow: stuckOf(t),
