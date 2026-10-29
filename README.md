@@ -6,6 +6,8 @@ Truce plans a shared evening (a film, a restaurant and music) for a couple or a 
 
 **Live demo:** https://truce-production.up.railway.app ("Couple demo" or "Friends demo" opens a recorded negotiation at once; "Run it live" starts a real one, about a minute)
 
+You need no key to try it: the hosted demo calls Qloo and Claude with the server's own keys, which never reach the browser, and its [limits](#responsible-data-handling) keep one visitor from using them up. To run your own copy with your own keys, see [Run it yourself](#run-it-yourself).
+
 ---
 
 ## The problem
