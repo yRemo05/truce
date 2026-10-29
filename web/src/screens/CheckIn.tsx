@@ -19,6 +19,7 @@ import type { CardItem, CheckinResult, LedgerView, Rating, Side, Slot, StreamEve
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '@/api';
 import { Avatar, Button, ButtonLink, Chip, ErrorNotice, Icon, InfoTip, LedgerMeter, Notice, Page, SectionHeader, Skeleton, Thumb, type IconName } from '@/ui';
+import { groupInfo, rememberCheckin } from '@/lib/evenings';
 import { EXPLAIN } from '@/lib/glossary';
 import { monograms, nameOf, possessive, type Names } from '@/lib/people';
 import { SLOT_ICON, SLOT_LABEL, SLOTS } from '@/lib/truce';
@@ -134,8 +135,13 @@ export function CheckIn({ truceId, side }: { truceId: string; side: Side }) {
   }, [truceId, attempt]);
 
   const send = useAction(async () => {
-    if (went === null) return;
-    setResult(await api.checkin(truceId, side, { went, ratings: went ? ratings : {} }));
+    if (went === null || !view) return;
+    const input = { went, ratings: went ? ratings : {} };
+    const done = await api.checkin(truceId, side, input);
+    // Saved feedback for My evenings, in this browser only.
+    const rated = (picksOf(view, swaps?.bundle ?? null) ?? []).map((i) => ({ slot: i.slot, id: i.id, name: i.name, imageUrl: i.imageUrl }));
+    rememberCheckin(groupInfo(view, view.pairId), truceId, side, input, rated, done.learned);
+    setResult(done);
   });
 
   if (loadError?.status === 404) return <NotFound what="truce" />;

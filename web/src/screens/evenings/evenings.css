@@ -1,0 +1,529 @@
+/* ---------- My evenings (/evenings) ---------- */
+
+.evenings__head {
+  display: grid;
+  gap: var(--s-4);
+  margin-bottom: var(--s-6);
+}
+.evenings__intro {
+  display: grid;
+  gap: var(--s-1);
+}
+.evenings__intro p {
+  max-width: 38em;
+}
+@media (min-width: 64em) {
+  .evenings__head {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    align-items: end;
+    column-gap: var(--s-6);
+  }
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+@media (max-width: 29.99em) {
+  .stats {
+    gap: var(--s-2);
+  }
+  .stats .stat {
+    padding: var(--s-2) var(--s-3);
+  }
+  .stats .stat__label {
+    font-size: var(--text-xs);
+    gap: var(--s-1);
+  }
+  .stats .stat__value {
+    font-size: 1.5rem;
+    min-height: 2rem;
+  }
+  .stats .stat__hint {
+    font-size: var(--text-xs);
+  }
+}
+
+.evenings__undo {
+  margin-bottom: var(--s-5);
+}
+.evenings__note {
+  margin-top: var(--s-6);
+}
+
+/* Phone: waiting, the groups, loved. Wide: the groups in 1–8, waiting and loved in 9–12. */
+.evenings__grid {
+  row-gap: var(--s-5);
+  align-items: start;
+}
+.evenings__waiting,
+.evenings__groups,
+.evenings__loved {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.evenings__groups {
+  display: grid;
+  gap: var(--s-4);
+}
+@media (min-width: 64em) {
+  .evenings__grid {
+    grid-template-rows: auto 1fr;
+  }
+  .evenings__groups {
+    grid-column: 1 / span 8;
+    grid-row: 1 / span 2;
+  }
+  .evenings__waiting {
+    grid-column: 9 / span 4;
+    grid-row: 1;
+  }
+  .evenings__loved {
+    grid-column: 9 / span 4;
+    grid-row: 2;
+  }
+}
+
+/* ---------- A group ---------- */
+.group {
+  display: grid;
+  gap: var(--s-5);
+  container-type: inline-size;
+}
+.group__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+}
+.group__faces {
+  flex: none;
+  display: inline-flex;
+}
+.group__faces .avatar + .avatar {
+  margin-left: -0.5rem;
+}
+.group__who {
+  flex: 1 1 12rem;
+  min-width: 0;
+  display: grid;
+  gap: 0.125rem;
+}
+.group__title {
+  font-size: var(--text-lg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.125rem var(--s-2);
+}
+.group__meta .icon-line {
+  gap: 0.25rem;
+}
+.group__actions {
+  display: flex;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+.group__body {
+  display: grid;
+  gap: var(--s-5);
+}
+@container (min-width: 38rem) {
+  .group__body {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    column-gap: var(--s-6);
+  }
+}
+.group__now,
+.group__ledger {
+  display: grid;
+  gap: var(--s-3);
+  align-content: start;
+  min-width: 0;
+}
+.group__status {
+  color: var(--foreground);
+}
+.group__status .icon {
+  color: var(--muted-foreground);
+}
+.group__label {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.group__label > .icon {
+  color: var(--muted-foreground);
+}
+.group__label-meta {
+  font-weight: 450;
+}
+.group__plan {
+  display: grid;
+  gap: var(--s-2);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+}
+.group__posters {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-3);
+  max-width: 24rem;
+}
+
+/* ---------- The ledger chart ---------- */
+.lchart {
+  display: grid;
+  gap: var(--s-2);
+  margin: 0;
+}
+.lchart__grid {
+  display: grid;
+  grid-template-columns: minmax(4.25rem, 6rem) minmax(0, 1fr) 5.5rem;
+  column-gap: var(--s-3);
+  align-items: start;
+}
+/* The two headings share the first row: the bars' from the left, the say's from the right, so neither is squeezed into its column. */
+.lchart__head {
+  grid-row: 1;
+  grid-column: 1 / 3;
+}
+.lchart__head--say {
+  grid-column: 2 / 4;
+  justify-self: end;
+}
+.lchart__head {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  min-height: 1.5rem;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+}
+.lchart__names,
+.lchart__say {
+  list-style: none;
+  padding: 0;
+}
+.lchart__names,
+.lchart__plot,
+.lchart__say {
+  grid-row: 2;
+}
+.lchart__name,
+.lchart__share {
+  /* --row: the chart's row height, set by LedgerChart, so names and shares line up with the bars. */
+  height: var(--row);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--text-sm);
+}
+.lchart__name > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lchart__plot {
+  min-width: 0;
+}
+.lchart__focus {
+  display: inline-block;
+  border-radius: var(--radius-sm);
+}
+.lchart__focus svg {
+  overflow: visible;
+  touch-action: pan-y;
+}
+.lchart__band {
+  fill: rgb(233 236 236 / 0.06);
+}
+.lchart__base {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.lchart__bar {
+  fill: var(--p);
+  opacity: 0.7;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.lchart__bar.is-on {
+  opacity: 1;
+}
+.lchart__bar--earlier {
+  fill: transparent;
+  stroke: var(--p);
+  stroke-width: 1.5;
+}
+.lchart__hit {
+  fill: transparent;
+  cursor: pointer;
+}
+.lchart__axis {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-top: 0.125rem;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lchart__axis > :only-child {
+  margin-left: auto;
+}
+.lchart__none {
+  min-height: calc(2 * var(--row));
+  display: flex;
+  align-items: center;
+}
+.lchart__share {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2.25rem;
+}
+.lchart__track {
+  position: relative;
+  height: 0.375rem;
+  border-radius: var(--radius-full);
+  background: var(--track);
+}
+.lchart__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: var(--p);
+  transform-origin: left center;
+  transition: transform 600ms var(--ease-out);
+}
+/* The even share: right of it, more say than an equal split. */
+.lchart__even {
+  position: absolute;
+  left: 50%;
+  top: -0.25rem;
+  bottom: -0.25rem;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--muted-foreground);
+}
+.lchart__share .num {
+  text-align: right;
+  font-weight: 550;
+  color: var(--muted-foreground);
+}
+.lchart__share.is-owed .num {
+  font-weight: 650;
+  color: var(--foreground);
+}
+.lchart__readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s-2);
+  min-height: 3em;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+}
+.lchart__when {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.lchart__what {
+  color: var(--muted-foreground);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lchart__values {
+  flex-basis: 100%;
+}
+.lchart__caption {
+  color: var(--foreground);
+}
+.lchart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1) var(--s-4);
+}
+.lchart__legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.lchart__table summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--muted-foreground);
+  border-radius: var(--radius-sm);
+}
+.lchart__table summary:hover {
+  color: var(--foreground);
+}
+.lchart__scroll {
+  overflow-x: auto;
+  margin-top: var(--s-2);
+}
+.lchart__table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.lchart__table th,
+.lchart__table td {
+  padding: 0.375rem var(--s-2);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-weight: 450;
+  white-space: nowrap;
+}
+.lchart__table thead th,
+.lchart__table tfoot th {
+  font-weight: 600;
+}
+.lchart__table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Waiting on you ---------- */
+.waiting,
+.loved {
+  display: grid;
+  gap: var(--s-4);
+}
+.waiting__list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+}
+.waiting__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--s-3);
+  padding-block: var(--s-3);
+  border-top: 1px solid var(--border);
+}
+.waiting__item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.waiting__icon {
+  margin-top: 0.125rem;
+  color: var(--muted-foreground);
+}
+.waiting__text {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.waiting__title {
+  font-weight: 600;
+}
+.waiting__more {
+  justify-self: start;
+  margin: calc(-1 * var(--s-2)) 0 0 calc(-1 * var(--s-3));
+}
+.waiting__actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+}
+
+/* ---------- Loved ---------- */
+.loved__shelf {
+  display: grid;
+  gap: var(--s-2);
+}
+.loved__title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--text-sm);
+}
+.loved__title > .icon {
+  color: var(--muted-foreground);
+}
+.loved__title .num {
+  font-weight: 450;
+}
+.loved__row {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-4) var(--s-3);
+}
+
+/* ---------- First visit ---------- */
+.empty {
+  display: grid;
+  gap: var(--s-7);
+  padding: var(--s-6);
+}
+@media (min-width: 48em) {
+  .empty {
+    padding: var(--s-8);
+  }
+  .empty--preview {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: center;
+    column-gap: var(--s-9);
+  }
+}
+.empty__copy {
+  display: grid;
+  gap: var(--s-4);
+  justify-items: start;
+}
+.empty__holds {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--s-3);
+}
+.empty__holds li {
+  flex-wrap: nowrap;
+  gap: var(--s-3);
+  align-items: flex-start;
+}
+.empty__glyph {
+  color: var(--primary);
+}
+.empty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+}
+.empty__preview {
+  display: grid;
+  gap: var(--s-3);
+  margin: 0;
+}
+.empty__posters {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+/* The three picks arrive one after another, the middle one set a little higher. */
+.empty__posters > li {
+  animation: rise 420ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 90ms + 120ms);
+  --rise: 10px;
+}
+.empty__posters > li:nth-child(odd) {
+  margin-top: var(--s-4);
+}

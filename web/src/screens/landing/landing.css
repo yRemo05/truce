@@ -1,0 +1,1000 @@
+/*
+ * The landing (screens/Landing.tsx and screens/landing/*). Everything is
+ * prefixed `l-`. Tokens only from styles/tokens.css; the app's own classes
+ * (bubble, sys-pill, scorerow, btn, badge, act-links) are reused, not copied.
+ *
+ * Glass stays cheap: the sticky bar and the hero window are fake glass
+ * (Frost, a pre-blurred photo that never re-blurs); every other card is a
+ * near-solid surface (.l-surface). No backdrop-filter anywhere on this page.
+ */
+
+/* ---------- Page and bar ---------- */
+.page:has(> .l-main) {
+  overflow-x: clip;
+}
+.l-main {
+  display: grid;
+  gap: clamp(4.5rem, 3rem + 6vw, 8rem);
+  padding-top: var(--s-6);
+}
+.page:has(> .l-main) > .topbar {
+  border-bottom-color: var(--glass-edge);
+}
+/* The bar's fake glass: the photo, pre-blurred, under a dark fill so text on it keeps its contrast. */
+.l-nav__frost::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(10 17 16 / 0.6);
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .page:has(> .l-main) > .topbar {
+    background: var(--background);
+  }
+}
+.l-nav__list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  gap: var(--s-1);
+}
+.l-nav__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-h-sm);
+  padding-inline: var(--s-3);
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+  font-size: var(--text-sm);
+  font-weight: 550;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out);
+}
+.l-nav__link:hover {
+  color: var(--foreground);
+  background: rgb(233 236 236 / 0.06);
+}
+.l-nav__icon {
+  padding-inline: var(--s-2);
+}
+.l-nav__icon .icon {
+  width: 20px;
+  height: 20px;
+}
+@media (max-width: 51.99em) {
+  .page:has(> .l-main) .topbar__context {
+    display: none;
+  }
+}
+@media (max-width: 22.99em) {
+  .l-nav__icon {
+    display: none;
+  }
+}
+
+/* ---------- Shared pieces ---------- */
+/* Near-solid glass for every static card on the photo: the photo barely tints through, nothing blurs. */
+.l-surface {
+  border-color: var(--glass-edge);
+  background: rgb(17 23 22 / 0.88);
+  box-shadow: var(--glass-shadow);
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .l-surface {
+    background: var(--card);
+  }
+}
+.l-section {
+  display: grid;
+  gap: var(--s-7);
+  scroll-margin-top: calc(var(--header-h, var(--bar-h)) + var(--s-4));
+}
+.l-section__title {
+  font-size: clamp(1.625rem, 1.25rem + 1.3vw, 2.25rem);
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+.l-section__lede {
+  margin-top: var(--s-3);
+  max-width: 40em;
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+}
+.l-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-1) var(--s-4);
+}
+.l-card-head__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.l-card-head__title > .icon {
+  align-self: center;
+}
+.l-note {
+  margin-top: var(--s-1);
+}
+.l-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+.l-ok {
+  color: var(--primary);
+}
+
+/* A pick's picture at a fixed ratio, or the typeset stand-in. */
+.l-art {
+  position: relative;
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  container-type: inline-size;
+}
+.l-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.l-art--blank {
+  background: linear-gradient(160deg, var(--secondary), var(--muted));
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.l-art__stand-in {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted-foreground);
+}
+.l-art__initial {
+  font-size: 42cqi;
+  font-weight: 600;
+  line-height: 1;
+}
+.l-art__glyph {
+  position: absolute;
+  right: 0.375rem;
+  bottom: 0.375rem;
+}
+
+/* Everyone's fit for a pick, one per line. */
+.l-fits {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.125rem;
+  color: var(--muted-foreground);
+}
+.l-fits strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+/* The evening as three pictures. */
+.l-plan {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-2);
+  width: 100%;
+}
+.l-plan__card {
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: var(--s-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+.l-plan__card .l-art {
+  margin-bottom: 0.25rem;
+}
+.l-plan__kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+.l-plan__name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.6em;
+}
+.l-plan__card .l-fits {
+  font-size: var(--text-xs);
+}
+
+/* ---------- Hero ---------- */
+.l-hero {
+  display: grid;
+  gap: var(--s-8);
+  align-items: center;
+}
+.l-hero__copy {
+  display: grid;
+  gap: var(--s-5);
+  justify-items: start;
+  min-width: 0;
+}
+.l-hero__title {
+  font-size: clamp(2.25rem, 1.45rem + 3.2vw, 3.5rem);
+  font-weight: 650;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  max-width: 13em;
+}
+.l-hero__lede {
+  font-size: 1.0625rem;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+  max-width: 36em;
+}
+.l-hero__note {
+  display: grid;
+  gap: var(--s-1);
+}
+.l-live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--s-1);
+}
+.l-live__buttons {
+  display: inline-flex;
+  gap: var(--s-1);
+}
+@media (min-width: 64em) {
+  .l-hero {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--s-6);
+    min-height: calc(100svh - var(--bar-h) - var(--s-6) - var(--s-7));
+    padding-bottom: var(--s-7);
+  }
+  .l-hero__copy {
+    grid-column: 1 / span 6;
+  }
+  .l-demo {
+    grid-column: 7 / span 6;
+  }
+  .l-hero__lede {
+    font-size: 1.125rem;
+  }
+}
+
+/* The negotiation window: fake glass over the photo, a chat inside. */
+.l-demo {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 30px 60px -30px rgb(0 0 0 / 0.75);
+}
+.l-demo .frost {
+  border-radius: inherit;
+}
+/* The hairline edge, drawn over the frost (an inset shadow on the window itself would sit under it). */
+.l-demo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--glass-edge);
+  pointer-events: none;
+}
+.l-demo__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 3rem;
+  padding: var(--s-1) var(--s-2) var(--s-1) var(--s-4);
+  border-bottom: 1px solid var(--glass-edge);
+  background: rgb(10 17 16 / 0.45);
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.l-demo__people {
+  display: inline-flex;
+}
+.l-demo__people .avatar + .avatar {
+  margin-left: -0.25rem;
+}
+.l-demo__who {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+}
+.l-demo__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.5rem;
+  padding-inline: var(--s-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 550;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  transition:
+    color var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
+}
+.l-demo__status .icon {
+  width: 14px;
+  height: 14px;
+}
+.l-demo__status.is-done {
+  color: var(--primary);
+  border-color: rgb(110 168 163 / 0.45);
+}
+.l-demo__pause {
+  padding-inline: var(--s-2);
+}
+.l-demo__feed {
+  position: relative;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 33rem;
+  overflow: hidden;
+  padding: var(--s-4) var(--s-3) var(--s-3);
+  background-color: rgb(10 17 16 / 0.5);
+  background-image: radial-gradient(rgb(233 236 236 / 0.035) 1px, transparent 1.2px);
+  background-size: 18px 18px;
+  /* Older messages fade out under the bar instead of being cut. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 3rem);
+  mask-image: linear-gradient(to bottom, transparent, #000 3rem);
+}
+@media (min-width: 64em) {
+  .l-demo__feed {
+    height: clamp(33rem, 100svh - 20rem, 38rem);
+  }
+}
+.l-demo__scroll {
+  display: grid;
+  gap: var(--s-2);
+}
+.l-demo__scroll .bubble-row.is-first:not(:first-child) {
+  margin-top: var(--s-2);
+}
+.l-demo__scroll .bubble__text {
+  font-size: var(--text-sm);
+}
+.l-demo__gap {
+  display: flex;
+  justify-content: center;
+  margin-block: var(--s-1);
+}
+.l-demo__gap .sys-pill {
+  align-items: center;
+}
+.l-demo__deal {
+  display: grid;
+  justify-items: center;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+}
+.l-demo__caption {
+  padding: var(--s-2) var(--s-4);
+  border-top: 1px solid var(--glass-edge);
+  background: rgb(10 17 16 / 0.45);
+  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+.l-demo__skel-bubble {
+  margin-left: calc(1.375rem + var(--s-2));
+}
+.l-demo__skel-bubble .skeleton,
+.l-demo__skel-plan .skeleton {
+  border-radius: var(--radius-lg);
+}
+.l-demo__skel-plan {
+  height: 17rem;
+  margin-top: var(--s-4);
+}
+@media (max-width: 29.99em) {
+  .l-demo__feed {
+    height: 31rem;
+    padding-inline: var(--s-2);
+  }
+  .l-demo__bar {
+    padding-left: var(--s-3);
+  }
+  .l-demo__skel-plan {
+    height: 13rem;
+  }
+}
+
+/* ---------- The problem ---------- */
+.l-tally {
+  display: grid;
+  gap: var(--s-4);
+}
+.l-tally__head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-4);
+}
+.l-tally__title {
+  font-weight: 600;
+}
+.l-tally__row {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  gap: 0.375rem;
+}
+.l-tally__night .avatar {
+  --av: 2rem;
+  box-shadow: none;
+}
+/* The one evening that went the other way stands out by shape too, not by colour alone. */
+.l-tally__night.p-a .avatar {
+  outline: 2px solid var(--person-a);
+  outline-offset: 2px;
+}
+.l-tally__sum {
+  color: var(--muted-foreground);
+}
+.l-tally__sum strong {
+  color: var(--foreground);
+  font-size: var(--text-xl);
+  font-weight: 650;
+}
+@media (min-width: 64em) {
+  .l-problem {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--s-6);
+    align-items: center;
+  }
+  .l-problem > .l-section__head {
+    grid-column: 1 / span 6;
+  }
+  .l-problem > .l-tally {
+    grid-column: 8 / span 5;
+  }
+  .l-tally__night .avatar {
+    --av: 2.375rem;
+  }
+}
+
+/* ---------- How it works ---------- */
+.l-steps {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--s-4);
+}
+.l-step {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: var(--s-4);
+}
+.l-step__text {
+  display: grid;
+  gap: var(--s-1);
+  align-content: start;
+}
+.l-step__title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+.l-step__n {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-full);
+  background: var(--secondary);
+  color: var(--primary);
+  font-size: var(--text-xs);
+  font-weight: 650;
+}
+.l-step__text > p {
+  padding-left: calc(1.5rem + var(--s-2));
+}
+/* The piece of interface: a quiet inset panel, its content centred in what's left of the card. */
+.l-frag {
+  display: grid;
+  align-content: center;
+  padding: var(--s-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--chat-bg);
+  min-width: 0;
+}
+@media (min-width: 45em) {
+  .l-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .l-step:last-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (min-width: 64em) {
+  .l-steps {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+  .l-step {
+    grid-column: span 4;
+  }
+  .l-step.l-step--wide {
+    grid-column: span 7;
+  }
+  .l-step:last-child {
+    grid-column: span 5;
+  }
+}
+
+.l-fav {
+  display: grid;
+  gap: var(--s-3);
+}
+.l-fav__who {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--text-sm);
+  font-weight: 550;
+}
+.l-fav__list,
+.l-brief__tags {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+.l-fav__found {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.l-brief {
+  display: grid;
+  gap: var(--s-3);
+}
+.l-brief__note {
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  font-size: var(--text-sm);
+}
+.l-brief__as {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.l-scout {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--s-3);
+}
+.l-scout li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+.l-scout .voice {
+  flex: none;
+  min-width: 4.25rem;
+  justify-content: center;
+}
+.l-place {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: var(--s-3) var(--s-4);
+  align-items: start;
+}
+.l-place__what {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.l-place__name {
+  font-weight: 600;
+  font-size: var(--text-lg);
+  line-height: 1.25;
+}
+.l-place__act {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--s-3);
+}
+.l-place__act .l-fits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+.l-place__act .act-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+@media (min-width: 30em) {
+  .l-place {
+    grid-template-columns: 6rem minmax(0, 1fr);
+  }
+}
+.l-after {
+  display: grid;
+  gap: var(--s-3);
+}
+.l-after__line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+}
+.l-after__line > .icon {
+  margin-top: 0.125rem;
+}
+.l-after__line .badge {
+  margin-left: var(--s-1);
+  vertical-align: 1px;
+}
+.l-after__rates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* ---------- Why Qloo ---------- */
+.l-qloo {
+  display: grid;
+  gap: var(--s-4);
+  align-items: start;
+}
+.l-qloo__side {
+  display: grid;
+  gap: var(--s-4);
+}
+@media (min-width: 64em) {
+  .l-qloo {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--s-4);
+    align-items: stretch;
+  }
+  .l-short {
+    grid-column: 1 / span 7;
+  }
+  .l-qloo__side {
+    grid-column: 8 / span 5;
+    grid-template-rows: repeat(3, auto);
+    align-content: space-between;
+  }
+}
+.l-short {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--s-3);
+}
+/* Rows share the card's height evenly, so it ends level with the column beside it. */
+.l-short__rows {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-auto-rows: 1fr;
+}
+.l-short__row {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  grid-template-areas:
+    'art name'
+    'art meters';
+  gap: var(--s-1) var(--s-3);
+  align-items: center;
+  padding: var(--s-2);
+  border-top: 1px solid var(--border);
+}
+.l-short__row:first-child {
+  border-top: 0;
+}
+.l-short__row.is-bridge {
+  border-radius: var(--radius-md);
+  background: rgb(110 168 163 / 0.09);
+  box-shadow: inset 0 0 0 1px rgb(110 168 163 / 0.35);
+}
+.l-short__row.is-bridge + .l-short__row {
+  border-top-color: transparent;
+}
+.l-short__art {
+  grid-area: art;
+}
+.l-short__name {
+  grid-area: name;
+  min-width: 0;
+}
+.l-short__name > p:first-child {
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.l-short__name > p + p {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.l-short__meters {
+  grid-area: meters;
+  display: grid;
+  gap: 0.25rem;
+}
+.l-short__meters .meter {
+  grid-template-columns: 3.25rem minmax(0, 1fr) 1.75rem;
+}
+@media (min-width: 45em) {
+  .l-short__row {
+    grid-template-columns: 2.75rem minmax(0, 1fr) minmax(12rem, 16rem);
+    grid-template-areas: 'art name meters';
+  }
+}
+.l-tile {
+  display: grid;
+  gap: var(--s-3);
+  align-content: start;
+}
+.l-cross {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+}
+.l-cross__art {
+  flex: none;
+  width: 4rem;
+}
+.l-cross__text {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.l-words,
+.l-calls {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+.l-words li {
+  display: grid;
+  grid-template-columns: 8.5rem auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.125rem var(--s-2);
+}
+.l-words__said {
+  font-size: var(--text-sm);
+  font-weight: 550;
+}
+@media (max-width: 29.99em) {
+  .l-words li {
+    grid-template-columns: 8.5rem auto minmax(0, 1fr);
+  }
+  .l-words li > :last-child {
+    grid-column: 3;
+  }
+}
+.l-calls li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--s-2);
+}
+.l-calls__what {
+  display: grid;
+  font-size: var(--text-sm);
+  line-height: 1.35;
+}
+.l-calls__what .mono {
+  font-size: var(--text-xs);
+}
+
+/* ---------- Fairness ---------- */
+.l-fair {
+  display: grid;
+  gap: var(--s-7);
+  align-items: start;
+}
+.l-rules {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--s-5);
+}
+.l-rule {
+  display: flex;
+  gap: var(--s-3);
+}
+.l-rule__icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  background: var(--secondary);
+  color: var(--primary);
+}
+.l-rule__title {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.4;
+  min-height: 1.5rem;
+}
+.l-ledger {
+  display: grid;
+  gap: var(--s-4);
+}
+@media (min-width: 64em) {
+  .l-fair {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--s-6);
+  }
+  .l-rules {
+    grid-column: 1 / span 5;
+  }
+  .l-ledger {
+    grid-column: 6 / span 7;
+  }
+}
+
+/* The ledger chart: hand-built SVG, text in text colours, marks in each person's colour. */
+.l-chart {
+  display: grid;
+  gap: var(--s-2);
+}
+.l-chart__legend {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  gap: var(--s-4);
+  color: var(--muted-foreground);
+}
+.l-chart__plot {
+  display: grid;
+  gap: var(--s-2);
+  min-width: 0;
+  border-radius: var(--radius-md);
+}
+.l-chart__plot:focus-visible {
+  outline-offset: 4px;
+}
+.l-chart__plot svg {
+  overflow: visible;
+  touch-action: pan-y;
+}
+.l-chart__title {
+  fill: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+}
+.l-chart__tick {
+  fill: var(--muted-foreground);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.l-chart__x {
+  fill: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 550;
+}
+.l-chart__x.is-next {
+  fill: var(--foreground);
+  font-weight: 650;
+}
+.l-chart__grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.l-chart__grid.is-mid,
+.l-chart__grid.is-base {
+  stroke: var(--accent);
+}
+.l-chart__line {
+  fill: none;
+  stroke: var(--p);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.l-chart__dot {
+  fill: var(--p);
+  stroke: var(--card);
+  stroke-width: 2;
+  transition: r var(--dur-fast) var(--ease-out);
+}
+.l-chart__col {
+  fill: var(--p);
+}
+.l-chart__end {
+  fill: var(--foreground);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.l-chart__band {
+  fill: rgb(233 236 236 / 0.05);
+}
+/* The picked evening, read out under the chart (hover or arrow keys); a quiet hint until then. */
+.l-chart__tip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem var(--s-3);
+  min-height: 2.75em;
+  align-content: start;
+  color: var(--muted-foreground);
+}
+.l-chart__tip strong,
+.l-chart__tip b {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.l-chart__tip:not(.is-on)::before {
+  content: 'Point at an evening, or focus the chart and use the arrow keys, to read its numbers.';
+}
+@media (hover: none) {
+  .l-chart__tip:not(.is-on)::before {
+    content: 'Tap an evening to read its numbers.';
+  }
+}
+
+/* ---------- Closing band ---------- */
+.l-end {
+  display: grid;
+  gap: var(--s-5);
+  padding: var(--s-7) var(--card-pad);
+}
+@media (min-width: 64em) {
+  .l-end {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--s-8);
+    padding: var(--s-8);
+  }
+  .l-end > .notice {
+    grid-column: 1 / -1;
+  }
+}

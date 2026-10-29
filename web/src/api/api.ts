@@ -8,6 +8,7 @@ import type {
   PairView,
   ReceiptsView,
   SearchResult,
+  ShowcaseView,
   Side,
   SideInput,
   SideSaved,
@@ -73,6 +74,8 @@ export interface Api {
   startTruce(pairId: string): Promise<{ truceId: string }>;
   /** A ready-made group: an instant replay of a recorded run with `replay`, else live (the server may still replay when busy). */
   demo(kind: DemoInput['kind'], replay?: boolean): Promise<DemoStarted>;
+  /** The demo's recorded run as the landing shows it: the plan, the pool and the first messages. 404 until there is one. */
+  showcase(kind: DemoInput['kind']): Promise<ShowcaseView>;
   getTruce(id: string): Promise<TruceView>;
   /** Every Qloo call the truce made, and one of them opened up. */
   receipts(truceId: string): Promise<ReceiptsView>;

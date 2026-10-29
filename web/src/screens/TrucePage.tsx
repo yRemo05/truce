@@ -38,6 +38,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { Badge, Button, ButtonLink, cx, ErrorNotice, Icon, InfoTip, Notice, Page, PairNames, Spinner } from '@/ui';
 import { useDemo, wasBusyReplay, type DemoKind } from '@/lib/demo';
+import { groupInfo, rememberGroup } from '@/lib/evenings';
 import { dayMonth } from '@/lib/format';
 import { EXPLAIN } from '@/lib/glossary';
 import { mySide } from '@/lib/mine';
@@ -248,6 +249,11 @@ export function TrucePage({ truceId }: { truceId: string }) {
       },
     [meta, state.items, state.turns, state.brain],
   );
+
+  // Remembered for My evenings, in this browser only.
+  useEffect(() => {
+    if (meta) rememberGroup(groupInfo(meta, meta.pairId));
+  }, [meta]);
 
   const { feed } = state;
   const done = state.phase === 'done' && state.result !== null;

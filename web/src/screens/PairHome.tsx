@@ -44,6 +44,7 @@ import {
 import { useDemo } from '@/lib/demo';
 import { isPassMode, withPass } from '@/lib/flow';
 import { EXPLAIN } from '@/lib/glossary';
+import { groupInfo, rememberGroup } from '@/lib/evenings';
 import { dayMonth } from '@/lib/format';
 import { groupNames, listNames, modeLabel, monograms, nameOf, possessive, type Names } from '@/lib/people';
 import { absolute } from '@/lib/share';
@@ -277,6 +278,10 @@ export function PairHome({ pairId }: { pairId: string }) {
   // Poll while someone is still picking, a truce runs, or check-ins are due on other phones.
   const settled = Boolean(pair && pair.members.every((s) => pair.ready[s]) && !running && !checkinDue && !openSwap);
   useEffect(() => setPoll(!settled), [settled]);
+  // Remembered for My evenings, in this browser only.
+  useEffect(() => {
+    if (pair) rememberGroup(groupInfo(pair, pair.id));
+  }, [pair]);
 
   if (error?.status === 404) return <NotFound what="pair" />;
   const letters = pair ? monograms(pair.names, pair.members) : {};

@@ -20,6 +20,7 @@ export const api: Api = {
   saveTonight: async (...args) => (await load()).saveTonight(...args),
   startTruce: async (...args) => (await load()).startTruce(...args),
   demo: async (...args) => (await load()).demo(...args),
+  showcase: async (...args) => (await load()).showcase(...args),
   getTruce: async (...args) => (await load()).getTruce(...args),
   receipts: async (...args) => (await load()).receipts(...args),
   checkin: async (...args) => (await load()).checkin(...args),

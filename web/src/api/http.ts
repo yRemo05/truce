@@ -39,6 +39,7 @@ export const httpApi: Api = {
     request(`/api/pairs/${encodeURIComponent(pairId)}/sides/${side}/tonight`, json('PUT', input)),
   startTruce: (pairId) => request(`/api/pairs/${encodeURIComponent(pairId)}/truces`, json('POST')),
   demo: (kind, replay) => request('/api/demo', json('POST', { kind, ...(replay ? { replay: true } : {}) })),
+  showcase: (kind) => request(`/api/showcase/${kind}`),
   getTruce: (id) => request(`/api/truces/${encodeURIComponent(id)}`),
   receipts: (truceId) => request(`/api/truces/${encodeURIComponent(truceId)}/receipts`),
   checkin: (truceId, side, input) =>

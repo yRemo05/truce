@@ -32,6 +32,7 @@ import type {
   SearchHit,
   Seed,
   Side,
+  ShowcaseView,
   SideInput,
   Slot,
   SwapLock,
@@ -773,6 +774,50 @@ export const mockApi: Api = {
     return { pairId: pair.id, truceId, replay };
   },
 
+  // The demo's "recording" as the landing shows it: the mock's own script, never stored. `?noshowcase` answers 404, like a server with no recording yet.
+  async showcase(kind) {
+    await wait(250);
+    if (new URLSearchParams(location.search).has('noshowcase')) throw new ApiError(404, 'not_found', 'No recorded run of this demo yet.');
+    const pair = demoPair(kind);
+    const before = ledgerOf(pair, []);
+    const { timeline, result, items } = buildTimeline({
+      mode: pair.mode,
+      members: pair.members,
+      names: pair.names,
+      location: pair.location,
+      sides: perSide(pair.members, (s) => pair.sides[s]!.input),
+      briefs: perSide(pair.members, (s) => pair.sides[s]!.brief),
+      alpha: before.alpha,
+      opener: pair.members[0]!,
+      variant: 'deal',
+      strikeAt: null,
+      brain: 'claude',
+      ledgerAfter: () => ({ type: 'ledger', before: { alpha: before.alpha, tilt: before.tilt }, after: { alpha: before.alpha, tilt: before.tilt, owed: before.owed } }),
+    });
+    const moves: ShowcaseView['moves'] = [];
+    for (const { event: e } of timeline) {
+      if (moves.length >= 6) break;
+      if (e.type === 'move') moves.push({ side: e.side, action: e.action, message: e.message });
+      else if (e.type === 'declined') moves.push({ side: e.side, action: 'declined', message: e.message });
+    }
+    return {
+      kind,
+      mode: pair.mode,
+      members: pair.members,
+      names: pair.names,
+      location: pair.location,
+      how: result.how,
+      plan: bySlot((slot) => items[slot].find((i) => i.id === result.bundle[slot])!),
+      pool: bySlot((slot) =>
+        [...items[slot]]
+          .sort((x, y) => Number(!!y.imageUrl) - Number(!!x.imageUrl))
+          .slice(0, 8)
+          .map(({ slot: sl, name, imageUrl, disambiguation, scores }) => ({ slot: sl, name, imageUrl, disambiguation, scores })),
+      ),
+      moves,
+    };
+  },
+
   // The mock keeps no Qloo calls: its truces show no receipts, like a truce from before they were kept.
   async receipts() {
     await wait(150);
@@ -981,3 +1026,7 @@ export const mockApi: Api = {
     };
   },
 };
+
+/** For mock/sample.ts only (/evenings?sample): the store and the truce maker, to set up groups in every state. */
+export const internals = { read, write, start, demoPair, newId, seed, poolOf, bundleOf, endOf, DEMOS };
+export type { DemoPerson, MockPair, MockTruce };

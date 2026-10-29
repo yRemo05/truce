@@ -23,6 +23,7 @@ import { IconSprite } from '@/ui';
 import { isSide } from '@/lib/people';
 import { Handoff } from '@/screens/Handoff';
 import { CheckIn } from '@/screens/CheckIn';
+import { Evenings } from '@/screens/Evenings';
 import { HowToPlay } from '@/screens/HowToPlay';
 import { Landing } from '@/screens/Landing';
 import { NewPair } from '@/screens/NewPair';
@@ -47,6 +48,7 @@ export function App() {
       <Switch>
         <Route path="/" component={Landing} />
         <Route path="/new" component={NewPair} />
+        <Route path="/evenings" component={Evenings} />
         <Route path="/p/:pairId/play">{(p) => <HowToPlay pairId={p.pairId} />}</Route>
         <Route path="/p/:pairId/handoff/:side">{(p) => (isSide(p.side) ? <Handoff key={p.side} pairId={p.pairId} side={p.side} /> : <NotFound />)}</Route>
         <Route path="/p/:pairId/:side">

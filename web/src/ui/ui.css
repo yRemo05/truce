@@ -1067,3 +1067,218 @@ html:has(.sheet[open]) {
     padding-bottom: var(--s-5);
   }
 }
+
+/* ---------- Bar: My evenings ---------- */
+.topbar__nav {
+  flex: none;
+  margin-left: auto;
+}
+.topbar__actions + .topbar__nav {
+  margin-left: 0;
+}
+.topbar__link {
+  color: var(--muted-foreground);
+}
+.topbar__link:hover,
+.topbar__link.is-here {
+  color: var(--foreground);
+}
+.topbar__link.is-here {
+  --b-bg: var(--secondary);
+}
+
+/* ---------- Thumb that fills its column, at a poster's 3:4 ---------- */
+.thumb--fill {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--radius-md);
+}
+.thumb--fill.skeleton {
+  display: block;
+}
+
+/* ---------- Poster: a pick led by its picture ---------- */
+.poster {
+  display: grid;
+  gap: var(--s-2);
+  align-content: start;
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+}
+.poster--link {
+  border-radius: var(--radius-md);
+}
+.poster--link .thumb {
+  transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+@media (hover: hover) {
+  .poster--link:hover .thumb {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px -14px rgb(0 0 0 / 0.8), 0 0 0 1px var(--glass-edge);
+  }
+}
+.poster--link:active .thumb {
+  transform: scale(0.98);
+}
+.poster--link:focus-visible {
+  outline-offset: 4px;
+}
+.poster__caption {
+  display: grid;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.poster__slot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  font-size: var(--text-xs);
+  color: var(--muted-foreground);
+}
+.poster__name {
+  font-size: var(--text-sm);
+  font-weight: 550;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.poster--link:hover .poster__name {
+  text-decoration: underline;
+  text-decoration-color: rgb(233 236 236 / 0.4);
+  text-underline-offset: 0.2em;
+}
+.poster__meta {
+  display: grid;
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  color: var(--muted-foreground);
+}
+/* One line per part (who, when): long names end in an ellipsis rather than pushing the row. */
+.poster__meta > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Stat tile ---------- */
+.stat {
+  display: grid;
+  align-content: start;
+  gap: 0.125rem;
+  min-width: 0;
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+.stat dd {
+  margin: 0;
+}
+.stat__label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: var(--text-sm);
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat__label .icon {
+  flex: none;
+}
+/* Proportional figures: a lone big number, not a column. */
+.stat__value {
+  min-height: 2.25rem;
+  display: flex;
+  align-items: center;
+  font-size: 1.75rem;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.stat__hint {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stat__short {
+  display: none;
+}
+@media (max-width: 29.99em) {
+  .stat__long {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .stat__short {
+    display: inline;
+  }
+  .stat__hint {
+    display: none;
+  }
+}
+
+/* ---------- Stage strip ---------- */
+.stages {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  gap: 3px;
+  container-type: inline-size;
+}
+.stage {
+  flex: 1 1 0;
+  display: grid;
+  gap: 0.375rem;
+  min-width: 0;
+}
+.stage__bar {
+  height: 0.375rem;
+  border-radius: var(--radius-full);
+  background: var(--track);
+}
+.stage--done .stage__bar {
+  background: var(--primary);
+}
+/* Under way: half filled, so "now" reads without colour alone (the label is bold too). */
+.stage--now .stage__bar {
+  background: linear-gradient(90deg, var(--primary) 50%, var(--track) 50%);
+}
+.stage__label {
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stage--now .stage__label {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.stage__short {
+  display: none;
+}
+/* Short labels whenever the strip is narrow, on a phone or in a narrow card column. */
+@container (max-width: 34rem) {
+  .stage__long {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .stage__short {
+    display: inline;
+  }
+}

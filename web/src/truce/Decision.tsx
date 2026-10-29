@@ -27,6 +27,7 @@ import type { CardItem, PerSide, Side, SwapLock, SwapsView } from '@contract';
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
 import { Badge, Button, ButtonLink, cx, ErrorNotice, Icon, InfoTip, LedgerMeter, PairNames, ScoreMeter, SectionHeader, Skeleton, type IconName } from '@/ui';
+import { rememberPlan } from '@/lib/evenings';
 import { eveningLabel } from '@/lib/format';
 import { EXPLAIN } from '@/lib/glossary';
 import { agentOf, groupNames, nameOf, possessive } from '@/lib/people';
@@ -350,6 +351,13 @@ interface DecisionProps {
 export function Decision({ state, truceId, pairId, demoKind, demo, checkedIn, stamp, swaps, onFollow }: DecisionProps) {
   const { names, letters, members } = useTruceCtx();
   const [ask, setAsk] = useState<Ask | null>(null);
+  // The evening as it stands, remembered for My evenings in this browser only.
+  const bundle = swaps.view?.bundle ?? state.result?.bundle ?? null;
+  const picks = bundle ? SLOTS.map((s) => state.items[bundle[s]]).filter((x): x is CardItem => Boolean(x)) : [];
+  const pickKey = picks.map((i) => i.id).join();
+  useEffect(() => {
+    if (picks.length) rememberPlan(truceId, pairId, picks.map((i) => ({ slot: i.slot, id: i.id, name: i.name, imageUrl: i.imageUrl })));
+  }, [truceId, pairId, pickKey]); // the picks, named by their ids
   if (!state.result) {
     if (state.error) return null;
     return (

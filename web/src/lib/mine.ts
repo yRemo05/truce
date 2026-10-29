@@ -27,3 +27,12 @@ export function mySide(pairId: string): Side | null {
     return null;
   }
 }
+
+/** Forgets which person this browser filled in for a group. */
+export function forgetSide(pairId: string) {
+  try {
+    localStorage.removeItem(key(pairId));
+  } catch {
+    /* nothing was kept */
+  }
+}
