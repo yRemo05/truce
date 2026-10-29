@@ -8,7 +8,7 @@
  */
 import type Anthropic from '@anthropic-ai/sdk';
 import { groundBrief, readBrief, type InterpretedBrief } from '../agents/brief';
-import type { DemoInput, Food, PairInput, Seed, SideInput, StreamEvent } from '../contract';
+import type { CardItem, DemoInput, Food, PairInput, Seed, ShowcaseView, SideInput, StreamEvent } from '../contract';
 import type { QlooClient } from '../qloo/client';
 import { findFoods, locate, searchEntities } from '../qloo/queries';
 import type { TruceResult } from '../truce/negotiate';
@@ -204,6 +204,45 @@ export function createDemos(qloo: QlooClient, anthropic: Anthropic | null) {
       store.copyTruce(truceId, pairId, source, source.events.map(movedToToday), store.receiptsOf(source.id));
       return { pairId, truceId };
     },
+  };
+}
+
+const SHOWCASE_POOL = 8;
+const SHOWCASE_MOVES = 6;
+
+/** The recorded run of a demo as the landing page shows it, or null until there is one. */
+export function showcaseOf(store: Store, kind: DemoInput['kind']): ShowcaseView | null {
+  const id = store.showcaseOf(kind);
+  const truce = id ? store.truce(id) : null;
+  const pair = truce ? store.pair(truce.pairId) : null;
+  const pool = truce?.events.find((e): e is Extract<StreamEvent, { type: 'pool' }> => e.type === 'pool');
+  if (!truce?.result || !pair || !pool) return null;
+  const plan = Object.fromEntries(SLOTS.map((s) => [s, pool.items[s].find((i) => i.id === truce.result!.bundle[s])])) as Record<Slot, CardItem | undefined>;
+  if (SLOTS.some((s) => !plan[s])) return null;
+  const moves: ShowcaseView['moves'] = [];
+  for (const e of truce.events) {
+    if (moves.length >= SHOWCASE_MOVES) break;
+    if (e.type === 'move') moves.push({ side: e.side, action: e.action, message: e.message });
+    else if (e.type === 'declined') moves.push({ side: e.side, action: 'declined', message: e.message });
+  }
+  return {
+    kind,
+    mode: pair.mode,
+    members: pair.members,
+    names: pair.names,
+    location: pair.location,
+    how: truce.result.how,
+    plan: plan as Record<Slot, CardItem>,
+    pool: Object.fromEntries(
+      SLOTS.map((s) => [
+        s,
+        [...pool.items[s]]
+          .sort((x, y) => Number(!!y.imageUrl) - Number(!!x.imageUrl))
+          .slice(0, SHOWCASE_POOL)
+          .map(({ slot, name, imageUrl, disambiguation, scores }) => ({ slot, name, imageUrl, disambiguation, scores })),
+      ]),
+    ) as ShowcaseView['pool'],
+    moves,
   };
 }
 

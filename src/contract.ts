@@ -17,6 +17,7 @@
  *        Demo groups keep their people's picks: both PUTs and the PATCH answer 403 `demo`.
  *   POST /api/pairs/:id/truces                  → { truceId }   (409 until everyone is ready)
  *   POST /api/demo             body DemoInput   → DemoStarted   (a ready-made group: a live truce, or an instant replay)
+ *   GET  /api/showcase/:kind                    → ShowcaseView  (the recorded demo run, read-only: 404 until there is one)
  *   GET  /api/truces/:id                        → TruceView
  *   GET  /api/truces/:id/receipts               → ReceiptsView   (every Qloo call the truce made)
  *   GET  /api/truces/:id/stream[?from=n]        → server-sent events, one StreamEvent per `data:` line,
@@ -491,6 +492,25 @@ export interface DemoStarted {
   truceId: string;
   /** Whether this is an instant replay rather than a live run. */
   replay: boolean;
+}
+
+/**
+ * A look at a demo's recorded run, for the landing page: its people, the plan
+ * they got, the pool it came from and the first few messages. Read-only, and
+ * without the recording's ids, so nobody can swap or check in on it.
+ */
+export interface ShowcaseView {
+  kind: DemoInput['kind'];
+  mode: Mode;
+  members: Side[];
+  names: PerSide<string>;
+  location: string;
+  how: 'agreed' | 'ruled';
+  plan: Record<Slot, CardItem>;
+  /** Up to eight items per slot, those with an image first. */
+  pool: Record<Slot, Pick<CardItem, 'slot' | 'name' | 'imageUrl' | 'disambiguation' | 'scores'>[]>;
+  /** The agents' first messages, in order. */
+  moves: { side: Side; action: 'accept' | 'counter' | 'declined'; message: string }[];
 }
 
 export interface ApiError {

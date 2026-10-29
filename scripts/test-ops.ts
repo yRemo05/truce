@@ -13,7 +13,7 @@ import type { CardItem, SideInput, StreamEvent } from '../src/contract';
 import { createQlooClient, type QlooCache, type QlooClient } from '../src/qloo/client';
 import { describeCall, traced, type QlooCall } from '../src/qloo/trace';
 import { openStore } from '../src/server/db';
-import { createDemos } from '../src/server/demo';
+import { createDemos, showcaseOf } from '../src/server/demo';
 import { clientOf, createDaily } from '../src/server/limits';
 import { createRunner, readyOf, tonightDueOf } from '../src/server/runner';
 import type { TruceResult } from '../src/truce/negotiate';
@@ -140,6 +140,13 @@ check('replay: a demo group\'s truce that wasn\'t a live demo run (someone\'s ow
   check('prune: copies younger than the cutoff stay', store.pruneReplays('2000-01-01T00:00:00.000Z') === 0 && store.pair(copy.pairId) !== null);
   check('prune: older copies go, whole groups', store.pruneReplays('2999-01-01T00:00:00.000Z') === 1 && store.pair(copy.pairId) === null && store.truce(copy.truceId) === null);
   check('prune: the recording itself stays', store.truce(agreed) !== null && store.showcaseOf('couple') === agreed);
+}
+
+{
+  const view = showcaseOf(store, 'couple');
+  check('showcase: the recording\'s people, plan and pool', view !== null && view.names.a === 'Maya' && SLOTS.every((s) => view.plan[s].id === store.truce(agreed)!.result!.bundle[s]) && view.pool.film.length === 1);
+  check('showcase: no id that would let anyone act on the recording', !JSON.stringify(view).includes(agreed) && !JSON.stringify(view).includes(store.truce(agreed)!.pairId));
+  check('showcase: none for a demo without a recording', showcaseOf(store, 'friends') === null);
 }
 
 {

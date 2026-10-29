@@ -27,13 +27,14 @@ import type {
   TruceView,
   DemoStarted,
   ReceiptsView,
+  ShowcaseView,
 } from '../contract';
 import { QlooError, type QlooClient } from '../qloo/client';
 import { FOOD_FAMILIES, locate, searchEntities, type Locality } from '../qloo/queries';
 import { KIND_OF_SLOT, MAX_PEOPLE, MIN_PEOPLE, SIDES, SLOTS, perSide, type Side, type Slot } from '../truce/types';
 import { eveningIcs } from './calendar';
 import { INTERRUPTED, type SideRow, type Store } from './db';
-import { createDemos } from './demo';
+import { createDemos, showcaseOf } from './demo';
 import { clientOf, createDaily, createLimiter, type Action } from './limits';
 import { costOf, newId, pairLedger, readyOf, tonightDueOf, UserFacingError, type Runner } from './runner';
 import { createSwaps } from './swaps';
@@ -435,6 +436,13 @@ export function createApp({ store, qloo, runner, anthropic, webDir = 'web/dist' 
     // Only a live demo run, on the demo's own picks, may become the recording others replay.
     store.markShowcase(truceId);
     return c.json<DemoStarted>({ pairId, truceId, replay: false }, 201);
+  });
+
+  app.get('/api/showcase/:kind', (c) => {
+    const kind = c.req.param('kind');
+    const view = kind === 'couple' || kind === 'friends' ? showcaseOf(store, kind) : null;
+    if (!view) return fail(c, 404, 'not_found', 'There is no recorded demo to show yet.');
+    return c.json<ShowcaseView>(view);
   });
 
   app.get('/api/truces/:id/receipts', (c) => {
