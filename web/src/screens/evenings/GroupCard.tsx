@@ -97,9 +97,9 @@ export function GroupCard({ memo, load, memory, onRetry, onForget }: GroupCardPr
 function StatusLine({ pair }: { pair: PairView }) {
   const { icon, text } = statusOf(pair);
   return (
-    <p className="group__status icon-line small">
+    <p className="group__status icon-line icon-line--text small">
       <Icon name={icon} size={16} />
-      {text}
+      <span>{text}</span>
     </p>
   );
 }
