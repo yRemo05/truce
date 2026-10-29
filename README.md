@@ -61,6 +61,11 @@ flowchart LR
    - **A swap someone asked for and didn't get counts as ground they gave.** The item stays off their table from then on.
 10. **The ledger.** Each person's concession is their best possible evening minus what they got. The next truce's bargaining weights come from the decayed balance of how far each person's concessions sat above the group's average (for a couple: 0.35 to 0.65), and the favoured person's agent also concedes more slowly. The next day, each person can **check in**: loved, fine or not for me, per pick. An evening that disappointed someone counts as more ground given; loved picks become favourites, and the rest stay off the table.
 11. **The next evening.** Favourites, the ledger and what each person loved or avoided carry over. Tonight's questions don't: what matters most, the foods and the brief are asked again, because a craving from the last date isn't tonight's.
+12. **My evenings.** A dashboard of every group opened in this browser:
+    - what's waiting on you (votes, check-ins, tonight's questions);
+    - each group's stage, last plan and fairness ledger as a chart;
+    - a shelf of the films, places and music people loved.
+    It's kept only in the browser's own storage, no accounts and no extra database.
 
 ## Why Qloo is essential here
 

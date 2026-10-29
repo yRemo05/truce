@@ -381,10 +381,13 @@
   }
 }
 .l-demo__scroll {
+  position: relative;
   display: grid;
   gap: var(--s-2);
+  will-change: transform;
 }
-.l-demo__scroll .bubble-row.is-first:not(:first-child) {
+.l-demo__item:has(> .bubble-row.is-first):not(:first-child),
+.l-demo__scroll > .bubble-row--typing {
   margin-top: var(--s-2);
 }
 .l-demo__scroll .bubble__text {

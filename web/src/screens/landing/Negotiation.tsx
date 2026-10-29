@@ -1,16 +1,19 @@
 /*
  * The hero's moving picture: two agents' messages arriving one by one, then
  * the evening they settle on as three pictures. It opens on the finished
- * frame (what a screenshot or a reduced-motion visitor sees), then replays
- * from the first message, holds on the plan and loops. It rests off screen,
- * in a hidden tab, and when paused.
+ * frame (what a screenshot or a reduced-motion visitor sees) and holds it
+ * for 12 seconds, then plays the talk again as one continuous chat: a
+ * "from the top" note and the messages arrive below the last plan, which
+ * scrolls up and away, so the window is never empty. Off screen, in a hidden
+ * tab or when paused it stops, and it resumes from the same frame with the
+ * time that frame had left.
  *
  * The messages are the couple demo's recorded run when there is one (its
  * first two and last two), else the synthetic script. The moving feed is
  * hidden from screen readers; a plain summary stands in for it.
  */
 import type { Side } from '@contract';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Avatar, cx, Frost, Icon, Skeleton, Voice } from '@/ui';
 import { agentOf, groupNames, nameOf } from '@/lib/people';
 import { SLOT_LABEL, SLOTS } from '@/lib/truce';
@@ -50,14 +53,17 @@ function entriesOf(moves: Story['moves']): Entry[] {
   return out;
 }
 
-/** The loop as frames: a beat of typing before each message, time to read it, a long hold on the plan. */
+/** How long the finished frame holds: the plan with its pictures, long enough to read and to screenshot. */
+const HOLD_MS = 12_000;
+
+/** The loop as frames: a beat after the restart note, typing before each message, time to read it, a long hold on the plan. */
 function framesOf(entries: Entry[]): Frame[] {
-  const frames: Frame[] = [{ shown: 0, typing: null, ms: 500 }];
+  const frames: Frame[] = [{ shown: 0, typing: null, ms: 900 }];
   entries.forEach((e, i) => {
     if (e.kind === 'move') {
       frames.push({ shown: i, typing: e.move.side, ms: 1100 });
       frames.push({ shown: i + 1, typing: null, ms: Math.min(3600, 1200 + e.move.message.length * 14) });
-    } else frames.push({ shown: i + 1, typing: null, ms: e.kind === 'plan' ? 8000 : 700 });
+    } else frames.push({ shown: i + 1, typing: null, ms: e.kind === 'plan' ? HOLD_MS : 700 });
   });
   return frames;
 }
@@ -106,24 +112,112 @@ function Typing({ side, story }: { side: Side; story: Story }) {
   );
 }
 
+/** Where the loop is: which pass through the talk, and which frame of it. */
+interface Pos {
+  cycle: number;
+  index: number;
+}
+
+/**
+ * Plays the frames: each waits its time, then the next. Stopping keeps the
+ * frame and remembers what was left of its time, so a resume carries on
+ * rather than starting the frame (or the loop) over.
+ */
+function useLoop(frames: Frame[], running: boolean): Pos {
+  // The first pass opens on its finished frame.
+  const [pos, setPos] = useState<Pos>({ cycle: 0, index: -1 });
+  const left = useRef<number | null>(null);
+  const index = pos.index < 0 || pos.index >= frames.length ? frames.length - 1 : pos.index;
+  const ms = frames[index]?.ms ?? 0;
+
+  useEffect(() => {
+    if (!running || !frames.length) return;
+    const wait = left.current ?? ms;
+    const start = performance.now();
+    let fired = false;
+    const timer = setTimeout(() => {
+      fired = true;
+      left.current = null;
+      setPos((p) => (index + 1 < frames.length ? { cycle: p.cycle, index: index + 1 } : { cycle: p.cycle + 1, index: 0 }));
+    }, wait);
+    return () => {
+      clearTimeout(timer);
+      if (!fired) left.current = Math.max(0, wait - (performance.now() - start));
+    };
+  }, [running, index, ms, frames.length]);
+
+  return { cycle: pos.cycle, index };
+}
+
+/**
+ * Bottom-anchored, a new message pushes everything above it up at once. This
+ * eases that push: it finds how far the last item of the previous frame
+ * moved up, starts the list that far down, and lets it glide into place.
+ * Items carry `data-k`; the typing row doesn't, so it never anchors.
+ */
+function useGlide(ref: RefObject<HTMLDivElement | null>, step: string, on: boolean) {
+  const anchor = useRef<{ k: string; d: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fromBottom = (n: HTMLElement) => el.offsetHeight - (n.offsetTop + n.offsetHeight);
+    const prev = anchor.current;
+    if (on && prev) {
+      const node = el.querySelector<HTMLElement>(`[data-k="${prev.k}"]`);
+      const moved = node ? fromBottom(node) - prev.d : 0;
+      if (moved > 0 && moved < 1000) {
+        el.style.transition = 'none';
+        el.style.transform = `translateY(${moved}px)`;
+        void el.offsetHeight;
+        el.style.transition = 'transform 520ms var(--ease-out)';
+        el.style.transform = '';
+      }
+    }
+    const items = el.querySelectorAll<HTMLElement>('[data-k]');
+    const last = items[items.length - 1];
+    anchor.current = last ? { k: last.dataset.k!, d: fromBottom(last) } : null;
+  }, [ref, step, on]);
+}
+
 export function Negotiation({ story }: { story: Story | null }) {
   const ref = useRef<HTMLElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
   const onScreen = useOnScreen(ref);
   const [paused, setPaused] = useState(false);
   const entries = useMemo(() => (story ? entriesOf(story.moves) : []), [story]);
   const frames = useMemo(() => framesOf(entries), [entries]);
-  // Start on the finished frame; the loop begins after its hold.
-  const [at, setAt] = useState(-1);
-  const index = at < 0 || at >= frames.length ? frames.length - 1 : at;
-  const frame = frames[index]!;
   const running = Boolean(story) && !reduce && !paused && onScreen;
+  const { cycle, index } = useLoop(frames, running);
+  const frame = frames[index]!;
+  useGlide(list, `${cycle}-${index}`, !reduce);
 
-  useEffect(() => {
-    if (!running) return;
-    const timer = setTimeout(() => setAt((index + 1) % frames.length), frame.ms);
-    return () => clearTimeout(timer);
-  }, [running, index, frame.ms, frames.length]);
+  const entry = (e: Entry): ReactNode =>
+    !story ? null : e.kind === 'move' ? (
+      <Bubble move={e.move} first={e.first} story={story} />
+    ) : e.kind === 'gap' ? (
+      <p className="l-demo__gap enter">
+        <span className="sys-pill">
+          <Icon name="exchange" size={16} className="sys-pill__icon" />
+          More offers back and forth
+        </span>
+      </p>
+    ) : (
+      <div className="l-demo__deal enter">
+        <p className="sys-pill sys-pill--deal">
+          <Icon name={story.how === 'ruled' ? 'gavel' : 'check-circle'} size={16} className="sys-pill__icon" />
+          <span className="sys-pill__text">
+            <strong>{story.how === 'ruled' ? 'The referee ruled' : 'Both said yes'}</strong> · tonight&rsquo;s plan
+          </span>
+        </p>
+        <PlanCards plan={story.plan} members={story.members} names={story.names} eager />
+      </div>
+    );
+  const item = (key: string, body: ReactNode) => (
+    <div key={key} className="l-demo__item" data-k={key}>
+      {body}
+    </div>
+  );
 
   const status = frame.shown >= entries.length ? (story?.how === 'ruled' ? 'Referee’s ruling' : 'Agreed') : 'Negotiating';
   const done = status !== 'Negotiating';
@@ -166,29 +260,20 @@ export function Negotiation({ story }: { story: Story | null }) {
 
       <div className="l-demo__feed" aria-hidden="true">
         {story ? (
-          <div className="l-demo__scroll" key={frame.shown === 0 ? 'start' : 'run'}>
-            {entries.slice(0, frame.shown).map((e, i) =>
-              e.kind === 'move' ? (
-                <Bubble key={i} move={e.move} first={e.first} story={story} />
-              ) : e.kind === 'gap' ? (
-                <p key={i} className="l-demo__gap enter">
+          <div className="l-demo__scroll" ref={list}>
+            {/* The pass before this one, whole, so the window stays full while this one plays. */}
+            {cycle > 0 && entries.map((e, i) => item(`${cycle - 1}-${i}`, entry(e)))}
+            {cycle > 0 &&
+              item(
+                `again-${cycle}`,
+                <p className="l-demo__gap enter">
                   <span className="sys-pill">
-                    <Icon name="exchange" size={16} className="sys-pill__icon" />
-                    More offers back and forth
+                    <Icon name="retry" size={16} className="sys-pill__icon" />
+                    The same talk again, from the top
                   </span>
-                </p>
-              ) : (
-                <div key={i} className="l-demo__deal enter">
-                  <p className="sys-pill sys-pill--deal">
-                    <Icon name={story.how === 'ruled' ? 'gavel' : 'check-circle'} size={16} className="sys-pill__icon" />
-                    <span className="sys-pill__text">
-                      <strong>{story.how === 'ruled' ? 'The referee ruled' : 'Both said yes'}</strong> · tonight&rsquo;s plan
-                    </span>
-                  </p>
-                  <PlanCards plan={story.plan} members={story.members} names={story.names} eager />
-                </div>
-              ),
-            )}
+                </p>,
+              )}
+            {entries.slice(0, frame.shown).map((e, i) => item(`${cycle}-${i}`, entry(e)))}
             {frame.typing && <Typing side={frame.typing} story={story} />}
           </div>
         ) : (

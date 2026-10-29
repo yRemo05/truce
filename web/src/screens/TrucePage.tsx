@@ -33,12 +33,12 @@
  * exchange / retry (a swap or a replan waiting for votes, an evening planned again), play (a
  * recorded run).
  */
-import type { Side } from '@contract';
+import type { CardItem, Side } from '@contract';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { Badge, Button, ButtonLink, cx, ErrorNotice, Icon, InfoTip, Notice, Page, PairNames, Spinner } from '@/ui';
 import { useDemo, wasBusyReplay, type DemoKind } from '@/lib/demo';
-import { groupInfo, rememberGroup } from '@/lib/evenings';
+import { groupInfo, rememberGroup, rememberPlan } from '@/lib/evenings';
 import { dayMonth } from '@/lib/format';
 import { EXPLAIN } from '@/lib/glossary';
 import { mySide } from '@/lib/mine';
@@ -250,10 +250,16 @@ export function TrucePage({ truceId }: { truceId: string }) {
     [meta, state.items, state.turns, state.brain],
   );
 
-  // Remembered for My evenings, in this browser only.
+  // Remembered for My evenings, in this browser only: the group, and the evening as it stands, whichever tab is open.
   useEffect(() => {
     if (meta) rememberGroup(groupInfo(meta, meta.pairId));
   }, [meta]);
+  const bundle = swaps.view?.bundle ?? state.result?.bundle ?? null;
+  const picks = bundle ? SLOTS.map((s) => state.items[bundle[s]]).filter((x): x is CardItem => Boolean(x)) : [];
+  const pickKey = picks.map((i) => i.id).join();
+  useEffect(() => {
+    if (meta && picks.length) rememberPlan(truceId, meta.pairId, picks.map((i) => ({ slot: i.slot, id: i.id, name: i.name, imageUrl: i.imageUrl })));
+  }, [truceId, meta, pickKey]); // the picks, named by their ids
 
   const { feed } = state;
   const done = state.phase === 'done' && state.result !== null;
