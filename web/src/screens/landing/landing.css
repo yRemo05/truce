@@ -6,6 +6,11 @@
  * Glass stays cheap: the sticky bar and the hero window are fake glass
  * (Frost, a pre-blurred photo that never re-blurs); every other card is a
  * near-solid surface (.l-surface). No backdrop-filter anywhere on this page.
+ *
+ * Motion: only opacity, transform/translate/scale and clip-path animate, so
+ * nothing moves the layout. Everything that hides content before it reveals
+ * is gated on `.is-revealing` (set by useReveal) and on no-preference for
+ * reduced motion, so without script or with reduced motion it's all shown.
  */
 
 /* ---------- Page and bar ---------- */
@@ -13,6 +18,7 @@
   overflow-x: clip;
 }
 .l-main {
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
   display: grid;
   gap: clamp(4.5rem, 3rem + 6vw, 8rem);
   padding-top: var(--s-6);
@@ -450,6 +456,9 @@
   gap: var(--s-1) var(--s-4);
 }
 .l-tally__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
   font-weight: 600;
 }
 .l-tally__row {
@@ -475,6 +484,17 @@
   font-size: var(--text-xl);
   font-weight: 650;
 }
+/* The photo, and the tally laid over its lower edge (inset on a phone, hanging left on a wide screen). */
+/* Single tracks that may shrink: a photo's intrinsic width must never widen the page. */
+.l-problem__stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.l-problem__stage > .l-tally {
+  position: relative;
+  z-index: 1;
+  margin: -3.5rem var(--s-3) 0;
+}
 @media (min-width: 64em) {
   .l-problem {
     grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -482,10 +502,15 @@
     align-items: center;
   }
   .l-problem > .l-section__head {
-    grid-column: 1 / span 6;
+    grid-column: 1 / span 5;
   }
-  .l-problem > .l-tally {
-    grid-column: 8 / span 5;
+  .l-problem > .l-problem__stage {
+    grid-column: 6 / span 7;
+  }
+  .l-problem__stage > .l-tally {
+    justify-self: start;
+    width: min(100%, 29rem);
+    margin: -7rem 0 0 -2.5rem;
   }
   .l-tally__night .avatar {
     --av: 2.375rem;
@@ -681,6 +706,39 @@
 }
 
 /* ---------- Why Qloo ---------- */
+/* The film / restaurant / music triad sits beside the title on a wide screen, the cards below. */
+.l-triad {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--s-2);
+}
+@media (min-width: 45em) {
+  .l-triad {
+    gap: var(--s-4);
+  }
+  .l-triad > li:nth-child(2) {
+    margin-top: var(--s-8);
+  }
+}
+@media (min-width: 64em) {
+  .l-why {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--s-6);
+    align-items: center;
+  }
+  .l-why > .l-section__head {
+    grid-column: 1 / span 5;
+  }
+  .l-why > .l-triad {
+    grid-column: 6 / span 7;
+  }
+  .l-why > .l-qloo {
+    grid-column: 1 / -1;
+  }
+}
 .l-qloo {
   display: grid;
   gap: var(--s-4);
@@ -985,19 +1043,302 @@
 }
 
 /* ---------- Closing band ---------- */
+/* Two people over a city at night (mirrored, so they stand clear of the text), under a scrim from the text's side. */
 .l-end {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: grid;
+  align-content: end;
   gap: var(--s-5);
+  min-height: 32rem;
   padding: var(--s-7) var(--card-pad);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  box-shadow: var(--glass-shadow);
+}
+.l-end__photo {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 78% 40%;
+}
+.l-end::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(to top, rgb(var(--scrim) / 0.95) 38%, rgb(var(--scrim) / 0.45) 75%, rgb(var(--scrim) / 0.2));
+}
+.l-end__text {
+  max-width: 34rem;
 }
 @media (min-width: 64em) {
   .l-end {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    column-gap: var(--s-8);
-    padding: var(--s-8);
+    align-content: center;
+    min-height: 27rem;
+    padding: var(--s-9);
   }
-  .l-end > .notice {
-    grid-column: 1 / -1;
+  .l-end__photo {
+    object-position: 50% 62%;
+  }
+  .l-end::before {
+    background:
+      linear-gradient(to right, rgb(var(--scrim) / 0.95) 40%, rgb(var(--scrim) / 0.78) 52%, rgb(var(--scrim) / 0.12) 82%),
+      linear-gradient(to top, rgb(var(--scrim) / 0.5), transparent 40%);
+  }
+}
+
+/* ---------- Photos ---------- */
+.l-photo {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.l-photo__frame {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background: var(--muted);
+  clip-path: inset(0 round var(--radius-xl));
+}
+/* A hairline edge and a foot of shade, so a caption always sits on dark. */
+.l-photo__frame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(to top, rgb(var(--scrim) / 0.7), transparent 38%);
+  box-shadow: inset 0 0 0 1px var(--glass-edge);
+  pointer-events: none;
+}
+.l-photo__frame img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.l-photo__cap {
+  position: absolute;
+  left: var(--s-2);
+  bottom: var(--s-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: calc(100% - var(--s-4));
+  min-height: 1.75rem;
+  padding: 0 var(--s-2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-full);
+  background: rgb(10 17 16 / 0.78);
+  color: var(--foreground);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.l-photo__cap .icon {
+  flex: none;
+  color: var(--primary);
+}
+@media (min-width: 45em) {
+  .l-photo__cap {
+    left: var(--s-3);
+    bottom: var(--s-3);
+    padding-inline: 0.625rem;
+  }
+}
+@media (max-width: 29.99em) {
+  .l-triad .l-photo__cap {
+    gap: 0.25rem;
+    padding-inline: 0.375rem;
+  }
+  .l-triad .l-photo__cap .icon {
+    display: none;
+  }
+}
+
+/* ---------- Hero entrance ---------- */
+/* The headline rises line by line out of its own mask, then the lede, the buttons and the window. */
+.l-line {
+  display: block;
+  overflow: clip;
+  /* Room for descenders inside the mask, given back so the lines keep their spacing. */
+  padding-bottom: 0.12em;
+  margin-bottom: -0.12em;
+}
+.l-line > span {
+  display: block;
+}
+@keyframes l-line-up {
+  from {
+    transform: translateY(110%);
+  }
+}
+@keyframes l-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+@keyframes l-window {
+  from {
+    opacity: 0;
+    transform: translateY(32px) scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .l-line > span {
+    animation: l-line-up 1100ms var(--ease-expo) both;
+    animation-delay: calc(150ms + var(--i, 0) * 140ms);
+  }
+  .l-intro {
+    animation: l-rise 900ms var(--ease-expo) both;
+    animation-delay: calc(150ms + var(--i, 0) * 120ms);
+  }
+  .l-hero > .l-demo {
+    animation: l-window 1300ms var(--ease-expo) 380ms both;
+  }
+}
+
+/* ---------- Reveals (useReveal) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .is-revealing [data-reveal] {
+    transition:
+      opacity 900ms var(--ease-expo),
+      transform 1100ms var(--ease-expo);
+    transition-delay: var(--d, 0ms);
+  }
+  .is-revealing [data-reveal]:not(.is-in) {
+    opacity: 0;
+    transform: translateY(36px);
+  }
+
+  /* Photos: a wipe up from the foot while the picture settles from a slight zoom; then the caption. */
+  .is-revealing [data-reveal='wipe'] {
+    transition: none;
+  }
+  .is-revealing [data-reveal='wipe']:not(.is-in) {
+    opacity: 1;
+    transform: none;
+  }
+  .is-revealing [data-reveal='wipe'] .l-photo__frame {
+    transition: clip-path 1300ms var(--ease-expo) var(--d, 0ms);
+  }
+  .is-revealing [data-reveal='wipe'] img {
+    transition:
+      transform 1800ms var(--ease-expo) var(--d, 0ms),
+      scale 700ms var(--ease-out);
+  }
+  .is-revealing [data-reveal='wipe'] .l-photo__cap {
+    transition:
+      opacity 600ms var(--ease-out) calc(var(--d, 0ms) + 600ms),
+      transform 800ms var(--ease-expo) calc(var(--d, 0ms) + 600ms);
+  }
+  .is-revealing [data-reveal='wipe']:not(.is-in) .l-photo__frame {
+    clip-path: inset(100% 0 0 0 round var(--radius-xl));
+  }
+  .is-revealing [data-reveal='wipe']:not(.is-in) img {
+    transform: scale(1.18);
+  }
+  .is-revealing [data-reveal='wipe']:not(.is-in) .l-photo__cap {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  @media (hover: hover) {
+    .l-photo:hover img {
+      scale: 1.04;
+    }
+  }
+
+  /* The tally: the evenings arrive one by one. */
+  .is-revealing .l-tally .l-tally__night {
+    transition:
+      opacity 500ms var(--ease-out),
+      transform 700ms var(--ease-expo);
+    transition-delay: calc(450ms + var(--i, 0) * 70ms);
+  }
+  .is-revealing .l-tally:not(.is-in) .l-tally__night {
+    opacity: 0;
+    transform: translateY(10px) scale(0.85);
+  }
+
+  /* Why Qloo: the fit bars fill from zero. */
+  .is-revealing .l-short .meter__fill {
+    transition: transform 1400ms var(--ease-expo) 350ms;
+  }
+  .is-revealing .l-short:not(.is-in) .meter__fill {
+    transform: scaleX(0) !important;
+  }
+
+  /* The ledger draws itself: lines trace, columns grow, dots land. */
+  .is-revealing .l-ledger .l-chart__line {
+    stroke-dasharray: 1;
+    transition: stroke-dashoffset 1800ms var(--ease-expo) 400ms;
+  }
+  .is-revealing .l-ledger:not(.is-in) .l-chart__line {
+    stroke-dashoffset: 1;
+  }
+  .is-revealing .l-ledger .l-chart__col {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    transition: scale 900ms var(--ease-expo) calc(600ms + var(--i, 0) * 90ms);
+  }
+  .is-revealing .l-ledger:not(.is-in) .l-chart__col {
+    scale: 1 0;
+  }
+  .is-revealing .l-ledger .l-chart__dot {
+    transition:
+      r var(--dur-fast) var(--ease-out),
+      opacity 400ms var(--ease-out) calc(450ms + var(--i, 0) * 200ms);
+  }
+  .is-revealing .l-ledger:not(.is-in) .l-chart__dot {
+    opacity: 0;
+  }
+
+  /* The closing photo settles as the band arrives. */
+  .is-revealing .l-end .l-end__photo {
+    transition: transform 2200ms var(--ease-expo) 100ms;
+  }
+  .is-revealing .l-end:not(.is-in) .l-end__photo {
+    transform: scale(1.12);
+  }
+}
+
+/* ---------- Small physics ---------- */
+/* The primary button leans toward the pointer (useMagnet) and springs back. */
+.l-magnet {
+  display: inline-flex;
+  transition: translate 420ms cubic-bezier(0.22, 1.25, 0.36, 1);
+}
+/* The plan's cards in the window: a lift and a pass of light on hover. */
+.l-plan__card {
+  position: relative;
+  overflow: hidden;
+  transition:
+    translate var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
+}
+.l-plan__card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgb(233 236 236 / 0.09) 50%, transparent 65%);
+  translate: -110% 0;
+  pointer-events: none;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .l-plan__card:hover {
+    translate: 0 -2px;
+    border-color: rgb(110 168 163 / 0.45);
+  }
+  .l-plan__card:hover::after {
+    translate: 110% 0;
+    transition: translate 900ms var(--ease-expo);
   }
 }

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Icon, InfoTip, type IconName } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
 import type { Names } from '@/lib/people';
@@ -8,9 +8,9 @@ import { Section } from './Section';
 const NASH =
   'A standard rule from game theory for a fair compromise: the evening that does best by everyone at once (it maximises the product of everyone’s fit), with a little extra weight for whoever the ledger favours.';
 
-function Rule({ icon, title, children }: { icon: IconName; title: ReactNode; children: ReactNode }) {
+function Rule({ icon, title, i, children }: { icon: IconName; title: ReactNode; i: number; children: ReactNode }) {
   return (
-    <li className="l-rule">
+    <li className="l-rule" data-reveal style={{ '--d': `${i * 90}ms` } as CSSProperties}>
       <span className="l-rule__icon" aria-hidden="true">
         <Icon name={icon} size={20} />
       </span>
@@ -32,10 +32,11 @@ export function Fairness({ names }: { names: Names }) {
     >
       <div className="l-fair">
         <ul className="l-rules">
-          <Rule icon="ban" title="Vetoes are absolute">
+          <Rule i={0} icon="ban" title="Vetoes are absolute">
             &ldquo;No horror&rdquo; or &ldquo;I&rsquo;ve seen it&rdquo; ends the discussion. A vetoed option never reaches the table.
           </Rule>
           <Rule
+            i={1}
             icon="scale"
             title={
               <>
@@ -46,6 +47,7 @@ export function Fairness({ names }: { names: Names }) {
             An agent can&rsquo;t offer or accept an evening that leaves its person worse off than their minimum for that turn.
           </Rule>
           <Rule
+            i={2}
             icon="gavel"
             title={
               <>
@@ -55,13 +57,13 @@ export function Fairness({ names }: { names: Names }) {
           >
             No deal by the last turn? The referee picks the weighted Nash bargaining solution.
           </Rule>
-          <Rule icon="exchange" title="Swaps go to a vote">
+          <Rule i={3} icon="exchange" title="Swaps go to a vote">
             Anyone can ask to swap one item. The others say whether they&rsquo;re OK with <strong>an</strong> alternative before
             seeing it; a strict majority passes it, and the referee picks one that keeps everyone fair.
           </Rule>
         </ul>
 
-        <figure className="card l-surface l-ledger">
+        <figure className="card l-surface l-ledger" data-reveal>
           <figcaption className="l-card-head">
             <span className="l-card-head__title">
               <Icon name="scale" size={20} className="muted" />

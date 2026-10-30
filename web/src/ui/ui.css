@@ -616,33 +616,51 @@
   backdrop-filter: var(--glass-filter);
 }
 
-/* ---------- Backdrop: the faceted photo behind a page (Page backdrop) ---------- */
+/* ---------- Backdrop: the evening photo behind a page (Page backdrop) ---------- */
 /*
- * Landscape screens get the whole photo; portrait ones a full-resolution strip
- * around the bright crease. The teal-black scrim is heaviest where the text
- * sits: over the top on one column, down the left on two.
+ * A dinner table at night (public/img, credited in CREDITS.md), graded toward
+ * teal. Landscape screens get the whole frame, portrait ones a tall crop around
+ * the candles. The teal-black scrim is heaviest where the text sits: over the
+ * top on one column, down the left on two.
+ *
+ * Layers: the box itself never moves (Frost measures it); the photo rides on
+ * ::before with a film grain blended in (overlay, so it adds texture without
+ * lifting the blacks) and settles slowly on load (scale only, so Frost can
+ * copy it); ::after carries the scrim and a warm light leak. Scrolling
+ * past the first screen fades the whole backdrop down, so the story below
+ * reads on near-black and the photo stays the hero's.
  */
 .page--backdrop {
   isolation: isolate;
   --muted-foreground: var(--muted-foreground-photo);
-  /* The scrim and the photo's crop, shared by the backdrop and its pre-blurred copy (Frost) so they line up. */
+  /*
+   * The scrim and the photo's crop, shared by the backdrop and its pre-blurred copy (Frost) so they line up.
+   * Stops measured against the photo's brightest pixels under the text: muted text keeps ≥ 5.5:1 at 390×844
+   * and ≥ 6:1 at 1440×900 (the candles sit right where the hero's notes end).
+   */
   --scrim: 5 24 21;
-  --scrim-fill: linear-gradient(rgb(var(--scrim) / 0.67), rgb(var(--scrim) / 0.61) 45%, rgb(var(--scrim) / 0.4) 70%);
-  --photo-at: 55% 35%;
+  --scrim-fill: linear-gradient(rgb(var(--scrim) / 0.78), rgb(var(--scrim) / 0.8) 45%, rgb(var(--scrim) / 0.84) 72%, rgb(var(--scrim) / 0.66) 86%, rgb(var(--scrim) / 0.8));
+  --photo: url('/img/hero-tall.webp');
+  --photo-frost: url('/img/hero-frost-tall.webp');
+  --photo-at: 50% 50%;
 }
-@media (orientation: portrait) {
+@media (orientation: landscape) {
   .page--backdrop {
-    --photo-at: 50% 30%;
+    --photo: url('/img/hero-wide.webp');
+    --photo-frost: url('/img/hero-frost-wide.webp');
+    --photo-at: 50% 42%;
   }
 }
 @media (min-width: 64em) {
   .page--backdrop {
-    --scrim-fill: linear-gradient(to right, rgb(var(--scrim) / 0.64) 40%, rgb(var(--scrim) / 0.35) 75%);
+    --scrim-fill:
+      linear-gradient(to top, rgb(var(--scrim) / 0.75), transparent 28%),
+      linear-gradient(to right, rgb(var(--scrim) / 0.88), rgb(var(--scrim) / 0.84) 50%, rgb(var(--scrim) / 0.3) 68%, rgb(var(--scrim) / 0.14));
   }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .page--backdrop {
-    --scrim-fill: linear-gradient(rgb(var(--scrim) / 0.8), rgb(var(--scrim) / 0.8));
+    --scrim-fill: linear-gradient(rgb(var(--scrim) / 0.86), rgb(var(--scrim) / 0.86));
   }
 }
 .backdrop {
@@ -650,19 +668,56 @@
   inset: 0 0 auto;
   z-index: -1;
   height: 100lvh;
-  background: url('../assets/backdrop-wide.webp') var(--photo-at) / cover no-repeat;
-  background-image: image-set(url('../assets/backdrop-wide.avif') type('image/avif'), url('../assets/backdrop-wide.webp') type('image/webp'));
+  overflow: hidden;
+  background: var(--background);
   pointer-events: none;
 }
+.backdrop::before,
 .backdrop::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: var(--scrim-fill);
 }
-@media (orientation: portrait) {
+.backdrop::before {
+  /* Grey noise around mid-grey, overlaid: painted once with the photo. */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='.45 0 0 0 .28 .45 0 0 0 .28 .45 0 0 0 .28 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
+    var(--photo) var(--photo-at) / cover no-repeat;
+  background-blend-mode: overlay, normal;
+}
+.backdrop::after {
+  background:
+    /* A warm light leak from the lamps, top right. */
+    radial-gradient(55% 45% at 82% 6%, rgb(226 160 96 / 0.16), transparent 70%),
+    var(--scrim-fill);
+}
+/* The photo settles in on load: a slow push out, scale only. */
+@keyframes backdrop-settle {
+  from {
+    scale: 1.09;
+  }
+}
+/* Past the first screen the photo fades down to a texture (and Frost dims to match: backdrop-dim is 1 − that opacity). */
+@keyframes backdrop-fade {
+  to {
+    opacity: 0.12;
+  }
+}
+@keyframes backdrop-dim {
+  to {
+    opacity: 0.88;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .backdrop::before {
+    animation: backdrop-settle 14s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+@supports (animation-timeline: scroll()) {
   .backdrop {
-    background-image: image-set(url('../assets/backdrop-tall.avif') type('image/avif'), url('../assets/backdrop-tall.webp') type('image/webp'));
+    animation: backdrop-fade linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 85vh;
   }
 }
 
@@ -684,19 +739,29 @@
   position: absolute;
   top: 0;
   left: 0;
-  background-image:
-    var(--scrim-fill),
-    image-set(url('../assets/frost-wide.avif') type('image/avif'), url('../assets/frost-wide.webp') type('image/webp'));
-  background-position: 0 0, var(--photo-at);
-  background-size: 100% 100%, cover;
-  background-repeat: no-repeat;
+  background: var(--scrim-fill), var(--photo-frost) var(--photo-at) / cover no-repeat;
   will-change: translate;
 }
-@media (orientation: portrait) {
+/*
+ * It copies the backdrop's settle (the same scale about the same centre), and
+ * its fade as a page-coloured veil over the image, so the glass stays opaque.
+ */
+@media (prefers-reduced-motion: no-preference) {
   .frost__image {
-    background-image:
-      var(--scrim-fill),
-      image-set(url('../assets/frost-tall.avif') type('image/avif'), url('../assets/frost-tall.webp') type('image/webp'));
+    animation: backdrop-settle 14s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .frost::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: var(--background);
+    opacity: 0;
+    animation: backdrop-dim linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 85vh;
   }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {

@@ -174,3 +174,5 @@ Or build the single image: `docker build -t truce . && docker run -p 8787:8787 -
 Copyright (C) 2026 yRemo05.
 
 Truce is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only). You may use, study, change and share it. If you run a changed version for others over a network, you must offer them its source under the same license.
+
+**Photos:** the landing photographs in `web/public/img/` are from Unsplash, used under the [Unsplash License](https://unsplash.com/license), and are not covered by the AGPL. Photographers and sources are listed in [`web/public/img/CREDITS.md`](web/public/img/CREDITS.md).

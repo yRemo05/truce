@@ -5,7 +5,7 @@
  * The plan step uses the recorded run's restaurant when there is one.
  */
 import type { CardItem, LinkKind } from '@contract';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Avatar, Badge, Chip, Icon, InfoTip, Voice, type IconName } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
 import { agentOf, nameOf } from '@/lib/people';
@@ -28,7 +28,8 @@ interface StepProps {
 
 function Step({ n, title, children, frag, className }: StepProps) {
   return (
-    <li className={`card l-surface l-step ${className ?? ''}`}>
+    // Revealed on scroll, each row's cards a beat apart.
+    <li className={`card l-surface l-step ${className ?? ''}`} data-reveal style={{ '--d': `${((n - 1) % 3) * 110}ms` } as CSSProperties}>
       <div className="l-step__text">
         <h3 className="l-step__title">
           <span className="l-step__n" aria-hidden="true">

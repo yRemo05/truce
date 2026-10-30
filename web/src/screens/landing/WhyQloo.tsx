@@ -3,14 +3,18 @@
  * pool of films and Qloo's scores when there is one, else illustrative), the
  * option both like, a restaurant pulled up by a film, plain words turned into
  * tags, and the receipts. Nothing here is pasted Qloo data: the recorded run
- * arrives from the server at runtime.
+ * arrives from the server at runtime. Above it, the three parts of an evening
+ * as photographs, in the order the plan lists them.
  */
+import type { CSSProperties } from 'react';
 import { Badge, Icon, InfoTip, ScoreMeter, Voice } from '@/ui';
 import { EXPLAIN } from '@/lib/glossary';
 import { nameOf } from '@/lib/people';
+import { SLOT_ICON, SLOT_LABEL, SLOTS } from '@/lib/truce';
 import { TruceContext } from '@/truce/context';
 import { Because } from '@/truce/Because';
 import { Art } from './Art';
+import { Photo } from './Photo';
 import { Section } from './Section';
 import { ctxOf, spectrum, type Story } from './story';
 
@@ -19,6 +23,10 @@ const WORDS: { said: string; became: string; kind: string; veto: boolean }[] = [
   { said: '“nothing scary”', became: 'Horror', kind: 'film genre, left out', veto: true },
   { said: '“I’ve seen Dune”', became: 'Dune (2021)', kind: 'skipped', veto: true },
 ];
+
+/** One photograph per slot (public/img, credited in CREDITS.md). */
+const SCENE = { film: '/img/film.webp', restaurant: '/img/table.webp', music: '/img/music.webp' } as const;
+const after = (ms: number) => ({ '--d': `${ms}ms` }) as CSSProperties;
 
 const CALLS: { what: string; detail: string; n: string }[] = [
   { what: 'Films for both of you together', detail: '/v2/insights · urn:entity:movie', n: '20 results' },
@@ -33,11 +41,31 @@ export function WhyQloo({ story }: { story: Story }) {
   return (
     <Section
       id="qloo"
+      className="l-why"
       title="Why Qloo"
       lede="To be fair, Truce has to know how much each of you will like the same options. Qloo’s taste graph scores one shared shortlist once per person, so the referee can compute a fair evening instead of asking a model to guess."
     >
+      <ul className="l-triad" aria-label="One evening: a film, a restaurant and music">
+        {SLOTS.map((slot, i) => (
+          <li key={slot}>
+            <Photo
+              src={SCENE[slot]}
+              width={540}
+              height={720}
+              delay={i * 140}
+              caption={
+                <>
+                  <Icon name={SLOT_ICON[slot]} size={16} />
+                  {SLOT_LABEL[slot]}
+                </>
+              }
+            />
+          </li>
+        ))}
+      </ul>
+
       <div className="l-qloo">
-        <figure className="card l-surface l-short">
+        <figure className="card l-surface l-short" data-reveal>
           <figcaption className="l-card-head">
             <span className="l-card-head__title">
               <Icon name="film" size={20} className="muted" />
@@ -78,7 +106,7 @@ export function WhyQloo({ story }: { story: Story }) {
         </figure>
 
         <div className="l-qloo__side">
-          <section className="card l-surface l-tile" aria-labelledby="cross-title">
+          <section className="card l-surface l-tile" aria-labelledby="cross-title" data-reveal style={after(120)}>
             <h3 id="cross-title" className="l-card-head__title">
               <Icon name="bridge" size={20} className="muted" />
               Taste crosses domains
@@ -96,7 +124,7 @@ export function WhyQloo({ story }: { story: Story }) {
             </div>
           </section>
 
-          <section className="card l-surface l-tile" aria-labelledby="words-title">
+          <section className="card l-surface l-tile" aria-labelledby="words-title" data-reveal style={after(220)}>
             <h3 id="words-title" className="l-card-head__title">
               <Icon name="quote" size={20} className="muted" />
               Plain words become filters
@@ -115,7 +143,7 @@ export function WhyQloo({ story }: { story: Story }) {
             </ul>
           </section>
 
-          <section className="card l-surface l-tile" aria-labelledby="receipts-title">
+          <section className="card l-surface l-tile" aria-labelledby="receipts-title" data-reveal style={after(320)}>
             <h3 id="receipts-title" className="l-card-head__title">
               <Icon name="data" size={20} className="muted" />
               Every call is on the receipts

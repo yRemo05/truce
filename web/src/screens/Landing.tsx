@@ -1,5 +1,5 @@
 /*
- * Landing (/): the product story, on the faceted photo backdrop.
+ * Landing (/): the product story, told over photographs of an evening out.
  *
  * Inventory, by priority:
  *   primary   — Couple demo: one tap to a finished truce, an instant replay of a recorded run
@@ -24,15 +24,29 @@
  * Surfaces: the bar and the hero window are fake glass (Frost); every other card is near-solid
  * (`l-surface`), so nothing large runs a live blur while the page scrolls.
  * Icons: heart / users / plus (the demos, start), github, moon (My evenings), pause / play (the
- * loop), film / restaurant / music (slots), check-circle / gavel (deal, ruling), exchange (offers,
- * swaps), ban / scale / gavel (the rules), bridge, quote, data (the Qloo cards).
+ * loop), film / restaurant / music (slots, and the photo captions), check-circle / gavel (deal,
+ * ruling), exchange (offers, swaps), ban / scale / gavel (the rules), bridge, quote, data (the Qloo
+ * cards), calendar (the Fridays tally).
+ *
+ * Photography (public/img, credited in CREDITS.md; decorative, so empty alt): the backdrop is a
+ * dinner table at night, graded toward teal, that settles in on load and fades to a texture past
+ * the first screen. The problem shows a couple stuck on their phones under the tally; Why Qloo
+ * opens on a film / restaurant / music triad; the closing band is two people over a city at night.
+ *
+ * Motion (CSS, plus IntersectionObserver for the reveals; all of it off with reduced motion, where
+ * everything is simply shown): the headline rises line by line, then the lede, buttons and the
+ * window; sections rise or wipe in once as they reach the screen; the primary buttons lean toward
+ * a fine pointer; the meters fill and the ledger draws itself when they come into view. Only
+ * opacity, transform and clip-path animate, so nothing shifts the layout.
  */
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Button, ButtonLink, ErrorNotice, Page } from '@/ui';
 import { useDemo, type DemoKind } from '@/lib/demo';
 import { Fairness } from './landing/Fairness';
+import { useReveal } from './landing/hooks';
 import { HowItWorks } from './landing/HowItWorks';
 import { NavActions, NavLinks } from './landing/LandingNav';
+import { Magnet } from './landing/Magnet';
 import { Negotiation } from './landing/Negotiation';
 import { Problem } from './landing/Problem';
 import { syntheticStory, useStory } from './landing/story';
@@ -41,9 +55,13 @@ import './landing/landing.css';
 
 type Place = 'hero' | 'bar' | 'end';
 
+/** The hero's entrance order: each step a beat after the last (landing.css, "Hero entrance"). */
+const step = (i: number) => ({ '--i': i }) as CSSProperties;
+
 export function Landing() {
   const demo = useDemo();
   const story = useStory();
+  useReveal();
   // Where the last demo was asked for, so its error shows beside that button.
   const [from, setFrom] = useState<Place>('hero');
   const run = (place: Place, kind: DemoKind, replay: boolean) => {
@@ -54,11 +72,14 @@ export function Landing() {
   // The sections below the fold don't wait for the recorded run: they start on the synthetic one's people.
   const s = story ?? syntheticStory;
 
-  const demoButtons = (place: Place) => (
-    <div className="l-actions">
-      <Button variant="primary" icon="heart" busy={from === place && demo.busyFor('couple', true)} disabled={demo.busy} onClick={() => run(place, 'couple', true)}>
-        Couple demo
-      </Button>
+  // `intro`: the step in the hero's entrance, for the hero's own row.
+  const demoButtons = (place: Place, intro?: number) => (
+    <div className={intro === undefined ? 'l-actions' : 'l-actions l-intro'} style={intro === undefined ? undefined : step(intro)}>
+      <Magnet>
+        <Button variant="primary" icon="heart" busy={from === place && demo.busyFor('couple', true)} disabled={demo.busy} onClick={() => run(place, 'couple', true)}>
+          Couple demo
+        </Button>
+      </Magnet>
       <Button variant="secondary" icon="users" busy={from === place && demo.busyFor('friends', true)} disabled={demo.busy} onClick={() => run(place, 'friends', true)}>
         Friends demo
       </Button>
@@ -80,14 +101,19 @@ export function Landing() {
       <section className="l-hero" aria-labelledby="hero-title">
         <div className="l-hero__copy">
           <h1 id="hero-title" className="l-hero__title">
-            Plan tonight together. Nobody always gives in.
+            <span className="l-line" style={step(0)}>
+              <span>Plan tonight together.</span>
+            </span>{' '}
+            <span className="l-line" style={step(1)}>
+              <span>Nobody always gives in.</span>
+            </span>
           </h1>
-          <p className="l-hero__lede">
+          <p className="l-hero__lede l-intro" style={step(3)}>
             Each of you briefs your own AI agent. The agents negotiate a film, a restaurant and music over Qloo&rsquo;s taste data, a
             referee keeps every move fair, and whoever gives ground tonight gets more say next time. For a couple or up to four friends.
           </p>
-          {demoButtons('hero')}
-          <div className="l-hero__note">
+          {demoButtons('hero', 4)}
+          <div className="l-hero__note l-intro" style={step(5)}>
             <p className="small muted">Maya and Deniz in Manhattan, or three friends in Istanbul, recorded so they open at once.</p>
             <p className="l-live small muted">
               <span>Run it live (about a minute):</span>
@@ -111,7 +137,8 @@ export function Landing() {
       <WhyQloo story={s} />
       <Fairness names={s.names} />
 
-      <section className="card l-surface l-end" aria-labelledby="end-title">
+      <section className="l-end" aria-labelledby="end-title" data-reveal>
+        <img className="l-end__photo" src="/img/evening.webp" alt="" width={1600} height={900} loading="lazy" decoding="async" />
         <div className="l-end__text">
           <h2 id="end-title" className="l-section__title">
             See a whole truce in one tap

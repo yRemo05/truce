@@ -43,6 +43,8 @@ export function Frost({ className }: { className?: string }) {
     align();
     window.addEventListener('scroll', queue, { passive: true });
     window.addEventListener('resize', queue);
+    // An entrance animation on a parent moves it without a scroll, resize or reflow.
+    document.addEventListener('animationend', queue);
     // Text reflowing above it (a web font arriving, a notice) moves it without a scroll or resize.
     const observer = new ResizeObserver(queue);
     observer.observe(document.body);
@@ -51,6 +53,7 @@ export function Frost({ className }: { className?: string }) {
       cancelAnimationFrame(frame);
       window.removeEventListener('scroll', queue);
       window.removeEventListener('resize', queue);
+      document.removeEventListener('animationend', queue);
       observer.disconnect();
     };
   }, []);

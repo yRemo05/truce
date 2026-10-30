@@ -466,14 +466,38 @@
 }
 
 /* ---------- First visit ---------- */
+/*
+ * The landing's closing photo (two people over a city at night, public/img),
+ * faint behind the posters: the copy keeps the solid card, the photo shows
+ * through where the evening's picture sits (below on a phone, right on a wide screen).
+ * The veil never drops under 0.86, so even muted text over the brightest city
+ * light keeps AA.
+ */
 .empty {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: grid;
   gap: var(--s-7);
   padding: var(--s-6);
 }
+.empty--preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(var(--card) 45%, rgb(21 27 26 / 0.86) 65%),
+    url('/img/evening.webp') 50% 70% / cover no-repeat;
+}
 @media (min-width: 48em) {
   .empty {
     padding: var(--s-8);
+  }
+  .empty--preview::before {
+    background:
+      linear-gradient(to right, var(--card) 40%, rgb(21 27 26 / 0.86) 60%),
+      url('/img/evening.webp') 60% 62% / cover no-repeat;
   }
   .empty--preview {
     grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);

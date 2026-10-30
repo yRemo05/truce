@@ -10,7 +10,7 @@
  * beside them. Hover or arrow keys pick an evening; every value is also in
  * the hidden table.
  */
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { cx } from '@/ui';
 import type { Names } from '@/lib/people';
 
@@ -122,9 +122,9 @@ export function LedgerChart({ names }: { names: Names }) {
           ))}
           {SIDES.map((s) => (
             <g key={s} className={`p-${s}`}>
-              <path className="l-chart__line" d={line(s)} />
+              <path className="l-chart__line" d={line(s)} pathLength={1} />
               {EVENINGS.map((e, i) => (
-                <circle key={e.label} className="l-chart__dot" cx={cx_(i)} cy={ySay(e.say[s])} r={active === i ? 5 : 4} />
+                <circle key={e.label} style={{ '--i': i } as CSSProperties} className="l-chart__dot" cx={cx_(i)} cy={ySay(e.say[s])} r={active === i ? 5 : 4} />
               ))}
             </g>
           ))}
@@ -149,7 +149,7 @@ export function LedgerChart({ names }: { names: Names }) {
           ))}
           {EVENINGS.map((e, i) =>
             e.gave ? (
-              SIDES.map((s, k) => <path key={s} className={cx('l-chart__col', `p-${s}`)} d={column(cx_(i) - BAR - 1 + k * (BAR + 2), e.gave![s])} />)
+              SIDES.map((s, k) => <path key={s} style={{ '--i': i } as CSSProperties} className={cx('l-chart__col', `p-${s}`)} d={column(cx_(i) - BAR - 1 + k * (BAR + 2), e.gave![s])} />)
             ) : (
               <text key={e.label} className="l-chart__tick" x={cx_(i)} y={LOW.y1 - 6} textAnchor="middle">
                 to come
