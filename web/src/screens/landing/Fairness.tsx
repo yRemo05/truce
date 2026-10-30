@@ -5,9 +5,6 @@ import type { Names } from '@/lib/people';
 import { LedgerChart } from './LedgerChart';
 import { Section } from './Section';
 
-const NASH =
-  'A standard rule from game theory for a fair compromise: the evening that does best by everyone at once (it maximises the product of everyone’s fit), with a little extra weight for whoever the ledger favours.';
-
 function Rule({ icon, title, i, children }: { icon: IconName; title: ReactNode; i: number; children: ReactNode }) {
   return (
     <li className="l-rule" data-reveal style={{ '--d': `${i * 90}ms` } as CSSProperties}>
@@ -28,38 +25,29 @@ export function Fairness({ names }: { names: Names }) {
     <Section
       id="fairness"
       title="Fair tonight, and fair over time"
-      lede="The agents argue; plain code decides what’s allowed. And Truce remembers who gave ground, so it isn’t the same person every time."
+      lede="The agents argue, a referee in plain code rules, and the ledger remembers who gave ground."
     >
       <div className="l-fair">
         <ul className="l-rules">
           <Rule i={0} icon="ban" title="Vetoes are absolute">
-            &ldquo;No horror&rdquo; or &ldquo;I&rsquo;ve seen it&rdquo; ends the discussion. A vetoed option never reaches the table.
+            A vetoed option never reaches the table.
           </Rule>
-          <Rule
-            i={1}
-            icon="scale"
-            title={
-              <>
-                Nobody goes below a fair minimum <InfoTip label="What the minimum is">{EXPLAIN.minimum}</InfoTip>
-              </>
-            }
-          >
-            An agent can&rsquo;t offer or accept an evening that leaves its person worse off than their minimum for that turn.
+          <Rule i={1} icon="scale" title="Nobody goes below a fair minimum">
+            No agent can offer or accept less for its person.
           </Rule>
           <Rule
             i={2}
             icon="gavel"
             title={
               <>
-                Deadlock ends in a fair ruling <InfoTip label="What the weighted Nash bargaining solution is">{NASH}</InfoTip>
+                Deadlock ends in a fair ruling <InfoTip label="What the weighted Nash bargaining solution is">{EXPLAIN.nash}</InfoTip>
               </>
             }
           >
-            No deal by the last turn? The referee picks the weighted Nash bargaining solution.
+            No deal? The referee picks the weighted Nash bargaining solution.
           </Rule>
           <Rule i={3} icon="exchange" title="Swaps go to a vote">
-            Anyone can ask to swap one item. The others say whether they&rsquo;re OK with <strong>an</strong> alternative before
-            seeing it; a strict majority passes it, and the referee picks one that keeps everyone fair.
+            Anyone can ask. A majority decides; the referee picks a fair replacement.
           </Rule>
         </ul>
 
@@ -70,10 +58,9 @@ export function Fairness({ names }: { names: Names }) {
               The fairness ledger
               <InfoTip label="What the fairness ledger is">{EXPLAIN.ledger}</InfoTip>
             </span>
-            <span className="small muted">Whoever gave ground gets more say next time</span>
+            <span className="small muted">Illustrative</span>
           </figcaption>
           <LedgerChart names={names} />
-          <p className="l-note small muted">Illustrative: one couple over five evenings. A couple&rsquo;s split always stays between 35% and 65%.</p>
         </figure>
       </div>
     </Section>

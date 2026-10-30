@@ -269,7 +269,7 @@ export function Negotiation({ story }: { story: Story | null }) {
                 <p className="l-demo__gap enter">
                   <span className="sys-pill">
                     <Icon name="retry" size={16} className="sys-pill__icon" />
-                    The same talk again, from the top
+                    Again, from the top
                   </span>
                 </p>,
               )}
@@ -294,7 +294,7 @@ export function Negotiation({ story }: { story: Story | null }) {
       </div>
 
       <figcaption id="demo-caption" className="l-demo__caption small muted">
-        {story?.real ? 'The couple demo’s recorded run: the agents’ own messages and Qloo’s picks.' : 'An example negotiation, invented for this page.'}
+        {story?.real ? 'Recorded run.' : 'Invented example.'}
         {story && (
           <span className="visually-hidden">
             {' '}

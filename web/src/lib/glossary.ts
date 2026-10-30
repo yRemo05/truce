@@ -29,8 +29,9 @@ export const EXPLAIN = {
   floor: 'The least each person may end up with, set by the fair evening. A swap never takes anyone below it.',
   receipts: 'Every call Truce made to Qloo for this evening. The key never leaves the server, and no personal data is sent.',
   affinity: 'Qloo’s measure of how well an option fits someone’s favourites, from 0 to 1. Truce turns it into the 0–100 fit scores.',
-  shortfall:
-    'How far each evening fell short of that person’s own best evening, out of 100. 0 means they got their best; a check-in moves it toward how the evening really went.',
-  say: 'Each person’s share of the say in the next truce. Whoever gave more ground gets a bit more; the shares add up to 100%.',
-  myEvenings: 'Kept only in this browser. Links are the keys: forgetting a group here doesn’t delete it, and anyone with its link can still open it.',
+  shortfall: 'How far each evening fell short of that person’s own best, out of 100.',
+  say: 'Whoever gave more ground gets a bit more say in the next truce.',
+  loved: 'Picks you loved after an evening.',
+  runLive: 'Live takes about a minute; the demo buttons open a recording.',
+  nash: 'The evening that does best by everyone at once, tilted by the ledger.',
 } as const;

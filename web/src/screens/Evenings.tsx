@@ -12,9 +12,10 @@
  *               ledger as a chart (each evening's shortfall per person, the say next time)
  *   secondary — the headline numbers: evenings planned, loved picks, things waiting on you
  *   secondary — Loved: posters and photos of picks loved in check-ins sent here, per slot
- *   rare      — open a group, forget it (with Undo); a group whose link is gone drops quietly
- *   first run — what the page will hold, a real evening's posters from the demo, Try the
- *               couple demo (primary) and Start your own
+ *   rare      — open a group, forget it (with Undo); a group whose link is gone drops quietly;
+ *               that it all lives in this browser (the ⓘ beside the title)
+ *   first run — a real evening's posters from the demo, Try the couple demo (primary) and
+ *               Start your own
  *
  * Viewport budget: at 1440×900 the header with its three numbers, Waiting on you and the first
  * group card (its stage, plan posters and ledger chart) fit the first screen. At 390×844 the
@@ -33,9 +34,8 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { api } from '@/api';
-import { Button, Icon, InfoTip, Notice, Page, SectionHeader, StatTile } from '@/ui';
-import { forgetGroup, MAX_GROUPS, restoreGroup, useEvenings, type GroupSlice } from '@/lib/evenings';
-import { EXPLAIN } from '@/lib/glossary';
+import { Button, InfoTip, Notice, Page, SectionHeader, StatTile } from '@/ui';
+import { forgetGroup, restoreGroup, useEvenings, type GroupSlice } from '@/lib/evenings';
 import { mySide } from '@/lib/mine';
 import { groupNames } from '@/lib/people';
 import { SLOTS } from '@/lib/truce';
@@ -80,7 +80,6 @@ export function Evenings() {
   const shelf = lovedShelf(memory);
   const lovedCount = SLOTS.reduce((n, s) => n + shelf[s].length, 0);
   const planned = loaded.reduce((n, p) => n + p.ledger.entries.filter((e) => !e.earlier).length, 0);
-  const knowsYou = loaded.some((p) => mySide(p.id) !== null);
 
   const forget = (pairId: string) => setForgotten(forgetGroup(pairId));
   const undo = () => {
@@ -91,18 +90,15 @@ export function Evenings() {
   return (
     <Page title="My evenings" className="evenings">
       <header className="evenings__head">
-        <div className="evenings__intro">
+        <div className="icon-line">
           <h1 className="h2">My evenings</h1>
-          <p className="muted">
-            Every group you’ve opened here: what’s waiting, how each evening went, and how fair it’s been.{' '}
-            <InfoTip label="Where this is kept">{EXPLAIN.myEvenings}</InfoTip>
-          </p>
+          <InfoTip label="Where this is kept">Kept only in this browser. Forgetting a group doesn’t delete it: its link still works.</InfoTip>
         </div>
         {groups.length > 0 && (
           <dl className="stats">
-            <StatTile icon="calendar" label="Evenings planned" short="Evenings" value={settling ? null : planned} hint={`in ${groups.length} group${groups.length > 1 ? 's' : ''}`} />
-            <StatTile icon="heart" label="Loved picks" short="Loved" value={lovedCount} hint="from check-ins here" />
-            <StatTile icon="hourglass" label="Waiting on you" short="Waiting" value={settling ? null : waiting.length} hint={waiting.length ? 'see the list' : 'all clear'} />
+            <StatTile icon="calendar" label="Evenings planned" short="Evenings" value={settling ? null : planned} />
+            <StatTile icon="heart" label="Loved picks" short="Loved" value={lovedCount} />
+            <StatTile icon="hourglass" label="Waiting on you" short="Waiting" value={settling ? null : waiting.length} />
           </dl>
         )}
       </header>
@@ -128,24 +124,18 @@ export function Evenings() {
       ) : (
         <div className="grid evenings__grid">
           <div className="evenings__waiting">
-            <WaitingList items={waiting} loading={settling} knowsYou={knowsYou} />
+            <WaitingList items={waiting} loading={settling} />
           </div>
           <section className="evenings__groups" aria-labelledby="groups-title">
-            <SectionHeader icon="users" id="groups-title" title="Your groups" meta={`${groups.length} remembered in this browser, last seen first.`} />
+            <SectionHeader icon="users" id="groups-title" title="Your groups" />
             {groups.map((g) => (
-              <GroupCard key={g.pairId} memo={g} load={loads[g.pairId]} memory={memory} onRetry={() => retry(g.pairId)} onForget={() => forget(g.pairId)} />
+              <GroupCard key={g.pairId} memo={g} load={loads[g.pairId]} memory={memory} explain={g.pairId === loaded[0]?.id} onRetry={() => retry(g.pairId)} onForget={() => forget(g.pairId)} />
             ))}
           </section>
           <div className="evenings__loved">
             <LovedShelf shelf={shelf} />
           </div>
         </div>
-      )}
-      {groups.length > 0 && (
-        <p className="evenings__note icon-line small muted">
-          <Icon name="info" size={16} />
-          Kept only in this browser, for up to {MAX_GROUPS} groups.
-        </p>
       )}
     </Page>
   );

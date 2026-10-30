@@ -4,8 +4,8 @@ import { cx } from '@/ui';
 interface SectionProps {
   id: string;
   title: ReactNode;
-  /** One or two sentences under the title. */
-  lede?: ReactNode;
+  /** One short line under the title, 20 words at most. */
+  lede?: string;
   className?: string;
   children: ReactNode;
 }

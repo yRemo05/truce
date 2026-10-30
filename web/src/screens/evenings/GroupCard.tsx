@@ -13,6 +13,8 @@ interface GroupCardProps {
   memo: GroupMemo;
   load: PairLoad | undefined;
   memory: Memory;
+  /** Show the ledger's ⓘ: each term is explained once, on the first loaded card. */
+  explain: boolean;
   onRetry: () => void;
   onForget: () => void;
 }
@@ -22,7 +24,7 @@ interface GroupCardProps {
  * as pictures, and its fairness ledger as a chart. The header comes from
  * this browser's memory, so it shows at once; the rest waits for the server.
  */
-export function GroupCard({ memo, load, memory, onRetry, onForget }: GroupCardProps) {
+export function GroupCard({ memo, load, memory, explain, onRetry, onForget }: GroupCardProps) {
   // The server's names and place win once loaded; the memory's until then.
   const pair = load?.status === 'ok' ? load.pair : null;
   const names = pair?.names ?? memo.names;
@@ -84,9 +86,9 @@ export function GroupCard({ memo, load, memory, onRetry, onForget }: GroupCardPr
             <h4 id={`${id}-ledger`} className="group__label">
               <Icon name="scale" size={16} />
               Fairness ledger
-              <InfoTip label="What the fairness ledger does">{EXPLAIN.ledger}</InfoTip>
+              {explain && <InfoTip label="What the fairness ledger does">{EXPLAIN.ledger}</InfoTip>}
             </h4>
-            <LedgerChart ledger={pair.ledger} names={pair.names} letters={letters} titleId={`${id}-ledger`} />
+            <LedgerChart ledger={pair.ledger} names={pair.names} letters={letters} titleId={`${id}-ledger`} explain={explain} />
           </section>
         </div>
       )}
@@ -128,7 +130,7 @@ function LastPlan({ pair, memory, id }: { pair: PairView; memory: Memory; id: st
           })}
         </ul>
       ) : (
-        <p className="small muted">No plan yet. It shows here once the agents agree.</p>
+        <p className="small muted">No plan yet.</p>
       )}
     </section>
   );

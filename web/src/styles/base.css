@@ -203,7 +203,8 @@ p {
 }
 
 .enter {
-  animation: rise 260ms var(--ease-out) both;
+  /* Backwards only: a transform left filling after the end would pin an InfoTip's fixed bubble to this element. */
+  animation: rise 260ms var(--ease-out) backwards;
   animation-delay: var(--delay, 0ms);
 }
 

@@ -70,12 +70,12 @@ export function statusOf(pair: PairView): { icon: IconName; text: string } {
       return last?.status === 'running'
         ? { icon: 'eye', text: 'The agents are talking now.' }
         : last?.status === 'failed'
-          ? { icon: 'warning', text: 'The last truce stopped early. It can start again.' }
-          : { icon: 'play', text: 'Everyone’s ready: the truce can start.' };
+          ? { icon: 'warning', text: 'The last truce stopped early.' }
+          : { icon: 'play', text: 'Everyone’s ready to start.' };
     case CHECKINS:
       return { icon: 'heart', text: `Planned. Waiting for ${whose(pair, pending)} check-in${pending.length > 1 ? 's' : ''}.` };
     default:
-      return { icon: 'check-circle', text: pair.demo ? 'Everyone has checked in.' : 'Everyone has checked in. Ready for another evening.' };
+      return { icon: 'check-circle', text: 'Everyone has checked in.' };
   }
 }
 

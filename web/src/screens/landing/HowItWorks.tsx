@@ -1,13 +1,12 @@
 /*
  * How it works: five steps, each a small piece of the real interface made
  * with the app's own components rather than an icon. The pieces are pictures
- * (`inert`: not focusable, not announced); each step's text says what it shows.
+ * (`inert`: not focusable, not announced); each step's title and line say what it shows.
  * The plan step uses the recorded run's restaurant when there is one.
  */
 import type { CardItem, LinkKind } from '@contract';
 import type { CSSProperties, ReactNode } from 'react';
-import { Avatar, Badge, Chip, Icon, InfoTip, Voice, type IconName } from '@/ui';
-import { EXPLAIN } from '@/lib/glossary';
+import { Avatar, Badge, Chip, Icon, Voice, type IconName } from '@/ui';
 import { agentOf, nameOf } from '@/lib/people';
 import { TruceContext } from '@/truce/context';
 import { Hours } from '@/truce/Hours';
@@ -112,11 +111,7 @@ export function HowItWorks({ story }: { story: Story }) {
   const b = nameOf(story.names, 'b');
   const place = story.plan.restaurant;
   return (
-    <Section
-      id="how"
-      title="How it works"
-      lede="A minute each to set up, about a minute for the agents to agree. For a couple or two to four friends, on one phone or each on your own."
-    >
+    <Section id="how" title="How it works" lede="For a couple or up to four friends. A minute each to set up, a minute to agree.">
       <ol className="l-steps">
         <Step
           n={1}
@@ -143,7 +138,7 @@ export function HowItWorks({ story }: { story: Story }) {
             </div>
           }
         >
-          Films, restaurants and artists you love. Qloo finds each one, and you confirm the match.
+          Films, restaurants and artists.
         </Step>
 
         <Step
@@ -171,8 +166,7 @@ export function HowItWorks({ story }: { story: Story }) {
             </div>
           }
         >
-          In plain words. Qloo grounds them: wishes guide your agent, vetoes and &ldquo;I&rsquo;ve seen it&rdquo; are hard rules. Only your
-          agent reads your note.
+          In plain words. Only your agent reads them.
         </Step>
 
         <Step
@@ -195,8 +189,7 @@ export function HowItWorks({ story }: { story: Story }) {
             </ul>
           }
         >
-          One AI agent per person, with Qloo as a tool. They trade whole evenings until everyone says yes. A referee in plain code checks every
-          move.
+          They trade offers until everyone agrees.
         </Step>
 
         <Step
@@ -205,8 +198,7 @@ export function HowItWorks({ story }: { story: Story }) {
           className="l-step--wide"
           frag={<PlanPlace story={story} place={place} />}
         >
-          A film, a restaurant and music, with what you need to go: tonight&rsquo;s opening hours (closed places never appear), ratings,
-          booking links, IMDb or Spotify, and a calendar event.
+          Only places open tonight, with booking links and a calendar event.
         </Step>
 
         <Step
@@ -238,8 +230,7 @@ export function HowItWorks({ story }: { story: Story }) {
             </div>
           }
         >
-          Anyone can ask to swap one item; the others vote on it. Next day, a one-tap check-in{' '}
-          <InfoTip label="What a check-in does">{EXPLAIN.checkin}</InfoTip> tells the ledger how it really went.
+          Swaps go to a vote. Check-ins tell the ledger how it went.
         </Step>
       </ol>
     </Section>

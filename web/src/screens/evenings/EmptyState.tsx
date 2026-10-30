@@ -1,16 +1,10 @@
 import type { ShowcaseView } from '@contract';
 import { useEffect, useState } from 'react';
 import { api } from '@/api';
-import { Button, ButtonLink, cx, ErrorNotice, Icon, Poster, Skeleton, type IconName } from '@/ui';
+import { Button, ButtonLink, cx, ErrorNotice, Poster, Skeleton } from '@/ui';
 import { useDemo } from '@/lib/demo';
 import { groupNames } from '@/lib/people';
 import { SLOTS } from '@/lib/truce';
-
-const HOLDS: { icon: IconName; text: string }[] = [
-  { icon: 'hourglass', text: 'What’s waiting on you: votes, check-ins, tonight’s questions' },
-  { icon: 'scale', text: 'Each group’s evenings, and how fair they’ve been' },
-  { icon: 'heart', text: 'The films, places and music people loved' },
-];
 
 /** The recorded couple demo's evening, for a picture of what a plan looks like; null when there's none (404) or it fails. */
 function useShowcase() {
@@ -28,7 +22,7 @@ function useShowcase() {
   return view;
 }
 
-/** First visit: what this page will hold, a real evening's posters, and the two ways in. */
+/** First visit: a real evening's posters, and the two ways in. */
 export function EmptyState() {
   const demo = useDemo();
   const showcase = useShowcase();
@@ -40,15 +34,6 @@ export function EmptyState() {
         <h2 id="empty-title" className="h2">
           Your evenings will gather here
         </h2>
-        <p className="muted">Open a group, or try the demo, and this browser keeps it here for you:</p>
-        <ul className="empty__holds">
-          {HOLDS.map((h) => (
-            <li key={h.icon} className="icon-line">
-              <Icon name={h.icon} size={20} className="empty__glyph" />
-              {h.text}
-            </li>
-          ))}
-        </ul>
         <div className="empty__actions">
           <Button variant="primary" icon="heart" busy={demo.busyFor('couple', true)} disabled={demo.busy} onClick={() => void demo.run('couple', true)}>
             Try the couple demo
@@ -80,7 +65,7 @@ export function EmptyState() {
             })}
           </ul>
           <figcaption className="small muted">
-            {showcase ? `The evening ${groupNames(showcase.names, showcase.members)}’s agents planned in ${showcase.location}, from the couple demo.` : 'Loading a real evening from the demo…'}
+            {showcase ? `From the couple demo: ${groupNames(showcase.names, showcase.members)} in ${showcase.location}.` : <Skeleton w="60%" h="0.875rem" />}
           </figcaption>
         </figure>
       )}

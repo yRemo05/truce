@@ -54,9 +54,11 @@ interface LedgerChartProps {
   letters: Names;
   /** The heading's id, for the figure's label. */
   titleId: string;
+  /** Show the ⓘ beside each panel's heading. */
+  explain: boolean;
 }
 
-export function LedgerChart({ ledger, names, letters, titleId }: LedgerChartProps) {
+export function LedgerChart({ ledger, names, letters, titleId, explain }: LedgerChartProps) {
   const { members, entries, alpha, tilt, owed } = ledger;
   const plotRef = useRef<HTMLDivElement>(null);
   const [room, setRoom] = useState(6 * COL);
@@ -114,10 +116,10 @@ export function LedgerChart({ ledger, names, letters, titleId }: LedgerChartProp
     <figure className="lchart" aria-labelledby={titleId}>
       <div className="lchart__grid" style={{ ['--row' as string]: `${ROW}px` }}>
         <span className="lchart__head small muted">
-          Short of their best <InfoTip label="What short of their best means">{EXPLAIN.shortfall}</InfoTip>
+          Short of their best {explain && <InfoTip label="What short of their best means">{EXPLAIN.shortfall}</InfoTip>}
         </span>
         <span className="lchart__head lchart__head--say small muted">
-          Say next time <InfoTip label="What say next time means">{EXPLAIN.say}</InfoTip>
+          Say next time {explain && <InfoTip label="What say next time means">{EXPLAIN.say}</InfoTip>}
         </span>
 
         <ul className="lchart__names" aria-hidden="true">
@@ -131,7 +133,7 @@ export function LedgerChart({ ledger, names, letters, titleId }: LedgerChartProp
 
         <div ref={plotRef} className="lchart__plot">
           {entries.length === 0 ? (
-            <p className="lchart__none small muted">No evenings yet. The ledger starts even.</p>
+            <p className="lchart__none small muted">No evenings yet.</p>
           ) : (
             <div
               className="lchart__focus"
@@ -196,7 +198,7 @@ export function LedgerChart({ ledger, names, letters, titleId }: LedgerChartProp
               <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
                 <rect x="1.75" y="0.75" width="8.5" height="10.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
               </svg>
-              Outlined: a made-up earlier evening (demo)
+              Outlined: made-up earlier evening (demo)
             </span>
           )}
           {hidden > 0 && <span>{hidden} older in the table</span>}

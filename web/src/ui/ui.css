@@ -1267,11 +1267,6 @@ html:has(.sheet[open]) {
   line-height: 1.2;
   letter-spacing: -0.02em;
 }
-.stat__hint {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .stat__short {
   display: none;
 }
@@ -1286,9 +1281,6 @@ html:has(.sheet[open]) {
   }
   .stat__short {
     display: inline;
-  }
-  .stat__hint {
-    display: none;
   }
 }
 

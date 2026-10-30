@@ -5,17 +5,10 @@
   gap: var(--s-4);
   margin-bottom: var(--s-6);
 }
-.evenings__intro {
-  display: grid;
-  gap: var(--s-1);
-}
-.evenings__intro p {
-  max-width: 38em;
-}
 @media (min-width: 64em) {
   .evenings__head {
     grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-    align-items: end;
+    align-items: center;
     column-gap: var(--s-6);
   }
 }
@@ -40,16 +33,10 @@
     font-size: 1.5rem;
     min-height: 2rem;
   }
-  .stats .stat__hint {
-    font-size: var(--text-xs);
-  }
 }
 
 .evenings__undo {
   margin-bottom: var(--s-5);
-}
-.evenings__note {
-  margin-top: var(--s-6);
 }
 
 /* Phone: waiting, the groups, loved. Wide: the groups in 1–8, waiting and loved in 9–12. */
@@ -507,28 +494,13 @@
 }
 .empty__copy {
   display: grid;
-  gap: var(--s-4);
+  gap: var(--s-5);
   justify-items: start;
-}
-.empty__holds {
-  list-style: none;
-  padding: 0;
-  display: grid;
-  gap: var(--s-3);
-}
-.empty__holds li {
-  flex-wrap: nowrap;
-  gap: var(--s-3);
-  align-items: flex-start;
-}
-.empty__glyph {
-  color: var(--primary);
 }
 .empty__actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-3);
-  margin-top: var(--s-2);
 }
 .empty__preview {
   display: grid;

@@ -6,18 +6,13 @@ import type { WaitItem } from './derive';
 const FIRST = 4;
 
 /** Everything the remembered groups wait for that someone here can do, most urgent first. */
-export function WaitingList({ items, loading, knowsYou }: { items: WaitItem[]; loading: boolean; knowsYou: boolean }) {
+export function WaitingList({ items, loading }: { items: WaitItem[]; loading: boolean }) {
   const [all, setAll] = useState(false);
   const shown = all ? items : items.slice(0, FIRST);
   const more = items.length - shown.length;
   return (
     <section className="card waiting" aria-labelledby="waiting-title">
-      <SectionHeader
-        icon="hourglass"
-        id="waiting-title"
-        title="Waiting on you"
-        meta={knowsYou ? 'Votes, check-ins and answers, across your groups.' : 'Each person’s next step, across your groups.'}
-      />
+      <SectionHeader icon="hourglass" id="waiting-title" title="Waiting on you" />
       {items.length > 0 ? (
         <>
           <ul className="waiting__list" id="waiting-list">

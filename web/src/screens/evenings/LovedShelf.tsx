@@ -1,6 +1,7 @@
 import type { Slot } from '@contract';
-import { Icon, Poster, SectionHeader } from '@/ui';
+import { Icon, InfoTip, Poster, SectionHeader } from '@/ui';
 import { dayMonth } from '@/lib/format';
+import { EXPLAIN } from '@/lib/glossary';
 import { listNames } from '@/lib/people';
 import { SLOT_ICON, SLOTS } from '@/lib/truce';
 import type { LovedItem } from './derive';
@@ -25,7 +26,7 @@ export function LovedShelf({ shelf }: { shelf: Record<Slot, LovedItem[]> }) {
   const any = SLOTS.some((s) => shelf[s].length > 0);
   return (
     <section className="card loved" aria-labelledby="loved-title">
-      <SectionHeader icon="heart" id="loved-title" title="Loved" meta="From check-ins sent in this browser. Each opens its evening." />
+      <SectionHeader icon="heart" id="loved-title" title="Loved" info={<InfoTip label="What Loved means">{EXPLAIN.loved}</InfoTip>} />
       {any ? (
         SLOTS.filter((s) => shelf[s].length > 0).map((slot) => {
           const items = shelf[slot];
@@ -57,7 +58,7 @@ export function LovedShelf({ shelf }: { shelf: Record<Slot, LovedItem[]> }) {
       ) : (
         <p className="loved__none icon-line small muted">
           <Icon name="heart" size={16} />
-          Nothing loved yet. After an evening, check in: the picks you loved gather here.
+          Nothing loved yet. Check in after an evening.
         </p>
       )}
     </section>

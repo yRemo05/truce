@@ -40,8 +40,9 @@
  * opacity, transform and clip-path animate, so nothing shifts the layout.
  */
 import { useState, type CSSProperties } from 'react';
-import { Button, ButtonLink, ErrorNotice, Page } from '@/ui';
+import { Button, ButtonLink, ErrorNotice, InfoTip, Page } from '@/ui';
 import { useDemo, type DemoKind } from '@/lib/demo';
+import { EXPLAIN } from '@/lib/glossary';
 import { Fairness } from './landing/Fairness';
 import { useReveal } from './landing/hooks';
 import { HowItWorks } from './landing/HowItWorks';
@@ -109,24 +110,22 @@ export function Landing() {
             </span>
           </h1>
           <p className="l-hero__lede l-intro" style={step(3)}>
-            Each of you briefs your own AI agent. The agents negotiate a film, a restaurant and music over Qloo&rsquo;s taste data, a
-            referee keeps every move fair, and whoever gives ground tonight gets more say next time. For a couple or up to four friends.
+            Everyone gets an AI agent. They negotiate a film, restaurant and music using Qloo&rsquo;s taste data. A referee keeps it fair.
+            Whoever gives ground gets more say next time.
           </p>
           {demoButtons('hero', 4)}
-          <div className="l-hero__note l-intro" style={step(5)}>
-            <p className="small muted">Maya and Deniz in Manhattan, or three friends in Istanbul, recorded so they open at once.</p>
-            <p className="l-live small muted">
-              <span>Run it live (about a minute):</span>
-              <span className="l-live__buttons">
-                <Button size="sm" variant="ghost" icon="heart" busy={demo.busyFor('couple', false)} disabled={demo.busy} aria-label="Run the couple demo live" onClick={() => run('hero', 'couple', false)}>
-                  Couple
-                </Button>
-                <Button size="sm" variant="ghost" icon="users" busy={demo.busyFor('friends', false)} disabled={demo.busy} aria-label="Run the friends demo live" onClick={() => run('hero', 'friends', false)}>
-                  Friends
-                </Button>
-              </span>
-            </p>
-          </div>
+          <p className="l-live small muted l-intro" style={step(5)}>
+            <span>Run live</span>
+            <InfoTip label="What running live means">{EXPLAIN.runLive}</InfoTip>
+            <span className="l-live__buttons">
+              <Button size="sm" variant="ghost" icon="heart" busy={demo.busyFor('couple', false)} disabled={demo.busy} aria-label="Run the couple demo live" onClick={() => run('hero', 'couple', false)}>
+                Couple
+              </Button>
+              <Button size="sm" variant="ghost" icon="users" busy={demo.busyFor('friends', false)} disabled={demo.busy} aria-label="Run the friends demo live" onClick={() => run('hero', 'friends', false)}>
+                Friends
+              </Button>
+            </span>
+          </p>
           {error('hero')}
         </div>
         <Negotiation story={story} />
@@ -143,7 +142,7 @@ export function Landing() {
           <h2 id="end-title" className="l-section__title">
             See a whole truce in one tap
           </h2>
-          <p className="l-section__lede">Open a recorded negotiation from first offer to booked table, or start your own for two to four people.</p>
+          <p className="l-section__lede">A recorded negotiation, from first offer to final plan.</p>
         </div>
         {demoButtons('end')}
         {error('end')}

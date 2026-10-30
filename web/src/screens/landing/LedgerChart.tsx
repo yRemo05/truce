@@ -7,8 +7,8 @@
  * ground has more say the next evening.
  *
  * Colours are each person's own (teal, light neutral), always with the name
- * beside them. Hover or arrow keys pick an evening; every value is also in
- * the hidden table.
+ * beside them. Hover or arrow keys pick an evening, and the readout under the
+ * plot rests on the last one played; every value is also in the hidden table.
  */
 import { useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { cx } from '@/ui';
@@ -30,6 +30,8 @@ const EVENINGS: Evening[] = [
   { label: '5', say: { a: 51, b: 49 }, gave: { a: 21, b: 6 } },
   { label: 'Next', say: { a: 56, b: 44 }, gave: null },
 ];
+/** Where the readout rests, so its numbers show before anyone touches the chart. */
+const LAST_PLAYED = EVENINGS.findLastIndex((e) => e.gave !== null);
 const SIDES: ('a' | 'b')[] = ['a', 'b'];
 
 const H = 296;
@@ -45,6 +47,7 @@ export function LedgerChart({ names }: { names: Names }) {
   const box = useRef<HTMLDivElement>(null);
   const [w, setW] = useState(640);
   const [active, setActive] = useState<number | null>(null);
+  const at = active ?? LAST_PLAYED;
   const name = (s: 'a' | 'b') => names[s] ?? s;
 
   useLayoutEffect(() => {
@@ -79,10 +82,10 @@ export function LedgerChart({ names }: { names: Names }) {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'Home' && e.key !== 'End') return;
     e.preventDefault();
     const last = EVENINGS.length - 1;
-    setActive((i) => (e.key === 'Home' ? 0 : e.key === 'End' ? last : e.key === 'ArrowRight' ? Math.min(last, (i ?? -1) + 1) : Math.max(0, (i ?? last + 1) - 1)));
+    setActive(e.key === 'Home' ? 0 : e.key === 'End' ? last : e.key === 'ArrowRight' ? Math.min(last, at + 1) : Math.max(0, at - 1));
   };
 
-  const shown = active === null ? null : EVENINGS[active]!;
+  const shown = EVENINGS[at]!;
   const end = EVENINGS[EVENINGS.length - 1]!;
   const summary = `${name('a')} gave the most ground on evenings 1, 2 and 5, ${name('b')} on 3 and 4; each time, the one who gave more ground had more say the next evening.`;
 
@@ -106,8 +109,8 @@ export function LedgerChart({ names }: { names: Names }) {
         onBlur={() => setActive(null)}
       >
         <svg width={w} height={H} viewBox={`0 0 ${w} ${H}`} aria-hidden="true" onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setActive(null)}>
-          {/* The picked evening's column, behind everything. */}
-          {active !== null && <rect className="l-chart__band" x={ml + band * active + 2} y={8} width={band - 4} height={LOW.y1 - 8} rx={6} />}
+          {/* The current evening's column, behind everything. */}
+          <rect className="l-chart__band" x={ml + band * at + 2} y={8} width={band - 4} height={LOW.y1 - 8} rx={6} />
 
           <text className="l-chart__title" x={0} y={12}>
             Share of the say going in
@@ -124,7 +127,7 @@ export function LedgerChart({ names }: { names: Names }) {
             <g key={s} className={`p-${s}`}>
               <path className="l-chart__line" d={line(s)} pathLength={1} />
               {EVENINGS.map((e, i) => (
-                <circle key={e.label} style={{ '--i': i } as CSSProperties} className="l-chart__dot" cx={cx_(i)} cy={ySay(e.say[s])} r={active === i ? 5 : 4} />
+                <circle key={e.label} style={{ '--i': i } as CSSProperties} className="l-chart__dot" cx={cx_(i)} cy={ySay(e.say[s])} r={at === i ? 5 : 4} />
               ))}
             </g>
           ))}
@@ -167,24 +170,20 @@ export function LedgerChart({ names }: { names: Names }) {
           </text>
         </svg>
 
-        <p className={cx('l-chart__tip small', shown && 'is-on')} aria-live="polite">
-          {shown && (
-            <>
-              <strong>{evLabel(shown)}</strong>
-              <span>
-                Say going in: {name('a')} <b className="num">{shown.say.a}%</b>, {name('b')} <b className="num">{shown.say.b}%</b>
-              </span>
-              <span>
-                {shown.gave ? (
-                  <>
-                    Ground given: {name('a')} <b className="num">{shown.gave.a}</b>, {name('b')} <b className="num">{shown.gave.b}</b>
-                  </>
-                ) : (
-                  'Not played yet'
-                )}
-              </span>
-            </>
-          )}
+        <p className="l-chart__tip small" aria-live="polite">
+          <strong>{evLabel(shown)}</strong>
+          <span>
+            Say going in: {name('a')} <b className="num">{shown.say.a}%</b>, {name('b')} <b className="num">{shown.say.b}%</b>
+          </span>
+          <span>
+            {shown.gave ? (
+              <>
+                Ground given: {name('a')} <b className="num">{shown.gave.a}</b>, {name('b')} <b className="num">{shown.gave.b}</b>
+              </>
+            ) : (
+              'Not played yet'
+            )}
+          </span>
         </p>
       </div>
 

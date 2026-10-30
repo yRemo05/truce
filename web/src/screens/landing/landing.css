@@ -114,7 +114,7 @@
 .l-card-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--s-1) var(--s-4);
 }
@@ -259,10 +259,6 @@
   line-height: 1.6;
   color: var(--muted-foreground);
   max-width: 36em;
-}
-.l-hero__note {
-  display: grid;
-  gap: var(--s-1);
 }
 .l-live {
   display: flex;
@@ -447,13 +443,6 @@
 .l-tally {
   display: grid;
   gap: var(--s-4);
-}
-.l-tally__head {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--s-1) var(--s-4);
 }
 .l-tally__title {
   display: inline-flex;
@@ -933,8 +922,11 @@
     grid-template-columns: repeat(12, minmax(0, 1fr));
     column-gap: var(--s-6);
   }
+  /* The rules share the chart's height, first and last level with its card. */
   .l-rules {
     grid-column: 1 / span 5;
+    align-self: stretch;
+    align-content: space-between;
   }
   .l-ledger {
     grid-column: 6 / span 7;
@@ -1019,7 +1011,7 @@
 .l-chart__band {
   fill: rgb(233 236 236 / 0.05);
 }
-/* The picked evening, read out under the chart (hover or arrow keys); a quiet hint until then. */
+/* The current evening, read out under the chart: the last one played until hover or the arrow keys pick another. */
 .l-chart__tip {
   display: flex;
   flex-wrap: wrap;
@@ -1032,14 +1024,6 @@
 .l-chart__tip b {
   color: var(--foreground);
   font-weight: 600;
-}
-.l-chart__tip:not(.is-on)::before {
-  content: 'Point at an evening, or focus the chart and use the arrow keys, to read its numbers.';
-}
-@media (hover: none) {
-  .l-chart__tip:not(.is-on)::before {
-    content: 'Tap an evening to read its numbers.';
-  }
 }
 
 /* ---------- Closing band ---------- */
@@ -1198,7 +1182,8 @@
     animation-delay: calc(150ms + var(--i, 0) * 140ms);
   }
   .l-intro {
-    animation: l-rise 900ms var(--ease-expo) both;
+    /* Backwards only: a transform left filling after the end would pin an InfoTip's fixed bubble to this element. */
+    animation: l-rise 900ms var(--ease-expo) backwards;
     animation-delay: calc(150ms + var(--i, 0) * 120ms);
   }
   .l-hero > .l-demo {

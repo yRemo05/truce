@@ -43,7 +43,7 @@ export function WhyQloo({ story }: { story: Story }) {
       id="qloo"
       className="l-why"
       title="Why Qloo"
-      lede="To be fair, Truce has to know how much each of you will like the same options. Qloo’s taste graph scores one shared shortlist once per person, so the referee can compute a fair evening instead of asking a model to guess."
+      lede="Qloo’s taste graph scores one shared shortlist once per person, so the referee can compute a fair evening."
     >
       <ul className="l-triad" aria-label="One evening: a film, a restaurant and music">
         {SLOTS.map((slot, i) => (
@@ -72,7 +72,7 @@ export function WhyQloo({ story }: { story: Story }) {
               Same shortlist, two tastes
             </span>
             <span className="small muted">
-              Fit, 0–100 <InfoTip label="What the fit scores are">{EXPLAIN.affinity}</InfoTip>
+              Fit, 0–100 <InfoTip label="What the fit scores are">{EXPLAIN.score}</InfoTip>
             </span>
           </figcaption>
           <ul className="l-short__rows">
@@ -97,12 +97,7 @@ export function WhyQloo({ story }: { story: Story }) {
               </li>
             ))}
           </ul>
-          <p className="l-note small muted">
-            {story.real
-              ? `Films from the couple demo’s recorded run, scored by Qloo for ${nameOf(story.names, a)} and ${nameOf(story.names, b)}.`
-              : 'Illustrative scores.'}{' '}
-            No agent sees the other&rsquo;s scores.
-          </p>
+          <p className="l-note small muted">{story.real ? 'Films from the recorded run.' : 'Illustrative scores.'} No agent sees the other&rsquo;s scores.</p>
         </figure>
 
         <div className="l-qloo__side">
@@ -144,11 +139,13 @@ export function WhyQloo({ story }: { story: Story }) {
           </section>
 
           <section className="card l-surface l-tile" aria-labelledby="receipts-title" data-reveal style={after(320)}>
-            <h3 id="receipts-title" className="l-card-head__title">
-              <Icon name="data" size={20} className="muted" />
-              Every call is on the receipts
-              <InfoTip label="What the receipts are">{EXPLAIN.receipts}</InfoTip>
-            </h3>
+            <div className="l-card-head">
+              <h3 id="receipts-title" className="l-card-head__title">
+                <Icon name="data" size={20} className="muted" />
+                Every call is on the receipts
+              </h3>
+              <span className="small muted">Illustrative</span>
+            </div>
             <ul className="l-calls">
               {CALLS.map((c) => (
                 <li key={c.detail}>
@@ -161,7 +158,7 @@ export function WhyQloo({ story }: { story: Story }) {
                 </li>
               ))}
             </ul>
-            <p className="l-note small muted">Each truce&rsquo;s Research tab lists every Qloo call it made. Illustrative calls.</p>
+            <p className="l-note small muted">Each truce&rsquo;s Research tab lists its own.</p>
           </section>
         </div>
       </div>

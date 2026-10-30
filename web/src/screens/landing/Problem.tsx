@@ -18,20 +18,15 @@ export function Problem({ names, letters }: { names: Names; letters: Names }) {
       id="problem"
       className="l-problem"
       title="“I don’t mind, you pick.”"
-      lede={
-        <>
-          Recommenders are built for one person. A plan for two gets made by whoever gives in least, and it&rsquo;s the same person every
-          time. Nobody notices until one of you stops enjoying the evenings.
-        </>
-      }
+      lede="Recommenders are built for one person. With two, the same person gives in every time."
     >
       <div className="l-problem__stage">
         <Photo src="/img/problem.webp" width={1200} height={900} className="l-problem__photo" />
         <figure className="card l-surface l-tally" data-reveal style={{ '--d': '180ms' } as CSSProperties}>
-          <figcaption className="l-tally__head">
+          <figcaption className="l-card-head">
             <span className="l-tally__title">
               <Icon name="calendar" size={20} className="muted" />
-              Whose evening it was, the last eight Fridays
+              Whose evening, the last eight Fridays
             </span>
             <span className="small muted">Illustrative</span>
           </figcaption>
@@ -43,7 +38,7 @@ export function Problem({ names, letters }: { names: Names; letters: Names }) {
             ))}
           </ol>
           <p className="l-tally__sum">
-            <strong className="num">{count('b')}</strong> of 8 went {b}&rsquo;s way. {a} said &ldquo;I don&rsquo;t mind&rdquo; seven times.
+            <strong className="num">{count('b')}</strong> of 8 went {b}&rsquo;s way.
           </p>
         </figure>
       </div>
