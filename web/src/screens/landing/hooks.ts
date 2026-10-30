@@ -66,6 +66,29 @@ export function useReveal() {
 }
 
 /**
+ * Which of these sections the reader is in: the last one whose top has passed a line 40% down the
+ * window, held across the gaps between sections, and none above the first or past the end of the
+ * last. An observer on that line wakes it only when a section crosses, so it costs nothing per frame.
+ */
+export function useSection(ids: string[]): string | null {
+  const [here, setHere] = useState<string | null>(null);
+  useEffect(() => {
+    const sections = ids.flatMap((id) => document.getElementById(id) ?? []);
+    const last = sections.at(-1);
+    if (!last || typeof IntersectionObserver !== 'function') return;
+    const read = () => {
+      const line = window.innerHeight * 0.4;
+      const past = last.getBoundingClientRect().bottom <= line;
+      setHere(past ? null : (sections.filter((s) => s.getBoundingClientRect().top <= line).at(-1)?.id ?? null));
+    };
+    const io = new IntersectionObserver(read, { rootMargin: '-40% 0px -60% 0px' });
+    sections.forEach((s) => io.observe(s));
+    return () => io.disconnect();
+  }, [ids]);
+  return here;
+}
+
+/**
  * A magnetic pull: the element leans a few pixels toward a fine pointer while
  * it's over it, and springs back on leave. Moves only `translate` (no layout);
  * off for touch and for reduced motion.

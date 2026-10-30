@@ -8,35 +8,271 @@
  * near-solid surface (.l-surface). No backdrop-filter anywhere on this page.
  *
  * Motion: only opacity, transform/translate/scale and clip-path animate, so
- * nothing moves the layout. Everything that hides content before it reveals
+ * nothing moves the layout. The bar's light runs on the compositor; the page
+ * never repaints for it. Everything that hides content before it reveals
  * is gated on `.is-revealing` (set by useReveal) and on no-preference for
  * reduced motion, so without script or with reduced motion it's all shown.
  */
 
 /* ---------- Page and bar ---------- */
 .page:has(> .l-main) {
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  /* The air above the bar; the hero's fold budget counts it too. */
+  --bar-gap: var(--s-3);
+  --nav-on: rgb(110 168 163 / 0.26);
   overflow-x: clip;
 }
 .l-main {
-  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
   display: grid;
   gap: clamp(4.5rem, 3rem + 6vw, 8rem);
   padding-top: var(--s-6);
 }
-.page:has(> .l-main) > .topbar {
-  border-bottom-color: var(--glass-edge);
+/* Anchors glide; App's route changes ask for an instant jump, and base.css turns this off for reduced motion. */
+html:has(.l-main) {
+  scroll-behavior: smooth;
 }
-/* The bar's fake glass: the photo, pre-blurred, under a dark fill so text on it keeps its contrast. */
+
+/* ---------- The floating bar (LandingNav) ---------- */
+/*
+ * TopBar's header stays in the page's flow and stays sticky, but turns into clear air: its padding
+ * is the gap over the pill, so the --header-h it publishes is the true clearance anchors need
+ * (html's scroll-padding-top adds the breathing room). Tightening is scale only, so that never changes.
+ */
+.page:has(> .l-main) > .topbar {
+  padding-top: var(--bar-gap);
+  background: none;
+  border-bottom: 0;
+  pointer-events: none;
+}
+.page:has(> .l-main) .topbar__row {
+  --control-h-sm: var(--control-h);
+  --bar-r: calc(var(--bar-h) / 2);
+  /* The ring: wide enough for the light to read, and a whole pixel count, so it stays even all the way round. */
+  --bar-edge: 2px;
+  --bar-glow: 0 0 28px -12px rgb(110 168 163 / 0.35);
+  position: relative;
+  isolation: isolate;
+  width: fit-content;
+  max-width: calc(100% - 2 * var(--gutter));
+  gap: var(--s-2);
+  padding-inline: var(--s-5) var(--s-2);
+  border-radius: var(--bar-r);
+  box-shadow:
+    0 18px 36px -20px rgb(0 0 0 / 0.85),
+    var(--bar-glow);
+  pointer-events: auto;
+}
+.page:has(> .l-main) .topbar__row .btn {
+  border-radius: var(--radius-full);
+}
+.page:has(> .l-main) .topbar__row .topbar__link {
+  color: var(--foreground);
+}
+.page:has(> .l-main) .topbar__row .btn--primary {
+  box-shadow: 0 6px 18px -8px rgb(110 168 163 / 0.7);
+}
+/* The light is teal, so focus here is drawn in the lightest ink: a ring that can't be mistaken for it. */
+.page:has(> .l-main) .topbar__row :focus-visible {
+  outline-color: var(--foreground);
+}
+.page:has(> .l-main) .topbar__context {
+  flex: 0 1 auto;
+  margin-left: var(--s-2);
+  padding-left: 0;
+  border-left: 0;
+}
+.page:has(> .l-main) .topbar__actions {
+  margin-left: var(--s-2);
+}
+
+/* The surface: fake glass, opaque, so the bar's contrast doesn't depend on what passes behind it. */
+.l-nav__frost {
+  inset: var(--bar-edge);
+  border-radius: calc(var(--bar-r) - var(--bar-edge));
+}
 .l-nav__frost::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgb(10 17 16 / 0.6);
+  background: rgb(10 17 16 / 0.5);
+  box-shadow: inset 0 1px 0 rgb(233 236 236 / 0.07);
 }
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .page:has(> .l-main) > .topbar {
-    background: var(--background);
+@media (min-resolution: 1.5dppx) {
+  .page:has(> .l-main) .topbar__row {
+    --bar-edge: 1.5px;
   }
+}
+
+/*
+ * The hairline and the light. Under the frost, so only the ring (--bar-edge) and what spills past
+ * the pill show, with no mask to composite. A run is a bar-sized box moved by `translate` alone, so
+ * the loop never paints; its blob sits on the box's corner, which traces the pill's outline.
+ */
+.l-light {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+}
+.l-light__ring {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: var(--bar-r);
+  background: var(--glass-edge);
+}
+/* The fill under the frost: the ring's centre while frost loads, or for good where frost is off. */
+.l-light__ring::after {
+  content: '';
+  position: absolute;
+  inset: var(--bar-edge);
+  border-radius: calc(var(--bar-r) - var(--bar-edge));
+  background: var(--card);
+}
+.l-light__run {
+  display: none;
+  position: absolute;
+  inset: 0;
+}
+.l-light__run::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20rem;
+  height: 5.5rem;
+  translate: -50% -50%;
+  background: radial-gradient(closest-side, rgb(110 168 163 / 0.36), rgb(110 168 163 / 0.1) 55%, transparent);
+}
+.l-light__ring .l-light__run::before {
+  width: 24rem;
+  height: 5rem;
+  background: radial-gradient(closest-side, #dcf2ee, #a9dcd5 42%, rgb(127 181 176 / 0.85) 68%, transparent);
+}
+@keyframes l-orbit {
+  0%,
+  100% {
+    translate: var(--bar-r) 0;
+  }
+  44% {
+    translate: calc(100% - var(--bar-r)) 0;
+  }
+  47% {
+    translate: 100% 50%;
+  }
+  50% {
+    translate: calc(100% - var(--bar-r)) 100%;
+  }
+  94% {
+    translate: var(--bar-r) 100%;
+  }
+  97% {
+    translate: 0 50%;
+  }
+}
+/* A shorter pill: the ends are a bigger share of the way round, so the same speed holds. */
+@keyframes l-orbit-short {
+  0%,
+  100% {
+    translate: var(--bar-r) 0;
+  }
+  39% {
+    translate: calc(100% - var(--bar-r)) 0;
+  }
+  44.5% {
+    translate: 100% 50%;
+  }
+  50% {
+    translate: calc(100% - var(--bar-r)) 100%;
+  }
+  89% {
+    translate: var(--bar-r) 100%;
+  }
+  94.5% {
+    translate: 0 50%;
+  }
+}
+@keyframes l-light-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes l-bar-open {
+  from {
+    opacity: 0;
+    clip-path: inset(0 calc(50% - var(--bar-r)) round var(--bar-r));
+  }
+  to {
+    clip-path: inset(0 0 round var(--bar-r));
+  }
+}
+@keyframes l-bar-tight {
+  to {
+    translate: 0 -4px;
+    scale: 0.975;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* It opens from the centre as the first beat of the hero's entrance; the light arrives last, once the window has landed. */
+  .page:has(> .l-main) .topbar__row {
+    transform-origin: 50% 0;
+    animation: l-bar-open 1000ms var(--ease-expo) backwards;
+  }
+  .page:has(> .l-main) .wordmark,
+  .page:has(> .l-main) .topbar__context,
+  .page:has(> .l-main) .topbar__actions > .btn {
+    animation: l-rise 900ms var(--ease-expo) 240ms backwards;
+  }
+  .page:has(> .l-main) .topbar__context {
+    animation-delay: 320ms;
+  }
+  .page:has(> .l-main) .topbar__actions > .btn {
+    animation-delay: 400ms;
+  }
+  .l-light__run {
+    display: block;
+    animation:
+      l-orbit 12s linear infinite,
+      l-light-in 1800ms var(--ease-out) 1100ms backwards;
+  }
+  /* Past the top of the page the bar draws in a touch, tied to the scroll itself. */
+  @supports (animation-timeline: scroll()) {
+    .page:has(> .l-main) .topbar__row {
+      animation:
+        l-bar-open 1000ms var(--ease-expo) backwards,
+        l-bar-tight linear both;
+      animation-timeline: auto, scroll(root);
+      animation-range: normal, 0 160px;
+    }
+  }
+}
+/* Still: the same ring, resting lit, with a soft glow of its own. */
+@media (prefers-reduced-motion: reduce) {
+  .l-light__ring {
+    background: rgb(110 168 163 / 0.5);
+  }
+  .page:has(> .l-main) .topbar__row {
+    --bar-glow: 0 0 22px -6px rgb(110 168 163 / 0.5);
+  }
+}
+@media (prefers-contrast: more) {
+  .l-light__ring {
+    background: var(--foreground);
+  }
+}
+@media (forced-colors: active) {
+  .l-light {
+    display: none;
+  }
+  .page:has(> .l-main) .topbar__row {
+    outline: 1px solid CanvasText;
+  }
+}
+
+/* The sections, and the one highlight that slides behind them (`--x`, `--w`: the link it's on). */
+.l-nav {
+  position: relative;
+  isolation: isolate;
 }
 .l-nav__list {
   list-style: none;
@@ -47,36 +283,117 @@
 .l-nav__link {
   display: inline-flex;
   align-items: center;
+  gap: 0.375rem;
   min-height: var(--control-h-sm);
   padding-inline: var(--s-3);
-  border-radius: var(--radius-md);
-  color: var(--muted-foreground);
+  border-radius: var(--radius-full);
+  color: var(--foreground);
   font-size: var(--text-sm);
   font-weight: 550;
   text-decoration: none;
   white-space: nowrap;
-  transition:
-    color var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out);
 }
-.l-nav__link:hover {
-  color: var(--foreground);
-  background: rgb(233 236 236 / 0.06);
+.l-nav__link .icon {
+  color: var(--primary-hover);
+}
+.l-nav__glider {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--nav-on);
+  clip-path: inset(0 calc(100% - var(--x, 0px) - var(--w, 0px)) 0 var(--x, 0px) round var(--radius-full));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.l-nav__glider.is-on {
+  opacity: 1;
+  transition:
+    opacity var(--dur) var(--ease-out),
+    clip-path 440ms cubic-bezier(0.3, 1.2, 0.4, 1);
 }
 .l-nav__icon {
-  padding-inline: var(--s-2);
+  width: var(--control-h);
+  padding-inline: 0;
 }
-.l-nav__icon .icon {
-  width: 20px;
-  height: 20px;
+.l-nav__more:has(+ .l-sheet:popover-open) {
+  background: var(--secondary-hover);
 }
-@media (max-width: 51.99em) {
-  .page:has(> .l-main) .topbar__context {
+
+/* A phone: the sections and GitHub fold into one menu under the bar, and the pill spans the column. */
+.l-sheet {
+  position: fixed;
+  inset: calc(var(--header-h, var(--bar-h)) + var(--s-2)) var(--gutter) auto auto;
+  width: min(15rem, 100vw - 2 * var(--gutter));
+  margin: 0;
+  padding: var(--s-2);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-xl);
+  background: rgb(17 23 22 / 0.97);
+  box-shadow: var(--glass-shadow);
+  color: var(--foreground);
+}
+.l-sheet__list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--s-1);
+}
+.l-sheet .l-nav__link {
+  display: flex;
+  min-height: 2.75rem;
+  gap: var(--s-2);
+}
+.l-sheet .l-nav__link[aria-current] {
+  background: var(--nav-on);
+}
+.l-sheet__rare {
+  margin-top: var(--s-1);
+  padding-top: var(--s-1);
+  border-top: 1px solid var(--glass-edge);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .l-sheet:popover-open {
+    animation: l-rise 420ms var(--ease-expo);
+  }
+}
+@media (min-width: 56em) {
+  .l-nav__more,
+  .l-sheet {
     display: none;
   }
 }
+@media (max-width: 55.99em) {
+  .l-nav,
+  .l-nav__github {
+    display: none;
+  }
+  .page:has(> .l-main) .topbar__row {
+    width: var(--wrap);
+    padding-left: var(--s-4);
+  }
+  .page:has(> .l-main) .topbar__context {
+    margin-left: auto;
+  }
+  .page:has(> .l-main) .topbar__actions {
+    gap: var(--s-1);
+    margin-left: 0;
+  }
+  .l-light__run {
+    animation-name: l-orbit-short, l-light-in;
+    animation-duration: 9s, 1800ms;
+  }
+  /* The ends of a short pill sit close together, so a smaller glow, or it pools around them. */
+  .l-light__run::before {
+    width: 11rem;
+    height: 4.5rem;
+  }
+  .l-light__ring .l-light__run::before {
+    width: 13rem;
+  }
+}
 @media (max-width: 22.99em) {
-  .l-nav__icon {
+  .page:has(> .l-main) .wordmark > span {
     display: none;
   }
 }
@@ -96,7 +413,6 @@
 .l-section {
   display: grid;
   gap: var(--s-7);
-  scroll-margin-top: calc(var(--header-h, var(--bar-h)) + var(--s-4));
 }
 .l-section__title {
   font-size: clamp(1.625rem, 1.25rem + 1.3vw, 2.25rem);
@@ -274,7 +590,7 @@
   .l-hero {
     grid-template-columns: repeat(12, minmax(0, 1fr));
     column-gap: var(--s-6);
-    min-height: calc(100svh - var(--bar-h) - var(--s-6) - var(--s-7));
+    min-height: calc(100svh - var(--bar-h) - var(--bar-gap) - var(--s-6) - var(--s-7));
     padding-bottom: var(--s-7);
   }
   .l-hero__copy {

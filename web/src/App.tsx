@@ -35,7 +35,8 @@ import { TrucePage } from '@/screens/TrucePage';
 function ScrollToTop() {
   const [path] = useLocation();
   useEffect(() => {
-    if (!window.location.hash) window.scrollTo(0, 0);
+    // Instant, or the landing's smooth anchor scrolling would glide a new page up from the old position.
+    if (!window.location.hash) window.scrollTo({ top: 0, behavior: 'instant' });
   }, [path]);
   return null;
 }

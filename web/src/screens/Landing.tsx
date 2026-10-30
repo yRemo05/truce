@@ -16,6 +16,8 @@
  * negotiation and the shortlist; with none (404, offline) a synthetic run stands in, says so, and
  * shows the typeset stand-ins instead of pictures. While it loads, the hero window shows skeletons.
  *
+ * The bar is its own object: a floating pill with one light going round it (landing/LandingNav.tsx).
+ *
  * Viewport budget: at 1440×900 the bar, the headline, the lede, all three buttons, the live line
  * and the whole negotiation window fit above the fold. At 390×844 the headline, lede and the three
  * buttons fit, with the top of the window peeking in.
@@ -34,8 +36,9 @@
  * opens on a film / restaurant / music triad; the closing band is two people over a city at night.
  *
  * Motion (CSS, plus IntersectionObserver for the reveals; all of it off with reduced motion, where
- * everything is simply shown): the headline rises line by line, then the lede, buttons and the
- * window; sections rise or wipe in once as they reach the screen; the primary buttons lean toward
+ * everything is simply shown): the bar opens first, then the headline rises line by line, then the
+ * lede, buttons and the window, and the bar's light comes up last; sections rise or wipe in once
+ * as they reach the screen; the primary buttons lean toward
  * a fine pointer; the meters fill and the ledger draws itself when they come into view. Only
  * opacity, transform and clip-path animate, so nothing shifts the layout.
  */
